@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import { readdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { test } from 'node:test';
 import {
@@ -7,6 +6,7 @@ import {
 } from '../src/agent/dialogue.ts';
 import type { ChatMessage, Completion, ModelClient, StreamHandlers } from '../src/services/model/client.ts';
 import { Roster } from '../src/services/roster/index.ts';
+import { SOCIAL_NPCS } from '../src/types.ts';
 
 const world: WorldState = {
   year: 1, season: 'spring', day: 19, time: '15:00', weather: '晴', location: '鹈鹕镇广场',
@@ -86,8 +86,7 @@ test('prompt order: rules, stable card, gated card, situation, memory, then the 
 
 async function fullRoster() {
   const directory = resolve(import.meta.dirname, '../data/npcs');
-  const npcIds = (await readdir(directory)).filter((f) => !f.startsWith('_')).map((f) => f.slice(0, -3));
-  const roster = new Roster({ directory, npcIds });
+  const roster = new Roster({ directory, npcIds: SOCIAL_NPCS });
   await roster.load();
   return roster;
 }

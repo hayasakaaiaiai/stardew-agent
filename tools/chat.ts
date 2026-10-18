@@ -4,7 +4,7 @@
  *   node tools/chat.ts abigail [--scenario default] [--hearts 4] [--seen 1,2] [--relation friend]
  *   node tools/chat.ts --probe abigail,shane      # or --probe all
  */
-import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { parseArgs } from 'node:util';
@@ -13,6 +13,7 @@ import {
 } from '../src/agent/dialogue.ts';
 import { ModelClient, modelConfigFromEnv } from '../src/services/model/client.ts';
 import { type Relation, Roster } from '../src/services/roster/index.ts';
+import { SOCIAL_NPCS } from '../src/types.ts';
 
 const ROOT = resolve(import.meta.dirname, '..');
 const CARDS = join(ROOT, 'data/npcs');
@@ -53,8 +54,7 @@ const { values, positionals } = parseArgs({
 
 try { process.loadEnvFile(join(ROOT, '.env')); } catch { /* fall back to the real environment */ }
 const model = new ModelClient(modelConfigFromEnv());
-// Until this branch merges with the memory branch, the roster is whatever cards exist; then use SOCIAL_NPCS.
-const npcIds = (await readdir(CARDS)).filter((f) => f.endsWith('.md') && !f.startsWith('_')).map((f) => f.slice(0, -3));
+const npcIds: readonly string[] = SOCIAL_NPCS;
 const roster = new Roster({ directory: CARDS, npcIds });
 await loadRoster();
 
@@ -162,7 +162,7 @@ async function chat(npcId: string | undefined) {
   }
 }
 
-async function probe(ids: string[]) {
+async function probe(ids: readonly string[]) {
   for (const npcId of ids) {
     if (!roster.has(npcId)) throw new Error(`Unknown NPC "${npcId}"`);
     const file = join(PROBES, `${npcId}.md`);

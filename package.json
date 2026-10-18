@@ -10,6 +10,7 @@
   "scripts": {
     "demo": "node src/demo.ts",
     "demo:built": "node dist/demo.js",
+    "chat": "node tools/chat.ts",
     "test": "node --test tests/*.test.ts",
     "typecheck": "tsc -p tsconfig.check.json",
     "build": "tsc"

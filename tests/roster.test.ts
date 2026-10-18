@@ -4,15 +4,10 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { test } from 'node:test';
 import { CardError, parseCard, parseRule, Roster } from '../src/services/roster/index.ts';
+import { SOCIAL_NPCS } from '../src/types.ts';
 
 const CARDS = resolve(import.meta.dirname, '../data/npcs');
-const IDS = [
-  'abigail', 'alex', 'elliott', 'emily', 'haley', 'harvey', 'leah', 'maru',
-  'penny', 'sam', 'sebastian', 'shane', 'caroline', 'clint', 'demetrius',
-  'dwarf', 'evelyn', 'george', 'gus', 'jas', 'jodi', 'kent', 'krobus', 'leo',
-  'lewis', 'linus', 'marnie', 'pam', 'pierre', 'robin', 'sandy', 'vincent',
-  'willy', 'wizard',
-];
+const IDS = [...SOCIAL_NPCS];
 
 async function loadAll() {
   const roster = new Roster({ directory: CARDS, npcIds: IDS });
