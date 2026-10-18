@@ -11,6 +11,8 @@ export interface Card {
   gifts: Gift[];
   topics: Topic[];
   rules: Rule[];
+  /** What the NPC knows once the player has seen an event: its own heart events, or ones it witnessed. */
+  afterEvents: AfterEvent[];
   special: string;
 }
 
@@ -24,6 +26,8 @@ export interface Relationship {
 export interface Gift { item: string; text: string }
 
 export interface Topic { minHearts: number; text: string }
+
+export interface AfterEvent { event: string; label: string; text: string }
 
 /**
  * A "不能说的内容" line. `unseen` rules hold until any listed event is seen; `hearts` rules hold below a
@@ -61,6 +65,7 @@ const SECTIONS = {
   可送物品: 'gifts',
   按心数解锁的话题: 'topics',
   不能说的内容: 'rules',
+  看过事件之后: 'afterEvents',
   特殊条件: 'special',
 } as const;
 type SectionKey = (typeof SECTIONS)[keyof typeof SECTIONS];
@@ -150,6 +155,17 @@ export function parseCard(id: string, markdown: string, knownIds: ReadonlySet<st
     return rule;
   });
 
+  const afterEvents = items(bodies.get('afterEvents')).flatMap((item): AfterEvent[] => {
+    const match = /^事件\s*([0-9]+|[A-Za-z]\w*)（(.+?)）：(.+)$/.exec(item);
+    if (!match) {
+      problems.push(`after-event line needs "事件 <编号>（标签）：内容": "${item}"`);
+      return [];
+    }
+    return [{ event: match[1]!, label: match[2]!, text: match[3]! }];
+  });
+  const repeated = afterEvents.map((entry) => entry.event).filter((event, i, all) => all.indexOf(event) !== i);
+  for (const event of new Set(repeated)) problems.push(`after-event lines repeat event ${event}`);
+
   if (problems.length) throw new CardError(file, problems);
   return {
     card: {
@@ -159,7 +175,7 @@ export function parseCard(id: string, markdown: string, knownIds: ReadonlySet<st
       style: text(bodies.get('style')),
       examples, relationships,
       likes: text(bodies.get('likes')),
-      gifts, topics, rules,
+      gifts, topics, rules, afterEvents,
       special: text(bodies.get('special')),
     },
     warnings,

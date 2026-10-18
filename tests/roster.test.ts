@@ -3,7 +3,7 @@ import { cp, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { test } from 'node:test';
-import { CardError, parseCard, parseRule, Roster } from '../src/services/roster/index.ts';
+import { CardError, parseCard, parseRule, renderCard, Roster } from '../src/services/roster/index.ts';
 import { SOCIAL_NPCS } from '../src/types.ts';
 
 const CARDS = resolve(import.meta.dirname, '../data/npcs');
@@ -85,6 +85,45 @@ test('invalid cards report every problem', () => {
     assert.ok(error.problems.some((p) => p.includes('N+：')));
     return true;
   });
+});
+
+test('after-event lines render only once the player has seen the event', () => {
+  const known = new Set(['abigail']);
+  const base = [
+    '# 阿比盖尔', '## 身份与背景', '住在杂货店。', '## 性格', '- 直率', '## 说话风格', '短句。', '### 示例台词', '- 嘿。',
+    '## 人际关系', '- 皮埃尔：父亲。', '## 喜好', '紫水晶。', '## 按心数解锁的话题', '- 0+：雨天。',
+    '## 不能说的内容', '- 看过 6 心事件（事件 4）之前：不说在练剑。', '## 看过事件之后（可选）',
+  ];
+  const { card } = parseCard('abigail', [...base,
+    '- 事件 4（6 心，深夜墓地）：她坦白在偷偷练剑。',
+    '- 事件 2123243（艾米丽的 8 心事件，服装疗法）：她穿了一整套盔甲。'].join('\n'), known);
+  assert.deepEqual(card.afterEvents[0], { event: '4', label: '6 心，深夜墓地', text: '她坦白在偷偷练剑。' });
+  const view = (seen: string[]) => renderCard(card, { hearts: 6, seenEvents: new Set(seen), purpose: 'dialogue' }).gated;
+  assert.doesNotMatch(view([]), /已经发生过的事/);
+  assert.match(view(['4']), /### 已经发生过的事\n- 6 心，深夜墓地：她坦白在偷偷练剑。/);
+  assert.doesNotMatch(view(['4']), /不说在练剑/, 'the matching rule lapses at the same time');
+  assert.match(view(['2123243']), /艾米丽的 8 心事件/);
+
+  for (const [bad, problem] of [
+    [['- 事件 4（6 心）：一。', '- 事件 4（6 心，又一次）：二。'], 'repeat event 4'],
+    [['- 事件 4：没有标签。'], '事件 <编号>（标签）：内容'],
+    [['- 6 心事件之后：没有编号。'], '事件 <编号>（标签）：内容'],
+  ] as const) {
+    assert.throws(() => parseCard('abigail', [...base, ...bad].join('\n'), known), (error: unknown) => {
+      assert.ok(error instanceof CardError && error.problems.some((p) => p.includes(problem)), String(error));
+      return true;
+    });
+  }
+});
+
+test('every event a rule hides has an after-event line, so nothing goes blank once the rule lapses', async () => {
+  const { roster } = await loadAll();
+  for (const id of IDS) {
+    const card = roster.get(id);
+    const known = new Set(card.afterEvents.map((entry) => entry.event));
+    const hidden = card.rules.flatMap((rule) => (rule.kind === 'unseen' ? rule.events : []));
+    assert.deepEqual(hidden.filter((event) => !known.has(event)), [], id);
+  }
 });
 
 test('a missing card is reported without stopping the others', async () => {

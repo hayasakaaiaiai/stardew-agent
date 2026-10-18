@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { type Card, CardError, parseCard } from './card.ts';
 import { type CardView, type RenderedCard, renderCard } from './render.ts';
 
-export type { Card, Gift, Relationship, Rule, Topic } from './card.ts';
+export type { AfterEvent, Card, Gift, Relationship, Rule, Topic } from './card.ts';
 export { CardError, parseCard, parseRule } from './card.ts';
 export type { CardView, Relation, RenderedCard } from './render.ts';
 export { renderCard, ruleActive } from './render.ts';

@@ -30,8 +30,10 @@ export function renderCard(card: Card, view: CardView): RenderedCard {
 
   const topics = card.topics.filter((topic) => topic.minHearts <= view.hearts).map((topic) => topic.text);
   const rules = card.rules.filter((rule) => ruleActive(rule, view)).map(ruleText);
+  const happened = card.afterEvents.filter((entry) => view.seenEvents.has(entry.event)).map((entry) => `${entry.label}：${entry.text}`);
   const gated = [
     section(`现在可以聊的话题（${view.hearts} 心）`, bullets(topics)),
+    section('已经发生过的事', bullets(happened)),
     section('必须遵守的限制', bullets(rules)),
     section('特殊条件', card.special),
     view.includeGifts ? section('可以送给玩家的东西', bullets(card.gifts.map((g) => `${g.item}：${g.text}`))) : '',
