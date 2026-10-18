@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.env
+.runtime/
+*.log
+
+# Text exported from the local game install (copyrighted; do not commit)
+reference/game/
