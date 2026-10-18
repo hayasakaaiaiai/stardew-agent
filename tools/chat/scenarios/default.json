@@ -1,0 +1,35 @@
+{
+  "description": "第一年春季 17 日（周三）下午，晴",
+  "world": {
+    "year": 1,
+    "season": "spring",
+    "day": 17,
+    "time": "15:00",
+    "weather": "晴",
+    "location": "鹈鹕镇广场",
+    "player": { "name": "小林", "gender": "female", "farm": "晴空" },
+    "facts": {
+      "肯特": "还在前线打仗，第二年春天才回来",
+      "社区中心": "玩家正在修复，还没修好",
+      "Joja 超市": "照常营业",
+      "巴士": "还没修好，没人能去卡利科沙漠",
+      "玩家会不会矮人语": "不会",
+      "潘姆的新房子": "还没盖",
+      "姜岛": "还去不了",
+      "谢恩": "在 Joja 超市上班"
+    }
+  },
+  "locations": {
+    "abigail": "皮埃尔的杂货店", "pierre": "皮埃尔的杂货店", "caroline": "皮埃尔的杂货店",
+    "alex": "河间大道 1 号门口", "george": "河间大道 1 号家里", "evelyn": "镇上的公共花园",
+    "sam": "柳巷 1 号家里", "jodi": "柳巷 1 号家里", "vincent": "博物馆图书室", "jas": "博物馆图书室", "penny": "博物馆图书室",
+    "haley": "海滩", "elliott": "海滩上他的小屋", "willy": "海滩上的鱼店",
+    "emily": "柳巷 2 号家里", "gus": "星之果实酒吧", "pam": "河边的拖车", "lewis": "镇长的庄园门口",
+    "clint": "铁匠铺", "harvey": "哈维的诊所", "shane": "Joja 超市",
+    "robin": "木匠铺", "demetrius": "木匠铺的实验室", "maru": "木匠铺", "sebastian": "木匠铺地下室他的房间",
+    "linus": "山上他的帐篷外", "leah": "煤矿森林里她的小屋", "marnie": "玛妮的牧场",
+    "wizard": "法师塔", "krobus": "下水道里他的小店", "dwarf": "矿井里矮人的小店",
+    "sandy": "卡利科沙漠的绿洲商店", "leo": "姜岛上他的小屋", "kent": "柳巷 1 号家里"
+  },
+  "standing": { "hearts": 4, "seen": [], "relation": "friend" }
+}
