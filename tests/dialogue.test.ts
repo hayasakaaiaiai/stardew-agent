@@ -78,7 +78,7 @@ test('prompt order: rules, stable card, gated card, situation, memory, then the 
   assert.ok(order.every((at) => at > 0));
   assert.match(system, /第 1 年春季 19 日（周五）15:00，晴/);
   assert.deepEqual(messages.slice(1).map((m) => [m.role, m.content]), [
-    ['user', '你好'], ['assistant', '嘿。'], ['user', `今天做什么？${JSON_HINT}`],
+    ['user', '你好'], ['assistant', '{"reply":"嘿。"}'], ['user', `今天做什么？${JSON_HINT}`],
   ]);
   assert.equal(weekday(1), '周一');
   assert.equal(weekday(28), '周日');
@@ -144,4 +144,35 @@ test('a blank reply is retried once, and usage adds up across attempts', async (
   assert.equal(failed.attempts.length, 2, 'gives up after two attempts');
   assert.equal(failed.metaOk, false);
   assert.deepEqual(failed.meta.options, FALLBACK_OPTIONS);
+});
+
+test('a dropped connection is retried only while no reply text has been shown', async () => {
+  const roster = await fullRoster();
+  const input = { npcId: 'abigail', world, standing: { hearts: 4, seenEvents: new Set<string>(), relation: 'friend' as const }, playerLine: '你好' };
+  const flaky = (failAfter: string | null) => {
+    let calls = 0;
+    return {
+      calls: () => calls,
+      model: {
+        async chat(_messages: ChatMessage[], handlers: StreamHandlers): Promise<Completion> {
+          calls += 1;
+          if (calls === 1) {
+            if (failAfter) handlers.onContent?.(failAfter);
+            throw new TypeError('terminated');
+          }
+          handlers.onContent?.(GOOD);
+          return { content: GOOD, reasoning: '', finishReason: 'stop', usage: null, timing: { firstReasoningMs: null, firstContentMs: 1, totalMs: 1 } };
+        },
+      } as unknown as ModelClient,
+    };
+  };
+
+  const early = flaky(null);
+  const result = await runTurn({ roster, model: early.model }, input);
+  assert.equal(early.calls(), 2);
+  assert.equal(result.metaOk, true);
+
+  const late = flaky('{"reply":"嘿，你');
+  await assert.rejects(runTurn({ roster, model: late.model }, input), /terminated/);
+  assert.equal(late.calls(), 1, 'part of the reply was already shown, so it is not repeated');
 });

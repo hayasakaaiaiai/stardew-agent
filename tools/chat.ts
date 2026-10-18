@@ -2,24 +2,27 @@
  * Dialogue prototype CLI (docs/dialogue-prototype.md §6).
  *
  *   node tools/chat.ts abigail [--scenario default] [--hearts 4] [--seen 1,2] [--relation friend]
- *   node tools/chat.ts --probe abigail,shane      # or --probe all
+ *                              [--save cli] [--fresh] [--no-memory]
+ *   node tools/chat.ts --probe abigail,shane      # or --probe all; probes never use memory
  */
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { parseArgs } from 'node:util';
 import {
-  type DialogueMeta, type Exchange, OPENING_LINE, runTurn, type Standing, type TurnResult, type WorldState,
+  type DialogueMeta, type Exchange, OPENING_LINE, runTurn, type Standing, type TurnResult, weekday, type WorldState,
 } from '../src/agent/dialogue.ts';
 import { ModelClient, modelConfigFromEnv } from '../src/services/model/client.ts';
 import { type Relation, Roster } from '../src/services/roster/index.ts';
 import { SOCIAL_NPCS } from '../src/types.ts';
+import { absoluteDay, ChatSave, dateOf, minutesOf } from './chat/session.ts';
 
 const ROOT = resolve(import.meta.dirname, '..');
 const CARDS = join(ROOT, 'data/npcs');
 const SCENARIOS = join(ROOT, 'tools/chat/scenarios');
 const PROBES = join(ROOT, 'tools/chat/probes');
 const TRANSCRIPTS = join(ROOT, '.runtime/transcripts');
+const CHAT_DATA = join(ROOT, '.runtime/chat');
 const RELATIONS = new Set<Relation>(['stranger', 'friend', 'dating', 'engaged', 'married', 'roommate']);
 const EMOTION_LABEL: Record<DialogueMeta['emotion'], string> = {
   neutral: '平静', happy: '开心', sad: '难过', blush: '害羞', angry: '生气', special: '特殊',
@@ -49,6 +52,9 @@ const { values, positionals } = parseArgs({
     seen: { type: 'string' },
     relation: { type: 'string' },
     probe: { type: 'string' },
+    save: { type: 'string', default: 'cli' },
+    fresh: { type: 'boolean' },
+    'no-memory': { type: 'boolean' },
   },
 });
 
@@ -96,15 +102,33 @@ async function chat(npcId: string | undefined) {
   let last: TurnResult | undefined;
   const turns: Turn[] = [];
   const name = () => roster.get(npcId).name;
-  const rl = createInterface({ input: process.stdin, output: process.stdout });
 
-  console.log(`${name()}（${npcId}）· ${scenario.description} · ${describeStanding(standing)}`);
+  // With memory on, the save decides the date and today's conversation lives in the memory system.
+  const save = values['no-memory'] ? undefined : await ChatSave.open({
+    directory: CHAT_DATA, name: values.save!, fresh: values.fresh ?? false, startDay: absoluteDay(world), npcIds,
+  });
+  const syncDate = () => { if (save) world = { ...world, ...dateOf(save.day) }; };
+  syncDate();
+  const memory = save?.memory(npcId, () => absoluteDay(world) * 1440 + minutesOf(world.time));
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  // An iterator buffers lines that arrive while a reply is generating, so piped input works too.
+  const lines = rl[Symbol.asyncIterator]();
+  const ask = async () => {
+    process.stdout.write('> ');
+    const next = await lines.next();
+    return next.done ? undefined : String(next.value);
+  };
+
+  console.log(`${name()}（${npcId}）· ${describeDate(world)} · ${describeStanding(standing)}`);
+  console.log(save ? `记忆：存档“${values.save}”。/sleep 存档并进入下一天，/rollback 不存档退回上次存档。` : '记忆：关闭。');
   console.log('输入数字选选项，直接打字就是自己说；/help 查看命令。\n');
 
   const say = async (playerLine: string) => {
     let started = false;
     let thinking = false;
-    const result = await runTurn({ roster, model }, { npcId, world, standing, history, playerLine }, {
+    let result: TurnResult;
+    try {
+      result = await runTurn({ roster, model, ...(memory ? { memory } : {}) }, { npcId, world, standing, history, playerLine }, {
       onReasoning: () => {
         if (!thinking && !started) process.stdout.write('（思考中…）');
         thinking = true;
@@ -114,7 +138,12 @@ async function chat(npcId: string | undefined) {
         started = true;
         process.stdout.write(text);
       },
-    });
+      });
+    } catch (error) {
+      // A failed turn is not recorded, so the conversation can simply continue.
+      console.log(`\n  ⚠ 这一轮请求失败，没有记下来：${error instanceof Error ? error.message : String(error)}`);
+      return;
+    }
     if (!started) process.stdout.write(`${thinking ? '\r\x1b[K' : ''}${name()}：${result.reply}`);
     process.stdout.write('\n');
     printMeta(result);
@@ -123,11 +152,22 @@ async function chat(npcId: string | undefined) {
     last = result;
   };
 
-  await say(OPENING_LINE);
+  const recovered = save?.todayCount(npcId) ?? 0;
+  if (recovered && memory) {
+    const today = (await memory.context('')).today ?? [];
+    console.log(`（恢复了今天和${name()}的 ${recovered} 轮对话）`);
+    const latest = today.at(-1);
+    if (latest) console.log(`${name()}：${latest.npc}`);
+  } else {
+    await say(OPENING_LINE);
+  }
   try {
     for (;;) {
-      const input = (await rl.question('> ')).trim();
+      const raw = await ask();
+      if (raw === undefined) break;
+      const input = raw.trim();
       if (!input) continue;
+      if (!process.stdin.isTTY) console.log(input);
       if (input.startsWith('/')) {
         const [command, ...args] = input.slice(1).split(/\s+/);
         const arg = args.join(' ');
@@ -140,13 +180,29 @@ async function chat(npcId: string | undefined) {
           standing = { ...standing, seenEvents: seen };
           console.log(describeStanding(standing));
         } else if (command === 'relation') { standing = standingFrom({ ...scenario.standing, hearts: standing.hearts, seen: [...standing.seenEvents] }, { relation: arg }); console.log(describeStanding(standing)); }
-        else if (command === 'world') { world = applyWorld(world, args); console.log(world); }
-        else if (command === 'prompt') console.log(last ? last.messages.map((m) => `[${m.role}]\n${m.content}`).join('\n\n') : '还没有发出请求');
+        else if (command === 'world') {
+          if (save && args.some((pair) => /^(day|season|year)=/.test(pair))) console.log('记忆模式下日期由存档决定，用 /sleep 进入下一天');
+          else { world = applyWorld(world, args); console.log(world); }
+        } else if (command === 'prompt') console.log(last ? last.messages.map((m) => `[${m.role}]\n${m.content}`).join('\n\n') : '还没有发出请求');
         else if (command === 'stats') console.log(summarize(turns.map((t) => t.result)));
         else if (command === 'reload') await loadRoster();
-        else if (command === 'reset') { history = []; await say(OPENING_LINE); }
         else if (command === 'save') console.log(`已保存：${await saveTranscript(npcId, scenario, turns)}`);
-        else console.log('未知命令，/help 查看命令');
+        else if (command === 'reset') {
+          if (save) console.log('记忆模式下今天的对话已经记下了；要丢弃今天的内容用 /rollback');
+          else { history = []; await say(OPENING_LINE); }
+        } else if (command === 'sleep' || command === 'rollback') {
+          if (!save) { console.log('记忆已关闭（--no-memory）'); continue; }
+          if (command === 'sleep') await save.sleep();
+          else await save.rollback();
+          world = { ...world, time: scenario.world.time };
+          syncDate();
+          console.log(command === 'sleep' ? `（存档完成，进入${describeDate(world)}）` : `（没有存档，回到上次存档：${describeDate(world)}）`);
+          await say(OPENING_LINE);
+        } else if (command === 'memories') {
+          if (!memory) { console.log('记忆已关闭（--no-memory）'); continue; }
+          const recalled = await memory.context(arg);
+          console.log(recalled.memories.length ? recalled.memories.map((m) => `- （${m.when}）${m.text}`).join('\n') : '（没有召回到记忆）');
+        } else console.log('未知命令，/help 查看命令');
         continue;
       }
       const choice = /^[1-3]$/.test(input) && last ? last.meta.options[Number(input) - 1] : undefined;
@@ -159,7 +215,14 @@ async function chat(npcId: string | undefined) {
       console.log(summarize(turns.map((t) => t.result)));
       console.log(`对话记录：${await saveTranscript(npcId, scenario, turns)}`);
     }
+    // Keeps today's unsaved conversation in the journal, like a backend restart.
+    await save?.close();
   }
+}
+
+function describeDate(world: WorldState): string {
+  const seasons = { spring: '春季', summer: '夏季', fall: '秋季', winter: '冬季' } as const;
+  return `第 ${world.year} 年${seasons[world.season]} ${world.day} 日（${weekday(world.day)}）${world.time}`;
 }
 
 async function probe(ids: readonly string[]) {
@@ -312,6 +375,9 @@ const HELP = `命令：
   /prompt              打印上一次发出的完整 prompt
   /stats               本次会话的统计
   /reload              重新加载角色卡
-  /reset               清空今天的对话并重新开场
+  /reset               清空今天的对话并重新开场（仅 --no-memory）
+  /sleep               存档并进入下一天
+  /rollback            不存档，退回上次存档
+  /memories [话题]     查看现在能召回的记忆
   /save                保存对话记录
-  /quit                退出（自动保存对话记录）`;
+  /quit                退出（自动保存对话记录；今天没存档的对话下次启动会恢复）`;

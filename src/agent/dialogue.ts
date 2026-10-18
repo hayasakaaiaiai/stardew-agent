@@ -30,20 +30,24 @@ export interface Exchange { player: string; npc: string }
 
 export interface MemoryContext {
   summary?: string;
-  memories: { text: string }[];
+  /** `when` is a relative label such as 今天 or 3 天前. */
+  memories: { text: string; when?: string }[];
+  /** Today's earlier exchanges with this NPC; when present, it replaces the caller's history. */
+  today?: Exchange[];
 }
 
 export interface Remembered { text: string; importance: number }
 
-/** Implemented by the memory system once the branches merge; the prototype uses `noMemory`. */
+/** `AgentMemory` (dialogue-memory.ts) backs this with the memory system; probes use `noMemory`. */
 export interface DialogueMemory {
   context(query: string): Promise<MemoryContext>;
-  remember(items: Remembered[]): Promise<void>;
+  /** Stores the exchange itself and what the NPC chose to remember, as one event. */
+  record(exchange: Exchange, remembered: Remembered[]): Promise<void>;
 }
 
 export const noMemory: DialogueMemory = {
   context: async () => ({ memories: [] }),
-  remember: async () => {},
+  record: async () => {},
 };
 
 export interface DialogueMeta {
@@ -86,14 +90,15 @@ export const RULES = `# 角色扮演规则
 - reply：你说的台词，只写台词。
 - emotion：说这句话时的表情，取 neutral、happy、sad、blush、angry、special 之一。
 - options：玩家下一句可以说的话，正好 3 条，用玩家的口吻，每条不超过 15 字，方向要不同，比如一条顺着聊、一条追问、一条告别或岔开。
-- remember：这轮里值得你长期记住的事，0–2 条，每条写成 {"text":"……","importance":1到5}。只记关于玩家或重要事件的事，没有就写 []。
+- remember：这轮里值得你长期记住的事，0–2 条，每条写成 {"text":"……","importance":1到5}，用你自己的视角写，比如“小林说她最喜欢下雨天”。玩家说出的喜好、计划、承诺、经历和心里话都要记；寒暄和你自己说的话不用记；没有就写 []。
 - end：你想结束这次对话时写 true，比如玩家道别或你不想再聊了；否则写 false。`;
 
 /**
  * Appended to the latest player line only. With reasoning on and "json" mentioned only in the system prompt,
- * DeepSeek's JSON mode returns nothing but whitespace.
+ * DeepSeek's JSON mode returns nothing but whitespace; naming the fields stops it copying the reply-only
+ * shape of the history (measured 3/6 complete without, 6/6 with).
  */
-export const JSON_HINT = '（用 json 回复）';
+export const JSON_HINT = '（用 json 回复，字段齐全：reply、emotion、options、remember、end）';
 
 export interface PromptInput {
   npcName: string;
@@ -111,9 +116,11 @@ export function buildMessages(input: PromptInput): ChatMessage[] {
     .filter(Boolean).join('\n\n');
   return [
     { role: 'system', content: system },
+    // Earlier replies are shown in the JSON shape the model must produce: as plain text they push it into
+    // returning whitespace in JSON mode (measured 4/6 blank replies, versus 0/6).
     ...input.history.flatMap((exchange): ChatMessage[] => [
       { role: 'user', content: exchange.player },
-      { role: 'assistant', content: exchange.npc },
+      { role: 'assistant', content: JSON.stringify({ reply: exchange.npc }) },
     ]),
     { role: 'user', content: `${input.playerLine}${JSON_HINT}` },
   ];
@@ -140,7 +147,7 @@ function situation({ npcName, world, standing }: PromptInput): string {
 function memoryBlock(memory: MemoryContext): string {
   const lines = [
     ...(memory.summary ? [memory.summary] : []),
-    ...memory.memories.map((item) => `- ${item.text}`),
+    ...memory.memories.map((item) => `- ${item.when ? `（${item.when}）` : ''}${item.text}`),
   ];
   return lines.length ? ['## 你记得的事', ...lines].join('\n') : '';
 }
@@ -239,7 +246,8 @@ export interface TurnInput {
   npcId: string;
   world: WorldState;
   standing: Standing;
-  history: Exchange[];
+  /** Ignored when the memory supplies today's exchanges. */
+  history?: Exchange[];
   playerLine: string;
 }
 
@@ -256,7 +264,10 @@ export interface TurnResult {
   usage: Usage | null;
 }
 
-/** DeepSeek's JSON mode with reasoning on occasionally returns only whitespace; a retry almost always succeeds. */
+/**
+ * DeepSeek's JSON mode with reasoning on occasionally returns only whitespace, and connections through a proxy
+ * sometimes drop mid-stream. Either is retried once, but only before any reply text has reached the player.
+ */
 const MAX_ATTEMPTS = 2;
 
 export interface TurnHandlers {
@@ -271,35 +282,43 @@ export async function runTurn(
 ): Promise<TurnResult> {
   const memory = deps.memory ?? noMemory;
   const card = deps.roster.get(input.npcId);
+  const recalled = await memory.context(input.playerLine);
   const messages = buildMessages({
     npcName: card.name,
     card: deps.roster.render(input.npcId, { ...input.standing, purpose: 'dialogue' }),
     world: input.world,
     standing: input.standing,
-    memory: await memory.context(input.playerLine),
-    history: input.history,
+    memory: recalled,
+    history: recalled.today ?? input.history ?? [],
     playerLine: input.playerLine,
   });
   const started = performance.now();
   let firstReplyMs: number | null = null;
   const attempts: Completion[] = [];
   let stream = new ReplyStream();
-  while (attempts.length < MAX_ATTEMPTS) {
+  for (let tries = 1; ; tries++) {
     stream = new ReplyStream();
-    const completion = await deps.model.chat(messages, {
-      onContent: (delta) => {
-        const text = stream.push(delta);
-        if (!text) return;
-        firstReplyMs ??= Math.round(performance.now() - started);
-        handlers.onReply?.(text);
-      },
-      ...(handlers.onReasoning ? { onReasoning: handlers.onReasoning } : {}),
-    }, { json: true });
+    let completion: Completion;
+    try {
+      completion = await deps.model.chat(messages, {
+        onContent: (delta) => {
+          const text = stream.push(delta);
+          if (!text) return;
+          firstReplyMs ??= Math.round(performance.now() - started);
+          handlers.onReply?.(text);
+        },
+        ...(handlers.onReasoning ? { onReasoning: handlers.onReasoning } : {}),
+      }, { json: true });
+    } catch (error) {
+      const dropped = error instanceof TypeError && firstReplyMs === null;
+      if (!dropped || tries >= MAX_ATTEMPTS) throw error;
+      continue;
+    }
     attempts.push(completion);
-    if (completion.content.trim()) break;
+    if (completion.content.trim() || tries >= MAX_ATTEMPTS) break;
   }
   const { reply, meta, ok } = parseOutput(attempts.at(-1)!.content, stream.text);
-  if (meta.remember.length) await memory.remember(meta.remember);
+  if (reply) await memory.record({ player: input.playerLine, npc: reply }, meta.remember);
   return {
     reply, meta, metaOk: ok, messages, attempts,
     timing: { firstReplyMs, totalMs: Math.round(performance.now() - started) },
