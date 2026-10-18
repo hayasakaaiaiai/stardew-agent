@@ -3,7 +3,9 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { test } from 'node:test';
-import { daysAgo } from '../src/agent/dialogue-memory.ts';
+import { AgentMemory, daysAgo, recallPolicy } from '../src/agent/dialogue-memory.ts';
+import type { NpcAgent } from '../src/agent/npc.ts';
+import type { Memory } from '../src/types.ts';
 import { JSON_HINT, runTurn, type WorldState } from '../src/agent/dialogue.ts';
 import type { ChatMessage, Completion, ModelClient, StreamHandlers } from '../src/services/model/client.ts';
 import { Roster } from '../src/services/roster/index.ts';
@@ -141,4 +143,38 @@ test('closing and reopening the same save restores today, and sequence numbers k
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+test('how much an NPC remembers about the player depends on hearts and relation', async () => {
+  const now = 100 * 1440 + 900;
+  const memory = (id: string, importance: number, days: number): Memory => ({
+    id, commitId: 'c', npcId: 'abigail', gameTime: now - days * 1440, text: id, kind: 'conversation',
+    importance, subjects: ['player'], topics: [], visibility: 'private', sourceId: id,
+  });
+  const stored = [memory('重要的近事', 5, 2), memory('小事', 2, 1), memory('十天前的事', 4, 10), memory('上一季的事', 3, 40)];
+  const agent = {
+    async context() {
+      return {
+        state: {}, memories: stored.map((m) => ({ ...m, score: 1 })),
+        today: [{ seq: 1, gameTime: now, changes: [{ npcId: 'abigail', log: { player: '早', npc: '嘿。' } }] }],
+      };
+    },
+  } as unknown as NpcAgent;
+  const recall = new AgentMemory(() => agent, { now: () => now, nextSeq: () => 1 });
+  const at = async (hearts: number, relation: 'friend' | 'dating' = 'friend') =>
+    recall.context('', { hearts, relation, seenEvents: new Set() });
+
+  assert.deepEqual((await at(0)).memories.map((m) => m.text), ['重要的近事'], '0 hearts: only important things from the last 3 days');
+  assert.deepEqual((await at(3)).memories.map((m) => m.text), ['重要的近事'], '2–4 hearts: importance ≥ 3 within a week');
+  assert.deepEqual((await at(6)).memories.map((m) => m.text), ['十天前的事', '重要的近事', '小事'], '5–7 hearts: a season back');
+  assert.deepEqual((await at(9)).memories.length, 4, '8+ hearts: everything');
+  assert.deepEqual((await at(1, 'dating')).memories.length, 4, 'dating counts as the closest tier');
+
+  assert.match((await at(0)).tone ?? '', /模糊/);
+  assert.equal((await at(3)).tone, undefined);
+  assert.match((await at(9)).tone ?? '', /记得很清楚/);
+  assert.deepEqual((await at(0)).today, [{ player: '早', npc: '嘿。' }], 'today’s conversation is never filtered');
+
+  assert.deepEqual(recallPolicy({ hearts: 4, relation: 'friend' }), { limit: 3, minImportance: 3, maxDays: 7 });
+  assert.equal(recallPolicy({ hearts: 0, relation: 'roommate' }).maxDays, null);
 });

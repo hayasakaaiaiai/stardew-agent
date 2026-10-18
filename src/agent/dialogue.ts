@@ -34,13 +34,16 @@ export interface MemoryContext {
   memories: { text: string; when?: string }[];
   /** Today's earlier exchanges with this NPC; when present, it replaces the caller's history. */
   today?: Exchange[];
+  /** How the NPC should treat these memories, e.g. vaguely when it barely knows the player. */
+  tone?: string;
 }
 
 export interface Remembered { text: string; importance: number }
 
 /** `AgentMemory` (dialogue-memory.ts) backs this with the memory system; probes use `noMemory`. */
 export interface DialogueMemory {
-  context(query: string): Promise<MemoryContext>;
+  /** `standing` decides how much the NPC remembers about the player (docs/dialogue-prototype.md §14). */
+  context(query: string, standing: Standing): Promise<MemoryContext>;
   /** Stores the exchange itself and what the NPC chose to remember, as one event. */
   record(exchange: Exchange, remembered: Remembered[]): Promise<void>;
 }
@@ -149,7 +152,7 @@ function memoryBlock(memory: MemoryContext): string {
     ...(memory.summary ? [memory.summary] : []),
     ...memory.memories.map((item) => `- ${item.when ? `（${item.when}）` : ''}${item.text}`),
   ];
-  return lines.length ? ['## 你记得的事', ...lines].join('\n') : '';
+  return lines.length ? [`## 你记得的事${memory.tone ? `（${memory.tone}）` : ''}`, ...lines].join('\n') : '';
 }
 
 const ESCAPES: Record<string, string> = { n: '\n', r: '\r', t: '\t', b: '\b', f: '\f' };
@@ -282,7 +285,7 @@ export async function runTurn(
 ): Promise<TurnResult> {
   const memory = deps.memory ?? noMemory;
   const card = deps.roster.get(input.npcId);
-  const recalled = await memory.context(input.playerLine);
+  const recalled = await memory.context(input.playerLine, input.standing);
   const messages = buildMessages({
     npcName: card.name,
     card: deps.roster.render(input.npcId, { ...input.standing, purpose: 'dialogue' }),

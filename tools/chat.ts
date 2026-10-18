@@ -154,7 +154,7 @@ async function chat(npcId: string | undefined) {
 
   const recovered = save?.todayCount(npcId) ?? 0;
   if (recovered && memory) {
-    const today = (await memory.context('')).today ?? [];
+    const today = (await memory.context('', standing)).today ?? [];
     console.log(`（恢复了今天和${name()}的 ${recovered} 轮对话）`);
     const latest = today.at(-1);
     if (latest) console.log(`${name()}：${latest.npc}`);
@@ -200,7 +200,8 @@ async function chat(npcId: string | undefined) {
           await say(OPENING_LINE);
         } else if (command === 'memories') {
           if (!memory) { console.log('记忆已关闭（--no-memory）'); continue; }
-          const recalled = await memory.context(arg);
+          const recalled = await memory.context(arg, standing);
+          if (recalled.tone) console.log(`（${recalled.tone}）`);
           console.log(recalled.memories.length ? recalled.memories.map((m) => `- （${m.when}）${m.text}`).join('\n') : '（没有召回到记忆）');
         } else console.log('未知命令，/help 查看命令');
         continue;
