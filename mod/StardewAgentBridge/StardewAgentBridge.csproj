@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <AssemblyName>StardewAgentBridge</AssemblyName>
+    <RootNamespace>StardewAgentBridge</RootNamespace>
+    <Version>0.1.0</Version>
+    <!-- The game ships its own .NET 6 runtime. -->
+    <TargetFramework>net6.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <!-- ModBuildConfig copies the build into the game's Mods folder; no release zip needed yet. -->
+    <EnableModZip>false</EnableModZip>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Pathoschild.Stardew.ModBuildConfig" Version="4.4.0" />
+  </ItemGroup>
+
+</Project>

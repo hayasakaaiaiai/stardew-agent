@@ -11,16 +11,19 @@
     "demo": "node src/demo.ts",
     "demo:built": "node dist/demo.js",
     "chat": "node tools/chat.ts",
+    "bridge": "node tools/bridge.ts",
     "test": "node --test tests/*.test.ts",
     "typecheck": "tsc -p tsconfig.check.json",
     "build": "tsc"
   },
   "dependencies": {
     "@node-rs/jieba": "2.0.4",
-    "cordis": "4.0.0-rc.11"
+    "cordis": "4.0.0-rc.11",
+    "ws": "8.22.0"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
+    "@types/ws": "8.18.2",
     "typescript": "~5.9.3"
   }
 }

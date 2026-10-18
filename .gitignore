@@ -6,3 +6,7 @@ dist/
 
 # Text exported from the local game install (copyrighted; do not commit)
 reference/game/
+
+# SMAPI mod build output
+mod/**/bin/
+mod/**/obj/
