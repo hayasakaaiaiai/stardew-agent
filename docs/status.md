@@ -1,6 +1,6 @@
 # 项目现状
 
-> 更新于 2026-10-18。每做完一步就更新这份文档。各部分的细节在各自的设计文档里，见 §7。
+> 更新于 2026-10-19。每做完一步就更新这份文档。各部分的细节在各自的设计文档里，见 §8。
 
 ## 1. 这个项目在做什么
 
@@ -22,7 +22,7 @@
 | M3 接入游戏 | M3a 已实现，等游戏内验证 | M3a：游戏里"继续聊"，心数、事件、世界状态都从游戏读 | M3b：存档同步、游戏里的跨天记忆 | `game-bridge.md` |
 | M4 内容 | 角色卡已完成 | 34 张角色卡（已审阅），"看过事件之后"共 201 条 | 物品名到 ID 的对应、各动作的上限 | `design.md` §11 |
 
-目前 `dialogue-prototype` 分支上 44 个测试和类型检查全部通过。
+目前 `main` 上 44 个测试和类型检查全部通过。
 
 **M3a 的游戏内验证**按 `game-bridge.md` §7 的清单逐项试，Mac 和 Windows 都要试。重点看两项：
 - "自己说"的输入框能不能用拼音输入法打中文。
@@ -34,13 +34,14 @@ GitHub 私有仓库：https://github.com/hayasakaaiaiai/stardew-agent
 
 | 分支 | 内容 | Mac 上的目录 |
 |---|---|---|
-| `main` | 设计文档、34 张角色卡、参考资料、工具脚本 | — |
-| `codex/npc-memory-store` | `main` + 记忆内核（M1）。记忆系统在这个分支上单独开发 | `/Users/a11/Documents/ChatGPT/stardew-agent` |
-| `dialogue-prototype` | 记忆分支 + 对话 + M3a。**最新的完整代码在这里** | `/Users/a11/Documents/ChatGPT/stardew-agent-dialogue` |
+| `main` | 记忆内核 + 对话 + M3a。**最新的完整代码在这里** | `/Users/a11/Documents/ChatGPT/stardew-agent-dialogue`（目录名是以前留下的） |
+| `codex/npc-memory-store` | 记忆系统的开发分支，做完一步快进合并回 `main` | `/Users/a11/Documents/ChatGPT/stardew-agent` |
+| `hardware-companion` | `main` + 硬件陪伴（机器人），还没合并 | `/Users/a11/Documents/ChatGPT/stardew-agent-hardware` |
 
-- Mac 上的两个目录是同一个仓库的两个 git worktree。
-- `dialogue-prototype` 是变基在记忆分支上的。记忆分支有新提交时，把它再变基到新提交上。
-- 对话这条线只新增 `src/` 下的文件，不改记忆分支已有的 `src/` 文件。需要的话，两条线以后可以干净地合并。
+- Mac 上的三个目录是同一个仓库的三个 git worktree。同一个分支只能在一个目录里打开。
+- 2026-10-19 把记忆系统和对话合并进了 `main`，原来的 `dialogue-prototype` 分支已删除。
+- 不经你同意不合并进 `main`。`main` 有新提交时，把还没合并的分支变基到 `main` 上。
+- 对话和机器人这两条线只新增 `src/` 下的文件，不改记忆系统已有的 `src/` 文件，所以和记忆分支能干净地合并。
 
 ## 4. 环境
 
