@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
 import { resolve } from 'node:path';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { test } from 'node:test';
 import { WebSocket } from 'ws';
-import type { BackendMessage, WorldSnapshot } from '../src/bridge/protocol.ts';
+import { PROTOCOL_VERSION, type BackendMessage, type WorldSnapshot } from '../src/bridge/protocol.ts';
 import { BridgeServer } from '../src/bridge/server.ts';
 import { clock, worldFacts } from '../src/bridge/world.ts';
 import type { ChatMessage, Completion, ModelClient, StreamHandlers } from '../src/services/model/client.ts';
@@ -33,7 +35,8 @@ async function setup(fail = false) {
   const roster = new Roster({ directory: resolve(import.meta.dirname, '../data/npcs'), npcIds: SOCIAL_NPCS });
   await roster.load();
   const fake = fakeModel(fail);
-  const server = await BridgeServer.start({ roster, model: fake.model, port: 0 });
+  const directory = await mkdtemp(resolve(tmpdir(), 'stardew-bridge-'));
+  const server = await BridgeServer.start({ roster, model: fake.model, port: 0, memoryDirectory: directory });
   const socket = new WebSocket(`ws://127.0.0.1:${server.port}`);
   await new Promise((resolve, reject) => { socket.once('open', resolve); socket.once('error', reject); });
   const inbox: BackendMessage[] = [];
@@ -43,7 +46,8 @@ async function setup(fail = false) {
     for (const wake of waiters.splice(0)) wake();
   });
   let seq = 0;
-  const send = (message: Record<string, unknown>) => socket.send(JSON.stringify({ ...ENVELOPE, seq: ++seq, ...message }));
+  const send = (message: Record<string, unknown>) => socket.send(JSON.stringify({ ...ENVELOPE, seq: ++seq,
+    ...(message.type === 'talk.say' ? { date: WORLD.date } : {}), ...message }));
   /** Resolves with every message received up to and including the first matching one after `from`. */
   const until = async (type: BackendMessage['type'], from = inbox.length) => {
     for (;;) {
@@ -52,7 +56,11 @@ async function setup(fail = false) {
       await new Promise<void>((wake) => waiters.push(wake));
     }
   };
-  const close = async () => { socket.close(); await server.close(); };
+  const close = async () => { socket.close(); await server.close(); await rm(directory, { recursive: true, force: true }); };
+  send({ type: 'hello', modVersion: '0.1.0', protocol: PROTOCOL_VERSION });
+  await until('hello');
+  send({ type: 'save.loaded', seq: 0, player: { name: '小林', gender: 'female', farm: '晴空' }, date: WORLD.date, commit: null });
+  await until('save.ready');
   return { fake, send, until, inbox, close };
 }
 
@@ -61,15 +69,11 @@ const open = (npc = 'Abigail') => ({ type: 'talk.open', npc, hearts: 4, relation
 test('a talk streams deltas, then a reply; history builds up and a new day clears it', async () => {
   const { fake, send, until, close } = await setup();
   try {
-    send({ type: 'hello', modVersion: '0.1.0', protocol: 1 });
-    assert.deepEqual((await until('hello')).at(-1), { type: 'hello', protocol: 1 });
-    send({ type: 'save.loaded', player: { name: '小林', gender: 'female', farm: '晴空' } });
-
     send(open());
     const first = await until('talk.reply');
     assert.ok(first.filter((m) => m.type === 'talk.delta').length >= 1);
     assert.equal(first.filter((m) => m.type === 'talk.delta').map((m) => (m as { text: string }).text).join(''), '第1句。');
-    assert.deepEqual(first.at(-1), { type: 'talk.reply', npc: 'Abigail', reply: '第1句。', emotion: 'happy', options: ['一', '二', '三'], end: false });
+    assert.deepEqual(first.at(-1), { ...ENVELOPE, seq: 3, type: 'talk.reply', npc: 'Abigail', reply: '第1句。', emotion: 'happy', options: ['一', '二', '三'], end: false });
     const system = fake.sent[0]![0]!.content;
     assert.match(system, /第 1 年春季 17 日（周三）15:30，下雨/);
     assert.match(system, /玩家：小林（女），经营晴空农场/);
@@ -81,8 +85,10 @@ test('a talk streams deltas, then a reply; history builds up and a new day clear
     assert.deepEqual(fake.sent[1]!.slice(1).map((m) => m.role), ['user', 'assistant', 'user']);
 
     send({ type: 'talk.close', npc: 'Abigail' });
+    send({ type: 'save.saving', commit: { commitId: 'day17', parentId: null, dayEnded: 17 } });
+    send({ type: 'save.saved', commitId: 'day17', date: { ...WORLD.date, day: 18 } });
     send({ type: 'day.started', date: { year: 1, season: 'spring', day: 18, time: 600 }, weather: 'sunny' });
-    send(open());
+    send({ ...open(), world: { ...WORLD, date: { ...WORLD.date, day: 18 } } });
     await until('talk.reply');
     assert.deepEqual(fake.sent[2]!.slice(1).map((m) => m.role), ['user'], 'yesterday’s talk is gone');
   } finally {
@@ -115,7 +121,7 @@ test('malformed messages are ignored without dropping the connection', async () 
   try {
     send({ type: 'talk.open', npc: 'Abigail' });
     send({ type: 'no.such.type' });
-    send({ type: 'hello', modVersion: '0.1.0', protocol: 1 });
+    send({ type: 'hello', modVersion: '0.1.0', protocol: PROTOCOL_VERSION });
     await until('hello');
   } finally {
     await close();

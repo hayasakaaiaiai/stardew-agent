@@ -73,7 +73,7 @@ export class ModelClient {
   }
 
   /** `json` turns on the provider's JSON output mode; the prompt must still describe the object. */
-  async chat(messages: ChatMessage[], handlers: StreamHandlers = {}, options: { json?: boolean } = {}): Promise<Completion> {
+  async chat(messages: ChatMessage[], handlers: StreamHandlers = {}, options: { json?: boolean; signal?: AbortSignal } = {}): Promise<Completion> {
     const { config } = this;
     const started = performance.now();
     const elapsed = () => Math.round(performance.now() - started);
@@ -90,7 +90,7 @@ export class ModelClient {
         // DeepSeek turns reasoning off with `thinking`; otherwise `reasoning_effort` picks the level.
         ...(config.thinking === 'disabled' ? { thinking: { type: 'disabled' } } : { reasoning_effort: config.thinking }),
       }),
-      signal: AbortSignal.timeout(config.timeoutMs),
+      signal: AbortSignal.any([AbortSignal.timeout(config.timeoutMs), ...(options.signal ? [options.signal] : [])]),
     };
     const response = await fetchWithReconnect(`${config.endpoint}/chat/completions`, request);
     if (!response.ok || !response.body) {

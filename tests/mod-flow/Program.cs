@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.Loader;
+using System.Text.Json;
 
 if (args.Length != 2)
     throw new ArgumentException("Usage: ModFlowChecks <built mod DLL> <game directory>");
@@ -27,6 +28,7 @@ Type inputType = gameAssembly.GetType("StardewValley.Menus.TitleTextInputMenu", 
 Type changedType = modType.BaseType!.Assembly.GetType("StardewModdingAPI.Events.MenuChangedEventArgs", throwOnError: true)!;
 const BindingFlags Fields = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
 int failures = 0;
+int checks = 0;
 
 void Check(bool condition, string message)
 {
@@ -73,6 +75,7 @@ Exception? TryPending(object mod, object talk)
 
 void Test(string name, Action body)
 {
+    checks++;
     try
     {
         body();
@@ -147,5 +150,75 @@ Test("closing a reply without choosing still queues leaving", () =>
     Check((bool)Get(talk, "LeaveNext")!, "A plain close no longer ends the conversation.");
 });
 
-Console.WriteLine($"Mod flow checks: {5 - failures}/5 passed.");
+Type outboxType = modAssembly.GetType("StardewAgentBridge.ReliableOutbox", throwOnError: true)!;
+object NewOutbox() => Activator.CreateInstance(outboxType, nonPublic: true)!;
+object? Invoke(object target, string method, params object?[] values) => target.GetType().GetMethod(method, Fields)!.Invoke(target, values);
+int Count(object outbox) => (int)outboxType.GetProperty("Count")!.GetValue(outbox)!;
+JsonElement[] Pending(object outbox) => (JsonElement[])Invoke(outbox, "Messages")!;
+
+Test("lifecycle replay keeps the original snapshot and increasing event order", () =>
+{
+    object outbox = NewOutbox();
+    Dictionary<string, object?> fields = new() { ["type"] = "save.saving", ["seq"] = 7, ["dayEnded"] = 1 };
+    Check((bool)Invoke(outbox, "Add", 7, fields)!, "The lifecycle event was not cached.");
+    fields["dayEnded"] = 2;
+    Invoke(outbox, "Add", 9, new Dictionary<string, object?> { ["seq"] = 9 });
+    JsonElement[] first = Pending(outbox);
+    JsonElement[] replay = Pending(outbox);
+    Check(first[0].GetProperty("dayEnded").GetInt32() == 1, "A later game mutation changed the pending event.");
+    Check(first.Select(value => value.GetRawText()).SequenceEqual(replay.Select(value => value.GetRawText())), "Replaying changed a message.");
+    Check(first[0].GetProperty("seq").GetInt32() == 7 && first[1].GetProperty("seq").GetInt32() == 9, "Replay order changed.");
+});
+
+Test("only acknowledged lifecycle events are removed and repeated acknowledgements are harmless", () =>
+{
+    object outbox = NewOutbox();
+    foreach (int seq in new[] { 1, 2, 3 })
+        Invoke(outbox, "Add", seq, new Dictionary<string, object?> { ["seq"] = seq });
+    Invoke(outbox, "Acknowledge", 2);
+    Invoke(outbox, "Acknowledge", 2);
+    Invoke(outbox, "Acknowledge", 999);
+    Check(Count(outbox) == 2, "An acknowledgement removed an unrelated event.");
+    Check(Pending(outbox).Select(value => value.GetProperty("seq").GetInt32()).SequenceEqual(new[] { 1, 3 }), "Wrong events remain.");
+});
+
+Test("the lifecycle queue refuses overflow without losing accepted events", () =>
+{
+    object outbox = NewOutbox();
+    for (int seq = 1; seq <= 2000; seq++)
+        Check((bool)Invoke(outbox, "Add", seq, new Dictionary<string, object?> { ["seq"] = seq })!, "The queue filled early.");
+    Check(!(bool)Invoke(outbox, "Add", 2001, new Dictionary<string, object?> { ["seq"] = 2001 })!, "Overflow was accepted.");
+    Check(Count(outbox) == 2000 && Pending(outbox)[0].GetProperty("seq").GetInt32() == 1, "Overflow discarded accepted history.");
+});
+
+Test("stale load acknowledgements cannot remove the current load's pending event", () =>
+{
+    object mod = RuntimeHelpers.GetUninitializedObject(modType);
+    object outbox = NewOutbox();
+    Set(mod, "initialSave", new Dictionary<string, object?>()); Set(mod, "lineageId", "farm"); Set(mod, "loadNonce", "current");
+    Set(mod, "lifecycle", outbox);
+    Invoke(outbox, "Add", 4, new Dictionary<string, object?> { ["seq"] = 4 });
+    using JsonDocument stale = JsonDocument.Parse("{\"type\":\"ack\",\"lineageId\":\"farm\",\"loadNonce\":\"old\",\"seq\":4}");
+    Invoke(mod, "HandleSync", "ack", stale.RootElement);
+    Check(Count(outbox) == 1, "An old load acknowledged the new load's event.");
+    using JsonDocument current = JsonDocument.Parse("{\"type\":\"ack\",\"lineageId\":\"farm\",\"loadNonce\":\"current\",\"seq\":4}");
+    Invoke(mod, "HandleSync", "ack", current.RootElement);
+    Check(Count(outbox) == 0, "The correct acknowledgement was ignored.");
+});
+
+Test("late replies with the wrong nonce or request sequence never enter game UI logic", () =>
+{
+    var (mod, talk) = Flow();
+    Set(mod, "initialSave", new Dictionary<string, object?>()); Set(mod, "lineageId", "farm"); Set(mod, "loadNonce", "current");
+    foreach (string json in new[] { "{\"lineageId\":\"other\",\"loadNonce\":\"current\",\"seq\":12}", "{\"lineageId\":\"farm\",\"loadNonce\":\"old\",\"seq\":12}",
+        "{\"lineageId\":\"farm\",\"loadNonce\":\"current\",\"seq\":11}", "{}" })
+    {
+        using JsonDocument document = JsonDocument.Parse(json);
+        Check(!(bool)Invoke(mod, "IsCurrentReply", document.RootElement, 12)!, "A stale reply passed the request guard.");
+    }
+    using JsonDocument valid = JsonDocument.Parse("{\"lineageId\":\"farm\",\"loadNonce\":\"current\",\"seq\":12}");
+    Check((bool)Invoke(mod, "IsCurrentReply", valid.RootElement, 12)!, "The current request's reply was rejected.");
+});
+
+Console.WriteLine($"Mod flow checks: {checks - failures}/{checks} passed.");
 return failures == 0 ? 0 : 1;

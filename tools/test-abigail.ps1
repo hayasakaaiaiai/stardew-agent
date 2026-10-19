@@ -57,7 +57,7 @@ try {
     $taskPendingDirectory = Join-Path $taskRuntime 'pending-mod'
     New-Item -ItemType Directory -Path $taskPendingDirectory -Force | Out-Null
     Copy-Item -LiteralPath $taskBuiltDll -Destination (Join-Path $taskPendingDirectory 'StardewAgentBridge.dll') -Force
-    [pscustomobject]@{ Sha256=$taskHash; Fix='Menu lifecycle fix and opt-in Abigail test' } |
+    [pscustomobject]@{ Sha256=$taskHash; Fix='M3b save memory, menu lifecycle fix and opt-in Abigail test' } |
         ConvertTo-Json | Set-Content -LiteralPath (Join-Path $taskPendingDirectory 'install.json') -Encoding UTF8
 
     $taskBridge = Join-Path $taskRoot 'tools\bridge.ts'
@@ -67,7 +67,19 @@ try {
         if ($taskOwner.Name -ne 'node.exe' -or $taskOwner.CommandLine -notlike ('*' + $taskBridge + '*')) {
             throw '47711 端口被其他程序占用。'
         }
-    } else {
+        # An existing Node process still holds the old modules after a source update. Probe before reusing it.
+        $taskProbe = 'const ws=new WebSocket("ws://127.0.0.1:47711");setTimeout(()=>process.exit(2),3000);ws.onopen=()=>ws.send(JSON.stringify({type:"hello",protocol:2,modVersion:"test-launcher"}));ws.onmessage=e=>{const m=JSON.parse(e.data);if(m.type==="hello")process.exit(m.protocol===2?0:3);if(m.type==="sync.error")process.exit(3);};ws.onerror=()=>process.exit(2);'
+        $taskProbe | & $taskNode --input-type=module
+        if ($LASTEXITCODE -ne 0) {
+            if (Get-Process -Name StardewModdingAPI,'Stardew Valley' -ErrorAction SilentlyContinue) {
+                throw '游戏已启动，不能重启旧协议的后端，请先正常退出游戏。'
+            }
+            Write-Output '正在更新本项目的旧后端进程...'
+            Stop-Process -Id $taskListener.OwningProcess -ErrorAction Stop
+            $taskListener = $null
+        }
+    }
+    if (-not $taskListener) {
         Start-Process -FilePath $taskNode -ArgumentList ('"' + $taskBridge + '"') -WorkingDirectory $taskRoot -WindowStyle Hidden -RedirectStandardOutput (Join-Path $taskRuntime 'bridge.stdout.log') -RedirectStandardError (Join-Path $taskRuntime 'bridge.stderr.log') | Out-Null
         $taskReadyDeadline = [DateTime]::UtcNow.AddSeconds(15)
         do {

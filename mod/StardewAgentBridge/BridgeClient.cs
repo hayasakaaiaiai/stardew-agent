@@ -15,13 +15,13 @@ namespace StardewAgentBridge;
 /// </summary>
 internal sealed class BridgeClient : IDisposable
 {
-    private const int ProtocolVersion = 1;
+    private const int ProtocolVersion = 2;
     private static readonly TimeSpan RetryDelay = TimeSpan.FromSeconds(3);
 
     private readonly Uri uri;
     private readonly IMonitor monitor;
     private readonly string modVersion;
-    private readonly ConcurrentQueue<JsonElement> inbox = new();
+    private readonly ConcurrentQueue<(int Generation, JsonElement Message)> inbox = new();
     private readonly SemaphoreSlim sendLock = new(1, 1);
     private readonly CancellationTokenSource stop = new();
     private ClientWebSocket? socket;
@@ -42,7 +42,18 @@ internal sealed class BridgeClient : IDisposable
 
     public void Start() => _ = Task.Run(this.RunAsync);
 
-    public bool TryReceive(out JsonElement message) => this.inbox.TryDequeue(out message);
+    public bool TryReceive(out JsonElement message)
+    {
+        while (this.inbox.TryDequeue(out var item))
+        {
+            if (item.Generation != this.Generation || !this.IsConnected)
+                continue;
+            message = item.Message;
+            return true;
+        }
+        message = default;
+        return false;
+    }
 
     /// <summary>Fire and forget; dropped while disconnected, since the game falls back to vanilla behavior.</summary>
     public void Send(object message)
@@ -68,11 +79,11 @@ internal sealed class BridgeClient : IDisposable
                 connectTimeout.CancelAfter(RetryDelay);
                 await ws.ConnectAsync(this.uri, connectTimeout.Token);
                 this.socket = ws;
-                Interlocked.Increment(ref this.generation);
                 this.warned = false;
                 this.monitor.Log($"已连接后端 {this.uri}。", LogLevel.Info);
                 await this.SendAsync(new { type = "hello", modVersion = this.modVersion, protocol = ProtocolVersion });
-                await this.ReceiveLoopAsync(ws);
+                int connectedGeneration = Interlocked.Increment(ref this.generation);
+                await this.ReceiveLoopAsync(ws, connectedGeneration);
                 this.monitor.Log("和后端的连接断开了，会在后台重连。", LogLevel.Warn);
             }
             catch (Exception ex) when (!this.stop.IsCancellationRequested)
@@ -98,7 +109,7 @@ internal sealed class BridgeClient : IDisposable
         }
     }
 
-    private async Task ReceiveLoopAsync(ClientWebSocket ws)
+    private async Task ReceiveLoopAsync(ClientWebSocket ws, int connectedGeneration)
     {
         byte[] buffer = new byte[16 * 1024];
         using MemoryStream message = new();
@@ -113,7 +124,7 @@ internal sealed class BridgeClient : IDisposable
             try
             {
                 using JsonDocument document = JsonDocument.Parse(message.ToArray());
-                this.inbox.Enqueue(document.RootElement.Clone());
+                this.inbox.Enqueue((connectedGeneration, document.RootElement.Clone()));
             }
             catch (JsonException ex)
             {

@@ -48,6 +48,7 @@ internal sealed partial class ModEntry : Mod
         public NPC Npc { get; }
         public bool Waiting;
         public int WaitedTicks;
+        public int RequestSeq;
         public string Reply = "";
         public string Emotion = "neutral";
         public List<string> Options = new();
@@ -70,23 +71,11 @@ internal sealed partial class ModEntry : Mod
             this.bridge.Start();
             this.BeginAbigailTestIfRequested();
         };
-        helper.Events.GameLoop.SaveLoaded += (_, _) =>
-        {
-            this.loadNonce = Guid.NewGuid().ToString("N");
-            this.seq = 0;
-            this.AnnounceSave();
-        };
-        helper.Events.GameLoop.DayStarted += (_, _) =>
-        {
-            this.EndTalk(null);
-            this.Send("day.started", new() { ["date"] = GameState.Date(), ["weather"] = GameState.Weather() });
-        };
-        helper.Events.GameLoop.ReturnedToTitle += (_, _) =>
-        {
-            this.talk = null;
-            this.offerFor = null;
-            this.startFor = null;
-        };
+        helper.Events.GameLoop.SaveLoaded += (_, _) => this.OnSaveLoaded();
+        helper.Events.GameLoop.DayStarted += (_, _) => this.OnDayStarted();
+        helper.Events.GameLoop.Saving += (_, _) => this.OnSaving();
+        helper.Events.GameLoop.Saved += (_, _) => this.OnSaved();
+        helper.Events.GameLoop.ReturnedToTitle += (_, _) => this.OnReturnedToTitle();
         helper.Events.GameLoop.UpdateTicked += this.OnUpdateTicked;
         helper.Events.Display.MenuChanged += this.OnMenuChanged;
         helper.Events.Input.ButtonPressed += this.OnButtonPressed;
@@ -130,8 +119,15 @@ internal sealed partial class ModEntry : Mod
 
     private void OnUpdateTicked(object? sender, UpdateTickedEventArgs e)
     {
-        // After a (re)connection the backend knows nothing about the loaded save.
-        if (Context.IsWorldReady && this.bridge.IsConnected && this.bridge.Generation != this.announcedGeneration)
+        if (!this.bridge.IsConnected || this.bridge.Generation != this.announcedGeneration)
+        {
+            this.memoryReady = false;
+            if (this.talk is not null)
+                this.EndTalk("（后端已断开，重连后可以重新开口。）");
+        }
+        // Keep a title-return event until it is acknowledged, even though the world has already unloaded.
+        if (this.initialSave is not null && (this.activeLoad || this.lifecycle.Count > 0)
+            && this.bridge.IsConnected && this.bridge.Generation != this.announcedGeneration)
             this.AnnounceSave();
 
         while (this.bridge.TryReceive(out JsonElement message))
@@ -166,7 +162,7 @@ internal sealed partial class ModEntry : Mod
     private bool ShouldOffer(NPC npc)
     {
         return this.config.OfferContinueChat
-            && this.bridge.IsConnected
+            && this.CanChat
             && Context.IsWorldReady
             && SocialNpcs.Contains(npc.Name)
             && !Game1.eventUp
@@ -187,13 +183,13 @@ internal sealed partial class ModEntry : Mod
 
     private void StartTalk(NPC npc)
     {
-        if (!this.bridge.IsConnected)
+        if (!this.CanChat)
         {
-            Game1.addHUDMessage(new HUDMessage("Agent 后端没有连上，这次就聊到这里。", HUDMessage.error_type));
+            Game1.addHUDMessage(new HUDMessage("AI 记忆正在同步，请稍后再聊。", HUDMessage.error_type));
             return;
         }
         this.talk = new Talk(npc);
-        this.Send("talk.open", new()
+        this.talk.RequestSeq = this.Send("talk.open", new()
         {
             ["npc"] = npc.Name,
             ["hearts"] = GameState.Hearts(npc),
@@ -215,7 +211,7 @@ internal sealed partial class ModEntry : Mod
         if (t.SayNext is string line)
         {
             t.SayNext = null;
-            this.Send("talk.say", new() { ["npc"] = t.Npc.Name, ["text"] = line });
+            t.RequestSeq = this.Send("talk.say", new() { ["npc"] = t.Npc.Name, ["text"] = line });
             this.BeginWaiting(t);
         }
         else if (t.TypeNext)
@@ -341,8 +337,10 @@ internal sealed partial class ModEntry : Mod
     private void Handle(JsonElement message)
     {
         string type = message.TryGetProperty("type", out JsonElement typeValue) ? typeValue.GetString() ?? "" : "";
+        if (this.HandleSync(type, message))
+            return;
         string npc = message.TryGetProperty("npc", out JsonElement npcValue) ? npcValue.GetString() ?? "" : "";
-        if (this.talk is not { Waiting: true } t || t.Npc.Name != npc)
+        if (this.talk is not { Waiting: true } t || t.Npc.Name != npc || !this.IsCurrentReply(message, t.RequestSeq))
             return; // Late messages for a conversation that has already ended.
         switch (type)
         {
@@ -364,20 +362,4 @@ internal sealed partial class ModEntry : Mod
         }
     }
 
-    private void AnnounceSave()
-    {
-        this.announcedGeneration = this.bridge.Generation;
-        this.Send("save.loaded", new() { ["player"] = GameState.Player() });
-    }
-
-    private void Send(string type, Dictionary<string, object?> fields)
-    {
-        if (!Context.IsWorldReady)
-            return;
-        fields["type"] = type;
-        fields["lineageId"] = Game1.uniqueIDForThisGame.ToString();
-        fields["loadNonce"] = this.loadNonce;
-        fields["seq"] = ++this.seq;
-        this.bridge.Send(fields);
-    }
 }

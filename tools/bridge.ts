@@ -20,6 +20,7 @@ const stamp = () => new Date().toLocaleTimeString('zh-CN', { hour12: false });
 
 const server = await BridgeServer.start({
   roster, model,
+  memoryDirectory: join(ROOT, '.runtime', 'game'),
   port: Number(process.env.NPC_BRIDGE_PORT ?? 47711),
   log: (line) => console.log(`[${stamp()}] ${line}`),
 });

@@ -67,7 +67,7 @@ internal sealed partial class ModEntry
                     break;
 
                 case "loading-save":
-                    if (!Context.IsWorldReady || !this.bridge.IsConnected || Game1.activeClickableMenu is not null)
+                    if (!Context.IsWorldReady || !this.CanChat || Game1.activeClickableMenu is not null)
                         return;
                     if (Game1.player.Name != "测试" || Game1.uniqueIDForThisGame.ToString() != "436774213")
                         throw new InvalidOperationException("当前读入的不是指定测试存档，已停止。");
@@ -82,7 +82,7 @@ internal sealed partial class ModEntry
                     break; // The location request advances the scenario after the warp finishes.
 
                 case "start-talk":
-                    if (!Context.IsWorldReady || Game1.isWarping || Game1.activeClickableMenu is not null || !this.bridge.IsConnected)
+                    if (!Context.IsWorldReady || Game1.isWarping || Game1.activeClickableMenu is not null || !this.CanChat)
                         return;
                     NPC npc = this.abigailTestNpc!;
                     if (Game1.currentLocation != npc.currentLocation)

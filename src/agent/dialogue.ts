@@ -274,6 +274,7 @@ export interface TurnResult {
 const MAX_ATTEMPTS = 2;
 
 export interface TurnHandlers {
+  signal?: AbortSignal;
   onReply?: (text: string) => void;
   onReasoning?: StreamHandlers['onReasoning'];
 }
@@ -283,6 +284,7 @@ export async function runTurn(
   input: TurnInput,
   handlers: TurnHandlers = {},
 ): Promise<TurnResult> {
+  handlers.signal?.throwIfAborted();
   const memory = deps.memory ?? noMemory;
   const card = deps.roster.get(input.npcId);
   const recalled = await memory.context(input.playerLine, input.standing);
@@ -311,7 +313,7 @@ export async function runTurn(
           handlers.onReply?.(text);
         },
         ...(handlers.onReasoning ? { onReasoning: handlers.onReasoning } : {}),
-      }, { json: true });
+      }, { json: true, ...(handlers.signal ? { signal: handlers.signal } : {}) });
     } catch (error) {
       const dropped = error instanceof TypeError && firstReplyMs === null;
       if (!dropped || tries >= MAX_ATTEMPTS) throw error;
@@ -321,6 +323,7 @@ export async function runTurn(
     if (completion.content.trim() || tries >= MAX_ATTEMPTS) break;
   }
   const { reply, meta, ok } = parseOutput(attempts.at(-1)!.content, stream.text);
+  handlers.signal?.throwIfAborted();
   if (reply) await memory.record({ player: input.playerLine, npc: reply }, meta.remember);
   return {
     reply, meta, metaOk: ok, messages, attempts,
