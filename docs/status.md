@@ -1,0 +1,115 @@
+# 项目现状
+
+> 更新于 2026-10-18。每做完一步就更新这份文档。各部分的细节在各自的设计文档里，见 §7。
+
+## 1. 这个项目在做什么
+
+让星露谷物语里 34 位可以培养好感的 NPC 由云端便宜模型驱动：
+- 玩家能和 NPC 自由聊天。
+- NPC 记得聊过什么。存档或不存档，记忆都和游戏进度一致。
+- 以后 NPC 还会按时间自主行动，彼此互动。
+
+整个系统分两部分，在本机用 WebSocket 通信：
+- **后端**：Node.js + TypeScript，负责角色卡、记忆、调用模型。
+- **Mod**：SMAPI + C#，负责从游戏里读状态，用原版界面显示对话。
+
+## 2. 进度
+
+| 里程碑 | 状态 | 已完成 | 还没做 | 文档 |
+|---|---|---|---|---|
+| M1 存储与事务 | 完成 | 记忆内核：SQLite 提交树、中文检索、当天事务、存档提交和回滚、后端崩溃恢复 | 自动清理过期的临时日志 | `README.md`、`design.md` §16 |
+| M2 Agent | 完成一半 | 和玩家对话：角色卡加载、对话调用、接入记忆、好感度影响记忆 | 自主行动（调度器、合并场景调用、白名单动作）、夜间整合 | `dialogue-prototype.md` |
+| M3 接入游戏 | M3a 已实现，等游戏内验证 | M3a：游戏里"继续聊"，心数、事件、世界状态都从游戏读 | M3b：存档同步、游戏里的跨天记忆 | `game-bridge.md` |
+| M4 内容 | 角色卡已完成 | 34 张角色卡（已审阅），"看过事件之后"共 201 条 | 物品名到 ID 的对应、各动作的上限 | `design.md` §11 |
+
+目前 `dialogue-prototype` 分支上 44 个测试和类型检查全部通过。
+
+**M3a 的游戏内验证**按 `game-bridge.md` §7 的清单逐项试，Mac 和 Windows 都要试。重点看两项：
+- "自己说"的输入框能不能用拼音输入法打中文。
+- 聊完之后原版台词还在不在。
+
+## 3. 分支
+
+GitHub 私有仓库：https://github.com/hayasakaaiaiai/stardew-agent
+
+| 分支 | 内容 | Mac 上的目录 |
+|---|---|---|
+| `main` | 设计文档、34 张角色卡、参考资料、工具脚本 | — |
+| `codex/npc-memory-store` | `main` + 记忆内核（M1）。记忆系统在这个分支上单独开发 | `/Users/a11/Documents/ChatGPT/stardew-agent` |
+| `dialogue-prototype` | 记忆分支 + 对话 + M3a。**最新的完整代码在这里** | `/Users/a11/Documents/ChatGPT/stardew-agent-dialogue` |
+
+- Mac 上的两个目录是同一个仓库的两个 git worktree。
+- `dialogue-prototype` 是变基在记忆分支上的。记忆分支有新提交时，把它再变基到新提交上。
+- 对话这条线只新增 `src/` 下的文件，不改记忆分支已有的 `src/` 文件。需要的话，两条线以后可以干净地合并。
+
+## 4. 环境
+
+| 需要的 | Mac | Windows |
+|---|---|---|
+| Node.js 24 或更高 | 已装（24.18） | 官网安装包 |
+| .NET 8 SDK（只有编译 Mod 时需要） | 装在 `~/.dotnet`，没加进 PATH，用 `~/.dotnet/dotnet` 调用 | 官网安装包 |
+| 星露谷 1.6 + SMAPI | Steam 版 | Steam 或 GOG 版 |
+| 模型 | DeepSeek 官方接口，填在 `.env` 里 | 同左 |
+
+`.env` 不进仓库，按 `.env.example` 填：
+
+```
+NPC_MODEL_ENDPOINT=https://api.deepseek.com
+NPC_MODEL_NAME=deepseek-flash
+NPC_MODEL_API_KEY=<你的 key>
+NPC_MODEL_THINKING=high
+```
+
+- **NuGet**：Mac 这台机器连不上 nuget.org，所以 `mod/nuget.config` 把包源换成了华为云镜像。能直接连 nuget.org 的机器可以删掉这个文件。
+- **网络**：Mac 访问海外站点（GitHub、NuGet、DeepSeek）偶尔会断开，遇到这种情况先重试。后端调用 DeepSeek 时已经有自动重试。
+- **游戏目录**：编译 Mod 时，SMAPI 官方的编译工具会自动找游戏目录，找不到的话在 csproj 里设 `GamePath`。
+
+## 5. 常用命令
+
+```sh
+npm ci                        # 安装依赖
+npm test                      # 离线测试，不联网，不用 key
+npm run typecheck             # 类型检查
+
+npm run chat -- abigail --hearts 4 --seen 1,2   # 命令行和 NPC 聊天，带记忆
+npm run chat -- --probe all   # 跑全部探测题，对话记录存到 .runtime/transcripts/
+
+npm run bridge                # 启动给 Mod 连接的后端（127.0.0.1:47711）
+dotnet build mod/StardewAgentBridge   # 编译 Mod，编译完自动装进游戏的 Mods 目录
+```
+
+- 命令行聊天的参数和 `/sleep`、`/rollback` 等存档命令见 `dialogue-prototype.md` §6 和 §13.3。
+- 运行时数据都放在 `.runtime/` 下，不进仓库。
+
+## 6. 遗留问题
+
+| 问题 | 在哪记的 |
+|---|---|
+| 别人的心事件在这个 NPC 的卡里没有对应禁忌，玩家问起还没发生的事件时，NPC 可能会顺着说下去（比如刘易斯和服装疗法） | `dialogue-prototype.md` §12.6 |
+| 推理强度 `high` 偶尔推理太长，单轮超过 8 秒 | `dialogue-prototype.md` §12.6 |
+| 偶尔有小的事实错误，比如矮人说族里"就剩我一个了" | `dialogue-prototype.md` §11 |
+| 0 心时 NPC 可能太健忘。最简单的调法是把这一档的重要度门槛从 4 降到 3 | `dialogue-prototype.md` §14.5 |
+| 群体 10 心事件、科罗布斯 14 心事件还没写"看过事件之后" | `dialogue-prototype.md` §12.6 |
+| 每次都发给模型的卡片核心部分实测 530–690 token，超过最初定的 500 | `design.md` §11 |
+| M3a 的消息只记录 `seq`，还不去重、不补发，留到 M3b 做 | `game-bridge.md` §3 |
+| 过期的临时日志不会自动清理 | `design.md` §16 |
+
+## 7. 下一步
+
+1. **游戏内验证 M3a**（正在做）：先在 Windows 上试，有问题回来修。
+2. **M3b**：把命令行里模拟的存档换成游戏里真实的读档、睡觉存档、不存档退出，让游戏里的 NPC 也能跨天记事。
+3. M3b 之后的顺序还没定，候选有夜间整合和自主行动（M2b）。按项目约定，开始前先确认设计。
+
+## 8. 文档索引
+
+| 文档 | 讲什么 |
+|---|---|
+| `AGENTS.md` | 给 AI 助手的协作约定（Claude Code 通过 `CLAUDE.md` 读取它） |
+| `docs/status.md` | 本文档：进度、分支、环境、遗留问题、下一步 |
+| `docs/design.md` | 整体设计：已确认的决策、架构、存档和回滚、协议、角色卡、里程碑 |
+| `README.md` | 记忆内核（M1）的用法和接口 |
+| `docs/learning-memory.md` | 记忆内核的学习指南 |
+| `docs/dialogue-prototype.md` | 角色卡加载、对话调用、命令行、探测题，以及接入记忆和好感度影响记忆 |
+| `docs/game-bridge.md` | M3a：Mod 和后端的协议、原版界面怎么复用、游戏内测试清单 |
+| `data/npcs/_template.md` | 角色卡的结构 |
+| `reference/README.md` | 写卡用的参考资料，以及哪些能进仓库 |
