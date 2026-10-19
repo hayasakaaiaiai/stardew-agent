@@ -10,3 +10,5 @@ reference/game/
 # SMAPI mod build output
 mod/**/bin/
 mod/**/obj/
+tests/mod-flow/bin/
+tests/mod-flow/obj/

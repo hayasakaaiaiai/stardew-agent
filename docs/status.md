@@ -22,7 +22,7 @@
 | M3 接入游戏 | M3a 已实现，等游戏内验证 | M3a：游戏里"继续聊"，心数、事件、世界状态都从游戏读 | M3b：存档同步、游戏里的跨天记忆 | `game-bridge.md` |
 | M4 内容 | 角色卡已完成 | 34 张角色卡（已审阅），"看过事件之后"共 201 条 | 物品名到 ID 的对应、各动作的上限 | `design.md` §11 |
 
-目前 `main` 上 44 个测试和类型检查全部通过。
+后端 44 个测试和类型检查通过，另有 5 项 C# 菜单流程回归。Windows 已完成阿比盖尔连续三轮真机自动测试；完整的手动清单仍在验证中，见 [2026-10-19 测试报告](test-results/2026-10-19-abigail.md)。
 
 **M3a 的游戏内验证**按 `game-bridge.md` §7 的清单逐项试，Mac 和 Windows 都要试。重点看两项：
 - "自己说"的输入框能不能用拼音输入法打中文。
@@ -47,10 +47,22 @@ GitHub 私有仓库：https://github.com/hayasakaaiaiai/stardew-agent
 
 | 需要的 | Mac | Windows |
 |---|---|---|
-| Node.js 24 或更高 | 已装（24.18） | 官网安装包 |
-| .NET 8 SDK（只有编译 Mod 时需要） | 装在 `~/.dotnet`，没加进 PATH，用 `~/.dotnet/dotnet` 调用 | 官网安装包 |
-| 星露谷 1.6 + SMAPI | Steam 版 | Steam 或 GOG 版 |
-| 模型 | DeepSeek 官方接口，填在 `.env` 里 | 同左 |
+| Node.js 24 或更高 | 已装（24.18） | 已装（24.14.1），依赖已用 `npm ci` 安装 |
+| .NET SDK（只有编译 Mod 时需要） | .NET 8 装在 `~/.dotnet`，没加进 PATH，用 `~/.dotnet/dotnet` 调用 | 已装 9.0.202，可编译目标为 `net6.0` 的 Mod |
+| 星露谷 1.6 + SMAPI | Steam 版 | Steam 版 1.6.15 + SMAPI 4.5.2 |
+| 模型 | DeepSeek 官方接口，填在 `.env` 里 | 已在本机 `.env` 配好 `deepseek-flash`，`thinking=high` |
+
+Windows 本机安装与验证（2026-10-19）：
+
+- 项目位于 `E:\stardew-agent`，Release Mod 已安装到 `E:\games\steamapps\common\Stardew Valley\Mods\StardewAgentBridge`。
+- 44 个自动测试和类型检查通过；Mod 编译为 0 警告、0 错误，安装后的 DLL 与编译产物哈希一致。
+- 用模拟 Mod 的 WebSocket 客户端调用真实模型，完成开启对话、收到 3 个选项、选择选项继续对话和关闭对话；两轮端到端耗时分别为 1.687 秒、1.469 秒。结果保存在本机 `.runtime/smoke-result.json`。
+- 已通过桌面“星露谷 AI 对话测试”快捷方式启动游戏；SMAPI 日志确认新版 Mod 加载成功并连接 `ws://127.0.0.1:47711`。以后双击该快捷方式会启动后端和 SMAPI，后端日志在本机 `.runtime/bridge.stdout.log`。
+- 游戏里的中文输入、原版台词保留和其他交互仍按 `docs/game-bridge.md` §7 由用户验证；M3b 的游戏存档同步与跨天记忆尚未接入。
+- 同日用户实测报告第二轮 NPC 不回复。日志显示模型在 1.1–1.7 秒内正常完成，问题出在游戏端：`UpdateTicked` 先消费选择，下一帧 `MenuChanged` 误判为退出聊天，随后丢弃第二轮回复。已让 `RunPending` 等菜单关闭通知处理完且不在等待回复时再运行，同时修复“自己说”提交的同类时序问题。
+- 新增 5 项 C# 流程回归，原 DLL 为 2/5、修复后为 5/5；44 项后端测试、类型检查和 Release 编译再次通过（0 警告、0 错误）。修复 DLL 已在游戏退出后安装并核对哈希。
+- 新增 `tools/test-abigail.ps1` 和 Mod 的专用测试流程。北京时间 23:14:37–23:14:50，自动点击加载并选择 `测试_436774213`，传送到 `SeedShop` 的阿比盖尔相邻空格，再通过原版选项回调连续收到三轮回复，游戏内测试流程用时 12.77 秒。三轮模型总耗时分别为 1033、1014、1623 ms；第三轮对话框已留给用户继续测试。
+- 本机桌面已有“阿比盖尔自动测试”快捷方式；下次测试先正常退出游戏，再双击它。脚本会检查并编译安装所需 Mod、复用或启动后端，再启动自动测试。项目内复现命令、结果位置和覆盖边界见 `docs/game-bridge.md` §8。
 
 `.env` 不进仓库，按 `.env.example` 填：
 
@@ -97,7 +109,7 @@ dotnet build mod/StardewAgentBridge   # 编译 Mod，编译完自动装进游戏
 
 ## 7. 下一步
 
-1. **游戏内验证 M3a**（正在做）：先在 Windows 上试，有问题回来修。
+1. **游戏内验证 M3a**（正在做）：Windows 连续三轮选项对话已通过；继续手测中文输入法、原版台词保留、取消和断线恢复，Mac 也需按清单验证。
 2. **M3b**：把命令行里模拟的存档换成游戏里真实的读档、睡觉存档、不存档退出，让游戏里的 NPC 也能跨天记事。
 3. M3b 之后的顺序还没定，候选有夜间整合和自主行动（M2b）。按项目约定，开始前先确认设计。
 
@@ -112,5 +124,6 @@ dotnet build mod/StardewAgentBridge   # 编译 Mod，编译完自动装进游戏
 | `docs/learning-memory.md` | 记忆内核的学习指南 |
 | `docs/dialogue-prototype.md` | 角色卡加载、对话调用、命令行、探测题，以及接入记忆和好感度影响记忆 |
 | `docs/game-bridge.md` | M3a：Mod 和后端的协议、原版界面怎么复用、游戏内测试清单 |
+| `docs/test-results/2026-10-19-abigail.md` | 第二轮回复丢失的根因、修复验证、阿比盖尔三轮真机自动测试结果 |
 | `data/npcs/_template.md` | 角色卡的结构 |
 | `reference/README.md` | 写卡用的参考资料，以及哪些能进仓库 |

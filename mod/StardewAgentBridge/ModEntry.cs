@@ -14,7 +14,7 @@ namespace StardewAgentBridge;
 /// After a vanilla dialogue with a social NPC, offers "继续聊" and runs the agent conversation using only the game's
 /// own dialogue box, question responses and text input (docs/game-bridge.md §4).
 /// </summary>
-internal sealed class ModEntry : Mod
+internal sealed partial class ModEntry : Mod
 {
     /// <summary>The NPCs with character cards in data/npcs.</summary>
     private static readonly HashSet<string> SocialNpcs = new()
@@ -65,7 +65,11 @@ internal sealed class ModEntry : Mod
         this.config = helper.ReadConfig<ModConfig>();
         this.bridge = new BridgeClient(new Uri(this.config.BackendUrl), this.Monitor, this.ModManifest.Version.ToString());
 
-        helper.Events.GameLoop.GameLaunched += (_, _) => this.bridge.Start();
+        helper.Events.GameLoop.GameLaunched += (_, _) =>
+        {
+            this.bridge.Start();
+            this.BeginAbigailTestIfRequested();
+        };
         helper.Events.GameLoop.SaveLoaded += (_, _) =>
         {
             this.loadNonce = Guid.NewGuid().ToString("N");
@@ -118,6 +122,8 @@ internal sealed class ModEntry : Mod
 
     private void OnButtonPressed(object? sender, ButtonPressedEventArgs e)
     {
+        if (e.Button == SButton.Escape && this.abigailTestRequest is not null)
+            this.FinishAbigailTest(false, "用户按 Esc 取消自动测试。");
         if (this.talk is { Waiting: true } && e.Button == SButton.Escape)
             this.EndTalk(null);
     }
@@ -133,6 +139,8 @@ internal sealed class ModEntry : Mod
 
         if (this.talk is { } t)
             this.TickTalk(t);
+
+        this.TickAbigailTest();
 
         // Everything below opens a menu, so it waits until the previous one has fully closed.
         if (Game1.activeClickableMenu is not null || Game1.dialogueUp || !Context.IsWorldReady)
@@ -199,6 +207,11 @@ internal sealed class ModEntry : Mod
     /// <summary>Runs whatever the player chose in the last dialogue box, once that box has closed.</summary>
     private void RunPending(Talk t)
     {
+        // MenuChanged observes vanilla menu closes on the next tick. Keep the choice queued until then,
+        // or OwnDialogueClosed will mistake the consumed choice for leaving and discard the next reply.
+        if (t.Waiting || t.Shown is not null || t.Input is not null)
+            return;
+
         if (t.SayNext is string line)
         {
             t.SayNext = null;
