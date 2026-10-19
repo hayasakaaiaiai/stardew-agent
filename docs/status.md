@@ -21,6 +21,7 @@
 | M2 Agent | 对话、夜间整合、次日主动提计划已合入 | 和玩家对话；夜间整合原话校验；首次“继续聊”按昨天计划主动询问，日期由代码换算（2026-10-20 合并进 `main`） | 自主行动（调度器、合并场景调用、白名单动作） | `dialogue-prototype.md`、`nightly-consolidation.md`、`next-day-plans.md` |
 | M3 接入游戏 | M3a/M3b 已实现，Windows 真机组合通过 | 游戏里"继续聊"；真实保存/退出、跨天记忆、回滚、后端进程重启与旧档分叉 | M3a 剩下三项手测：输入法、原版台词保留、取消 | `game-bridge.md`、`game-memory.md` |
 | M4 内容 | 角色卡已完成 | 34 张角色卡（已审阅），"看过事件之后"共 201 条 | 物品名到 ID 的对应、各动作的上限 | `design.md` §11 |
+| 硬件陪伴 H1–H4 | H1 已实现 | H1：电脑端的设备服务、语音模式对话、聊天写回存档、和游戏及命令行互斥 | H2 真机语音、H3 头像、H4 游戏里接上（M3b 已完成，可以开始） | `companion-device.md` |
 
 `main` 上后端 84 个测试、类型检查和构建通过，另有 13 项 C# 流程检查。10 月 20 日阿比盖尔三轮真机回归通过，随后在独立副本中用真实模型完成跨天保留、不保存回滚、后端进程重启、旧档分叉四项真机验收：76.77 秒，13 次模型调用，3 次真实睡觉保存，原测试档 6 个文件哈希均相同。详见 [真机组合验收报告](test-results/2026-10-20-game-memory.md)。
 
@@ -29,6 +30,8 @@
 按用户“调整防止记错”的要求，现已用代码核对原话来源，禁止模型自由改写长期记忆。76/76、类型检查、构建和 13/13 C# 检查通过；5 类真实模型样本各 3 次通过。13:01 的真机组合验收 103.42 秒、13 次对话 + 3 次夜间整合通过，原档 6 文件哈希相同；原话确实落库并进入次日 prompt。固定输入每晚增加 195 输入 token，正常调用次数不变。常驻后端已备份并更新，最终 PID 25704。详见 [事实归属修复报告](test-results/2026-10-20-nightly-facts-fix.md)。
 
 用户确认 M2b 第一步后，`codex/next-day-plans` 已实现次日首次“继续聊”主动提计划、原话核对、日期换算、开场问句处理以及重启/回滚/分叉语义。该分支已同步 `main` / `7b3d6df`，完整 84/84、类型检查、构建、13/13 C# 检查通过。最终真实模型 6 类各 2 次，另有 12 次普通开场对照；首次计划开场额外 162–169 输入 token，之后不增加固定成本或固定调用。最终真机 105.22 秒、17 次调用、3 次真实睡觉保存通过，原档 6 文件哈希未变；14:17:21 已备份并重载正常后端，PID 17244。展示效果、回退和保留的失败证据见 [次日计划验收报告](test-results/2026-10-20-next-day-plans.md)。
+
+`hardware-companion` 分支另有机器人的测试，变基到 M3b 之后共 79 个测试和类型检查通过。
 
 **游戏内验证只在 Windows 上做**，Mac 只做自动测试、类型检查和编译 Mod。M3a 按 `game-bridge.md` §7 的清单还剩三项：
 - "自己说"的输入框能不能用拼音输入法打中文。
@@ -123,7 +126,8 @@ npm run typecheck             # 类型检查
 npm run chat -- abigail --hearts 4 --seen 1,2   # 命令行和 NPC 聊天，带记忆
 npm run chat -- --probe all   # 跑全部探测题，对话记录存到 .runtime/transcripts/
 
-npm run bridge                # 启动给 Mod 连接的后端（127.0.0.1:47711）
+npm run bridge                # 启动后端：Mod 连 127.0.0.1:47711，机器人连局域网 47712；/robot 选存档和角色
+npm run device                # 模拟机器人，打字代替说话（hardware-companion 分支）
 dotnet build mod/StardewAgentBridge   # 编译 Mod，编译完自动装进游戏的 Mods 目录
 ```
 
@@ -150,6 +154,7 @@ dotnet build mod/StardewAgentBridge   # 编译 Mod，编译完自动装进游戏
 1. **H4 机器人接回游戏存档**：夜间整合已在 2026-10-20 按用户“全部按推荐来”的授权快进合并进 `main`；接着把 `hardware-companion` 变基上来，按 `companion-device.md` §13 实现 H4。Windows 上测试前切回 `main` 拉最新代码。
 2. **补齐 Windows M3a 手测**：中文输入法、原版台词保留、取消，随时可做，不挡开发。脚本已覆盖原版输入回调，但不能代替拼音输入法的实际操作。
 3. **M2b 第一步已合入 `main`**：[次日主动提起计划](next-day-plans.md)；继续观察自然语言日期与重复邀约。实际行动、调度器和白名单动作另行设计。
+4. **硬件陪伴**：H1 已完成。H2 等你买好材料，百炼的实测和挑音色等你填 key，见 `companion-device.md` §11。机器人现在用命令行的记忆库（`.runtime/chat`），游戏用 `.runtime/game`，两边还是分开的，接起来是 H4。
 
 ## 8. 文档索引
 
@@ -172,5 +177,6 @@ dotnet build mod/StardewAgentBridge   # 编译 Mod，编译完自动装进游戏
 | `docs/test-results/2026-10-20-memory.md` | M3b 代码、67 项测试及真机握手成功/模型网络失败的验证记录 |
 | `docs/test-results/2026-10-20-retest.md` | 网络恢复后的三轮真机、真实模型记忆链路、存档指针对齐和失败暂停修复 |
 | `docs/test-results/2026-10-20-game-memory.md` | 独立副本中跨天、回滚、后端进程重启和旧档分叉的完整真机验收 |
+| `docs/companion-device.md` | 硬件陪伴：小智机器人、语音、聊天写回存档；H1 的用法和实测 |
 | `data/npcs/_template.md` | 角色卡的结构 |
 | `reference/README.md` | 写卡用的参考资料，以及哪些能进仓库 |

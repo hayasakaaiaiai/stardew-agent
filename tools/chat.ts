@@ -13,6 +13,7 @@ import {
   type DialogueMeta, type Exchange, OPENING_LINE, runTurn, type Standing, type TurnResult, weekday, type WorldState,
 } from '../src/agent/dialogue.ts';
 import { NIGHTLY_THINKING, nightlyConsolidator } from '../src/agent/nightly.ts';
+import { DatabaseBusyError } from '../src/companion/locks.ts';
 import { ModelClient, modelConfigFromEnv } from '../src/services/model/client.ts';
 import { type Relation, Roster } from '../src/services/roster/index.ts';
 import { SOCIAL_NPCS } from '../src/types.ts';
@@ -110,6 +111,12 @@ async function chat(npcId: string | undefined) {
     directory: CHAT_DATA, name: values.save!, fresh: values.fresh ?? false, startDay: absoluteDay(world), npcIds,
     consolidator: nightlyConsolidator({ roster, model: new ModelClient({ ...model.config, thinking: NIGHTLY_THINKING }), log: note }),
     log: note,
+  }).catch((error: unknown) => {
+    if (error instanceof DatabaseBusyError) {
+      console.error(`记忆数据库正被${error.holder}使用：先在后端输入 /robot stop，或者用 --no-memory`);
+      process.exit(1);
+    }
+    throw error;
   });
   const syncDate = () => { if (save) world = { ...world, ...dateOf(save.day) }; };
   syncDate();
@@ -125,6 +132,7 @@ async function chat(npcId: string | undefined) {
 
   console.log(`${name()}（${npcId}）· ${describeDate(world)} · ${describeStanding(standing)}`);
   console.log(save ? `记忆：存档“${values.save}”。/sleep 存档并进入下一天，/rollback 不存档退回上次存档。` : '记忆：关闭。');
+  if (save?.continuedFromRobot) console.log('（这个存档之后在机器人上聊过，从那里接着）');
   console.log('输入数字选选项，直接打字就是自己说；/help 查看命令。\n');
 
   const say = async (playerLine: string) => {
@@ -196,7 +204,12 @@ async function chat(npcId: string | undefined) {
           else { history = []; await say(OPENING_LINE); }
         } else if (command === 'sleep' || command === 'rollback') {
           if (!save) { console.log('记忆已关闭（--no-memory）'); continue; }
-          if (command === 'sleep') await save.sleep();
+          if (command === 'sleep') {
+            await save.sleep({
+              label: values.save!, player: world.player, facts: world.facts, seenEvents: [...standing.seenEvents],
+              npcs: { [npcId]: { hearts: standing.hearts, relation: standing.relation } },
+            });
+          }
           else await save.rollback();
           world = { ...world, time: scenario.world.time };
           syncDate();

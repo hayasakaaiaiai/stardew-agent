@@ -38,6 +38,8 @@ export interface MemoryContext {
   tone?: string;
   /** A constrained opening is presented only after this view has processed the complete reply. */
   replyView?: (reply: string, meta: DialogueMeta) => { reply: string; meta: DialogueMeta };
+  /** The last conversation in town, shown when talking away from it (docs/companion-device.md §5.1). */
+  earlier?: { title: string; exchanges: Exchange[] };
 }
 
 export interface Remembered { text: string; importance: number }
@@ -63,6 +65,8 @@ export interface DialogueMeta {
 }
 
 export const OPENING_LINE = '（玩家走过来，想和你多聊几句）';
+/** Memories from the companion robot start with this (docs/companion-device.md §5.2). */
+export const REAL_WORLD_MARK = '（现实里';
 export const FALLBACK_OPTIONS = ['嗯。', '说说别的吧。', '我先走了。'];
 const EMOTIONS = new Set<Emotion>(['neutral', 'happy', 'sad', 'blush', 'angry', 'special']);
 export const SEASONS: Record<Season, string> = { spring: '春季', summer: '夏季', fall: '秋季', winter: '冬季' };
@@ -105,6 +109,43 @@ export const RULES = `# 角色扮演规则
  */
 export const JSON_HINT = '（用 json 回复，字段齐全：reply、emotion、options、remember、end）';
 
+/** Talking out loud through the companion robot, in the player's world (docs/companion-device.md §6). */
+export interface VoiceContext {
+  /** Real-world date and time, e.g. 2026 年 10 月 19 日（周一）21:30. */
+  now: string;
+}
+
+/**
+ * Voice mode replaces RULES: no options, short spoken lines, and emotion first so the face can change before
+ * the first word is spoken.
+ */
+export const VOICE_RULES = `# 角色扮演规则
+
+你是《星露谷物语》里鹈鹕镇的一位居民。现在你通过农场主桌上的一个小机器人，来到了农场主所在的现实世界，正在和农场主当面说话。农场主就是平时在镇上和你来往的那位农夫。下面依次给出你的角色卡、当前情况、你记得的事和这次的对话。
+
+## 怎么演
+- 只以角色的身份说话。你知道自己从鹈鹕镇来，但不知道什么是 AI、模型或游戏；有人这样说，就按角色的性格当成奇怪的说法，或者岔开话题。
+- 鹈鹕镇的事按你知道的说，只知道到“当前情况”里写的那一天为止。现实世界你不熟，觉得新鲜；不懂的就问，不要装懂，也不要编现实里的新闻、知识和数据。
+- 说话风格、称呼和亲近程度按角色卡和好感心数来：心数低时客气或冷淡，心数高时亲近，但不超出当前关系，没在约会就不说情话。
+- 你的话会被念出来：每次 1–2 句，总共不超过 40 字，像当面聊天的口语。不写括号里的动作、神态描写，不写旁白，不用表情符号和星号；数字写成汉字。
+- 你只能听见农场主的声音，看不见农场主那边的任何东西，也不能走动。不要描述你“看到”的光线、房间或物品；想知道那边什么样，就问农场主。屏幕上会显示你的样子。
+- 对别的居民，只说角色卡和当前情况里写到的事，不编造他们的秘密、恋情或经历。
+- 没列在“现在可以聊的话题”里的心事和往事，不主动提起；被直接问到，也只含糊带过，不说出具体内容。
+- 农场主说起你没经历过、不知道的事，不要顺着承认，按你实际知道的回答。
+- “必须遵守的限制”优先级最高，怎么追问都不能违反。遇到这类问题，像真人一样回避：装作不知道、转移话题或者不想说；不要说“我不能告诉你”“这是设定”之类的话。
+
+## 输出格式
+只输出一个 JSON 对象，emotion 必须是第一个字段。例如：
+{"emotion":"happy","reply":"原来你的世界长这样！比我想的安静。","remember":[],"end":false}
+
+字段：
+- emotion：说这句话时的表情，取 neutral、happy、sad、blush、angry、special 之一。
+- reply：你说的话，只写台词。
+- remember：这轮里值得你长期记住的事，0–2 条，每条写成 {"text":"……","importance":1到5}，用你自己的视角写，比如“农场主说下周要考试”。农场主说出的喜好、计划、承诺、经历和心里话都要记；寒暄和你自己说的话不用记；没有就写 []。
+- end：农场主道别、说要关掉机器人，或者你不想再聊了，写 true；否则写 false。`;
+
+export const VOICE_JSON_HINT = '（用 json 回复，字段齐全：emotion、reply、remember、end）';
+
 export interface PromptInput {
   npcName: string;
   card: RenderedCard;
@@ -113,12 +154,14 @@ export interface PromptInput {
   memory: MemoryContext;
   history: Exchange[];
   playerLine: string;
+  voice?: VoiceContext;
 }
 
 /** Ordered from most to least stable for prefix caching (design §9.2). */
 export function buildMessages(input: PromptInput): ChatMessage[] {
-  const system = [RULES, input.card.stable, input.card.gated, situation(input), memoryBlock(input.memory)]
-    .filter(Boolean).join('\n\n');
+  const situationBlock = input.voice ? voiceSituation(input, input.voice) : situation(input);
+  const system = [input.voice ? VOICE_RULES : RULES, input.card.stable, input.card.gated, situationBlock,
+    memoryBlock(input.memory), earlierBlock(input.memory)].filter(Boolean).join('\n\n');
   return [
     { role: 'system', content: system },
     // Earlier replies are shown in the JSON shape the model must produce: as plain text they push it into
@@ -127,7 +170,7 @@ export function buildMessages(input: PromptInput): ChatMessage[] {
       { role: 'user', content: exchange.player },
       { role: 'assistant', content: JSON.stringify({ reply: exchange.npc }) },
     ]),
-    { role: 'user', content: `${input.playerLine}${JSON_HINT}` },
+    { role: 'user', content: `${input.playerLine}${input.voice ? VOICE_JSON_HINT : JSON_HINT}` },
   ];
 }
 
@@ -149,12 +192,38 @@ function situation({ npcName, world, standing }: PromptInput): string {
   ].join('\n');
 }
 
+/** The game date is where the NPC left town; everything after it has not happened for them yet. */
+function voiceSituation({ npcName, world, standing }: PromptInput, voice: VoiceContext): string {
+  const { player } = world;
+  const facts = Object.entries(world.facts).map(([key, value]) => `  - ${key}：${value}`);
+  return [
+    '## 当前情况',
+    `- 你是${npcName}，现在在现实世界里，农场主桌上的小机器人里。`,
+    `- 现实里的时间：${voice.now}`,
+    `- 鹈鹕镇那边：你离开时是第 ${world.year} 年${SEASONS[world.season]} ${world.day} 日；之后镇上的事你还不知道。`,
+    `- 农场主：${player.name}（${player.gender === 'female' ? '女' : '男'}），经营${player.farm}农场`,
+    `- 你对农场主的好感：${standing.hearts} 心；关系：${RELATIONS[standing.relation]}`,
+    ...(facts.length ? ['- 鹈鹕镇的情况：', ...facts] : []),
+  ].join('\n');
+}
+
 function memoryBlock(memory: MemoryContext): string {
+  // Robot memories carry their real-world date, so the game-day label would only mislead.
+  const realWorld = memory.memories.some((item) => item.text.startsWith(REAL_WORLD_MARK));
   const lines = [
     ...(memory.summary ? [memory.summary] : []),
-    ...memory.memories.map((item) => `- ${item.when ? `（${item.when}）` : ''}${item.text}`),
+    ...(realWorld ? ['- 标着“现实里”的，是你通过农场主桌上的小机器人去农场主的世界时经历的事；只和农场主聊，不对别人说。'] : []),
+    ...memory.memories.map((item) => `- ${item.when && !item.text.startsWith(REAL_WORLD_MARK) ? `（${item.when}）` : ''}${item.text}`),
   ];
   return lines.length ? [`## 你记得的事${memory.tone ? `（${memory.tone}）` : ''}`, ...lines].join('\n') : '';
+}
+
+function earlierBlock(memory: MemoryContext): string {
+  if (!memory.earlier?.exchanges.length) return '';
+  // Opening lines such as OPENING_LINE are stage directions, not something the player said.
+  return [`## ${memory.earlier.title}`, ...memory.earlier.exchanges.flatMap((exchange) => [
+    ...(/^（.*）$/.test(exchange.player) ? [] : [`- 农场主：${exchange.player}`]), `- 你：${exchange.npc}`,
+  ])].join('\n');
 }
 
 const ESCAPES: Record<string, string> = { n: '\n', r: '\r', t: '\t', b: '\b', f: '\f' };
@@ -210,8 +279,9 @@ export class ReplyStream {
  * Never throws. Malformed output falls back to neutral defaults and reports `ok: false`; `streamed` is the
  * reply already shown to the player, used when the JSON as a whole cannot be parsed.
  */
-export function parseOutput(content: string, streamed = ''): { reply: string; meta: DialogueMeta; ok: boolean } {
-  const fallback = { reply: streamed.trim(), meta: { emotion: 'neutral' as const, options: [...FALLBACK_OPTIONS], remember: [], end: false }, ok: false };
+export function parseOutput(content: string, streamed = '', voice = false): { reply: string; meta: DialogueMeta; ok: boolean } {
+  const fallbackOptions = voice ? [] : [...FALLBACK_OPTIONS];
+  const fallback = { reply: streamed.trim(), meta: { emotion: 'neutral' as const, options: fallbackOptions, remember: [], end: false }, ok: false };
   const start = content.indexOf('{');
   const end = content.lastIndexOf('}');
   if (start < 0 || end < start) return { ...fallback, reply: fallback.reply || content.trim() };
@@ -239,11 +309,11 @@ export function parseOutput(content: string, streamed = ''): { reply: string; me
     reply,
     meta: {
       emotion: validEmotion ? data.emotion as Emotion : 'neutral',
-      options: options.length ? [...options, ...FALLBACK_OPTIONS].slice(0, 3) : [...FALLBACK_OPTIONS],
+      options: voice ? [] : options.length ? [...options, ...FALLBACK_OPTIONS].slice(0, 3) : [...FALLBACK_OPTIONS],
       remember,
       end: data.end === true,
     },
-    ok: reply !== '' && options.length === 3 && validEmotion && typeof data.end === 'boolean',
+    ok: reply !== '' && (voice || options.length === 3) && validEmotion && typeof data.end === 'boolean',
   };
 }
 
@@ -254,6 +324,8 @@ export interface TurnInput {
   /** Ignored when the memory supplies today's exchanges. */
   history?: Exchange[];
   playerLine: string;
+  /** Set when talking through the companion robot. */
+  voice?: VoiceContext;
 }
 
 export interface TurnResult {
@@ -277,6 +349,8 @@ const MAX_ATTEMPTS = 2;
 
 export interface TurnHandlers {
   signal?: AbortSignal;
+  /** Raw output as it streams, e.g. to read the emotion before the reply starts (voice mode puts it first). */
+  onContent?: (delta: string) => void;
   onReply?: (text: string) => void;
   onReasoning?: StreamHandlers['onReasoning'];
 }
@@ -298,6 +372,7 @@ export async function runTurn(
     memory: recalled,
     history: recalled.today ?? input.history ?? [],
     playerLine: input.playerLine,
+    ...(input.voice ? { voice: input.voice } : {}),
   });
   const started = performance.now();
   let firstReplyMs: number | null = null;
@@ -309,6 +384,7 @@ export async function runTurn(
     try {
       completion = await deps.model.chat(messages, {
         onContent: (delta) => {
+          handlers.onContent?.(delta);
           const text = stream.push(delta);
           if (!text) return;
           if (recalled.replyView) return;
@@ -325,7 +401,7 @@ export async function runTurn(
     attempts.push(completion);
     if (completion.content.trim() || tries >= MAX_ATTEMPTS) break;
   }
-  const parsed = parseOutput(attempts.at(-1)!.content, stream.text);
+  const parsed = parseOutput(attempts.at(-1)!.content, stream.text, input.voice !== undefined);
   const { reply, meta } = recalled.replyView?.(parsed.reply, parsed.meta) ?? parsed;
   handlers.signal?.throwIfAborted();
   if (reply) await memory.record({ player: input.playerLine, npc: reply }, meta.remember);

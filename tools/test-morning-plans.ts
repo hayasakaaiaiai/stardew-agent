@@ -44,7 +44,7 @@ for (const sample of fixtures) for (let repeat = 1; repeat <= repeats; repeat++)
     await memory.record({ player: OPENING_LINE, npc: sample.fixture.opening }, []);
     await memory.context(sample.fixture.player, standing);
     await memory.record({ player: sample.fixture.player, npc: sample.fixture.reply }, []);
-    await save.sleep();
+    await save.sleep({ label: 'morning-plans', player: world.player, facts: {}, npcs: {}, seenEvents: [] });
     const db = new DatabaseSync(join(saveDirectory, 'memory.sqlite'), { readOnly: true });
     try {
       const count = () => db.prepare('SELECT COUNT(*) AS n FROM memory').get()!.n;

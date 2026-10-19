@@ -7,6 +7,9 @@ import { AgentMemory, type PlayerIdentity } from '../../src/agent/dialogue-memor
 import type { DialogueMemory, Season } from '../../src/agent/dialogue.ts';
 import { withMorningPlan } from '../../src/agent/morning.ts';
 import { Nightly } from '../../src/agent/nightly.ts';
+import { DatabaseLock } from '../../src/companion/locks.ts';
+import { CompanionRegistry } from '../../src/companion/registry.ts';
+import { type SaveSnapshot, SnapshotStore } from '../../src/companion/snapshot.ts';
 import { createRuntime, type SaveScope } from '../../src/index.ts';
 
 const SEASONS: Season[] = ['spring', 'summer', 'fall', 'winter'];
@@ -35,28 +38,42 @@ interface SaveState {
   day: number;
   /** The day a reload of the last save starts on. */
   savedDay: number;
+  /** What a game save file would point at. */
   commitId?: string;
+  /** Where this load continued from: commitId, or a robot session after it (docs/companion-device.md §5.3). */
+  headCommitId?: string;
 }
+
+/** What the CLI knows about the game state, written with each save for the robot (docs/companion-device.md §5.1). */
+export type SaveFacts = Pick<SaveSnapshot, 'label' | 'player' | 'facts' | 'npcs' | 'seenEvents'>;
 
 type Runtime = Awaited<ReturnType<typeof createRuntime>>;
 
+interface Storage {
+  runtime: Runtime;
+  lock: DatabaseLock;
+  registry: CompanionRegistry;
+  snapshots: SnapshotStore;
+  nightly: Nightly | undefined;
+}
+
 export class ChatSave {
-  private readonly runtime: Runtime;
+  private readonly storage: Storage;
   private readonly file: string;
   private readonly npcIds: readonly string[];
-  private readonly nightly: Nightly | undefined;
   private state: SaveState;
   private scope: SaveScope;
   private seq: number;
+  /** Set when the load continued after a robot session, for the CLI to mention. */
+  readonly continuedFromRobot: boolean;
 
-  private constructor(runtime: Runtime, file: string, npcIds: readonly string[], state: SaveState, scope: SaveScope,
-    nightly: Nightly | undefined) {
-    this.runtime = runtime;
+  private constructor(storage: Storage, file: string, npcIds: readonly string[], loaded: { state: SaveState; scope: SaveScope; continued: boolean }) {
+    this.storage = storage;
     this.file = file;
     this.npcIds = npcIds;
-    this.state = state;
-    this.scope = scope;
-    this.nightly = nightly;
+    this.state = loaded.state;
+    this.scope = loaded.scope;
+    this.continuedFromRobot = loaded.continued;
     this.seq = this.lastSeq();
   }
 
@@ -73,31 +90,46 @@ export class ChatSave {
     const state: SaveState = existing ?? {
       lineageId: `${options.name}-${randomUUID()}`, loadNonce: randomUUID(), day: options.startDay, savedDay: options.startDay,
     };
-    const runtime = await createRuntime({
-      databasePath: join(options.directory, 'memory.sqlite'),
-      journalDirectory: join(options.directory, 'scratch'),
-      npcIds: options.npcIds,
-    });
+    // The robot writes the same database from the backend; only one process may hold it.
+    const lock = await DatabaseLock.acquire(join(options.directory, 'memory.lock'), '命令行聊天');
+    let runtime: Runtime | undefined;
     try {
-      const scope = await ChatSave.load(runtime, state);
-      const nightly = options.consolidator ? new Nightly({
-        store: runtime.ctx.store, consolidator: options.consolidator, npcIds: options.npcIds, ...(options.log ? { log: options.log } : {}),
-      }) : undefined;
-      const save = new ChatSave(runtime, file, options.npcIds, state, scope, nightly);
+      runtime = await createRuntime({
+        databasePath: join(options.directory, 'memory.sqlite'),
+        journalDirectory: join(options.directory, 'scratch'),
+        npcIds: options.npcIds,
+      });
+      const storage = {
+        runtime, lock,
+        registry: new CompanionRegistry(join(options.directory, 'companion/registry')),
+        snapshots: new SnapshotStore(join(options.directory, 'saves')),
+        nightly: options.consolidator ? new Nightly({
+          store: runtime.ctx.store, consolidator: options.consolidator, npcIds: options.npcIds, ...(options.log ? { log: options.log } : {}),
+        }) : undefined,
+      };
+      const save = new ChatSave(storage, file, options.npcIds, await ChatSave.load(storage, state));
       await save.persist();
-      if (state.commitId) await nightly?.catchUp(state.lineageId, state.commitId);
+      if (save.state.commitId) await storage.nightly?.catchUp(save.state.lineageId, save.state.commitId);
       return save;
     } catch (error) {
-      await runtime.close();
+      await runtime?.close();
+      await lock.release();
       throw error;
     }
   }
 
-  private static load(runtime: Runtime, state: SaveState): Promise<SaveScope> {
-    return runtime.ctx.saves.load({
-      lineageId: state.lineageId, loadNonce: state.loadNonce, day: state.day,
-      ...(state.commitId ? { commitId: state.commitId } : {}),
+  /**
+   * Loads from the save's commit, or from the newest robot session after it. A robot session since the last
+   * load means a new load: the unsaved day was based on the older head and is dropped, as in the game.
+   */
+  private static async load(storage: Storage, state: SaveState): Promise<{ state: SaveState; scope: SaveScope; continued: boolean }> {
+    const head = state.commitId ? await storage.registry.head(state.lineageId, state.commitId) : undefined;
+    const moved = head !== (state.headCommitId ?? state.commitId);
+    const next: SaveState = { ...state, ...(moved ? { loadNonce: randomUUID(), day: state.savedDay } : {}), ...(head ? { headCommitId: head } : {}) };
+    const scope = await storage.runtime.ctx.saves.load({
+      lineageId: next.lineageId, loadNonce: next.loadNonce, day: next.day, ...(head ? { commitId: head } : {}),
     });
+    return { state: next, scope, continued: moved && head !== state.commitId };
   }
 
   get day(): number {
@@ -116,30 +148,39 @@ export class ChatSave {
     });
   }
 
-  /** Sleep and save: commit today, open the next day, then consolidate the saved one. */
-  async sleep(): Promise<void> {
-    const commitId = `${this.state.lineageId}-day${this.state.day}-${randomUUID().slice(0, 8)}`;
+  /** Sleep and save: commit today, write the snapshot the robot reads, open the next day, then consolidate the saved one. */
+  async sleep(facts: SaveFacts): Promise<void> {
+    const { lineageId, day } = this.state;
+    const commitId = `${lineageId}-day${day}-${randomUUID().slice(0, 8)}`;
     await this.scope.prepare(commitId);
     await this.scope.confirm(commitId);
-    this.state = { ...this.state, day: this.state.day + 1, savedDay: this.state.day + 1, commitId };
+    this.state = { ...this.state, day: day + 1, savedDay: day + 1, commitId, headCommitId: commitId };
     await this.persist();
+    // The CLI only knows the NPC it is talking to; others keep what earlier saves recorded.
+    const previous = await this.storage.snapshots.latestOf(lineageId);
+    await this.storage.snapshots.write({
+      ...facts, npcs: { ...previous?.npcs, ...facts.npcs },
+      lineageId, commitId, dayEnded: day, savedAt: new Date().toISOString(),
+    });
     await this.scope.startDay(this.state.day);
-    await this.nightly?.run(this.state.lineageId, commitId);
+    await this.storage.nightly?.run(lineageId, commitId);
   }
 
   /** Quit to title without saving and load the last save again: today is discarded. */
   async rollback(): Promise<void> {
-    await this.runtime.ctx.saves.returnToTitle(this.state.lineageId);
-    this.state = { ...this.state, loadNonce: randomUUID(), day: this.state.savedDay };
+    await this.storage.runtime.ctx.saves.returnToTitle(this.state.lineageId);
+    const loaded = await ChatSave.load(this.storage, { ...this.state, loadNonce: randomUUID(), day: this.state.savedDay });
+    this.state = loaded.state;
+    this.scope = loaded.scope;
     await this.persist();
-    this.scope = await ChatSave.load(this.runtime, this.state);
     this.seq = this.lastSeq();
   }
 
   /** Like the backend stopping: unsaved events stay in the journal and come back on the next open. */
   async close(): Promise<void> {
-    await this.nightly?.close();
-    return this.runtime.close();
+    await this.storage.nightly?.close();
+    await this.storage.runtime.close();
+    await this.storage.lock.release();
   }
 
   private lastSeq(): number {

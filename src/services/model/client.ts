@@ -67,14 +67,34 @@ export function modelConfigFromEnv(env: NodeJS.ProcessEnv = process.env): ModelC
 
 export class ModelClient {
   readonly config: ModelConfig;
+  private warmedAt = 0;
+  private warming: Promise<void> | undefined;
 
   constructor(config: ModelConfig) {
     this.config = config;
   }
 
+  /**
+   * Opens a connection ahead of a request expected soon, e.g. when the player starts speaking. Idle
+   * connections are dropped after a few seconds, and a new one costs 1.5–3.5 s through the proxy here
+   * (docs/companion-device.md §9). Listing models is free; the result is ignored.
+   */
+  warm(): void {
+    if (Date.now() - this.warmedAt < 2000) return;
+    this.warmedAt = Date.now();
+    // Reading the body hands the connection back to the pool for the request that follows.
+    const warming = fetch(`${this.config.endpoint}/models`, {
+      headers: { Authorization: `Bearer ${this.config.apiKey}` }, signal: AbortSignal.timeout(5000),
+    }).then((response) => response.arrayBuffer()).then(() => {}, () => {});
+    this.warming = warming;
+    void warming.then(() => { if (this.warming === warming) this.warming = undefined; });
+  }
+
   /** `json` turns on the provider's JSON output mode; the prompt must still describe the object. */
   async chat(messages: ChatMessage[], handlers: StreamHandlers = {}, options: { json?: boolean; signal?: AbortSignal } = {}): Promise<Completion> {
     const { config } = this;
+    // A connection still being opened by `warm` is quicker to wait for than opening a second one.
+    await this.warming;
     const started = performance.now();
     const elapsed = () => Math.round(performance.now() - started);
     const request = {

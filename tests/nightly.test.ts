@@ -17,6 +17,8 @@ const START: WorldState = {
   player: { name: '小林', gender: 'female', farm: '晴空' }, facts: {},
 };
 const standing = { hearts: 4, seenEvents: new Set<string>(), relation: 'friend' as const };
+/** What /sleep records for the robot; these tests do not look at it. */
+const FACTS = { label: 'test', player: START.player, facts: {}, npcs: {}, seenEvents: [] };
 
 const completion = (content: string): Completion =>
   ({ content, reasoning: '', finishReason: 'stop', usage: null, timing: { firstReasoningMs: null, firstContentMs: 1, totalMs: 1 } });
@@ -151,7 +153,7 @@ test('a night replaces its notes, retires what the model names, and the next day
     const dialogue = dialogueModel();
     const say = talk(roster, dialogue.model, save);
     await say('记住玩家还没养宠物');
-    await save.sleep();
+    await save.sleep(FACTS);
     const first = nightly.user(0);
     assert.match(first, /## 你是谁\n- 阿比盖尔，二十岁出头，皮埃尔和卡洛琳的独生女/);
     assert.match(first, /第 1 年春季 17 日\n- 农场主：小林（女）\n- 你对农场主的好感：4 心；关系：朋友/);
@@ -166,7 +168,7 @@ test('a night replaces its notes, retires what the model names, and the next day
     assert.doesNotMatch(dialogue.system(), /想问她要不要养只猫/, 'the plan stays out of dialogue');
 
     await say('记住玩家养了紫猫星糖');
-    await save.sleep();
+    await save.sleep(FACTS);
     const second = nightly.user(1);
     assert.match(second, /## 你以前对农场主的印象\n忙碌但真诚的人/);
     assert.match(second, /- m1（昨天，重要度 4）农场主说："记住玩家还没养宠物"/);
@@ -190,7 +192,7 @@ test('an answer that cannot be parsed twice keeps that day as it was, and is not
   try {
     const dialogue = dialogueModel();
     await talk(roster, dialogue.model, save)('记住玩家最喜欢下雨天');
-    await save.sleep();
+    await save.sleep(FACTS);
     assert.equal(nightly.sent.length, 2);
     assert.equal(logs.filter((line) => line.includes('无法解析')).length, 2);
     await save.close();
@@ -211,7 +213,7 @@ test('a network failure leaves the night for the next load', async () => {
   try {
     const dialogue = dialogueModel();
     await talk(roster, dialogue.model, save)('记住玩家下周要去城里');
-    await save.sleep();
+    await save.sleep(FACTS);
     assert.ok(logs.some((line) => line.startsWith('夜间整合失败')));
     await save.close();
     const retry = nightlyModel([answer({ memories: [{ sources: ['t1'], importance: 4 }], impression: '常跑来跑去的人' })]);

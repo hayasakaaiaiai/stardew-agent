@@ -20,6 +20,9 @@ export interface BridgeOptions {
   port: number;
   host?: string;
   log?: (line: string) => void;
+  /** The companion robot gives up a save the game loads (docs/companion-device.md §5.4). */
+  onSaveLoaded?: (lineageId: string) => Promise<void> | void;
+  onDisconnected?: () => void;
 }
 
 interface OpenTalk { npcId: string; standing: Standing; world: WorldState }
@@ -74,8 +77,10 @@ export class BridgeServer {
       session.pending?.abort('Mod disconnected');
       void session.chain.finally(() => {
         this.sessions.delete(session);
-        if (session.save && this.owners.get(session.save.initial.lineageId) === session)
+        if (session.save && this.owners.get(session.save.initial.lineageId) === session) {
           this.owners.delete(session.save.initial.lineageId);
+          this.options.onDisconnected?.();
+        }
       });
       this.log('Mod 已断开；保留同次读档的当天工作区');
     });
@@ -106,6 +111,7 @@ export class BridgeServer {
       session.open.clear();
       if (session.save && this.owners.get(session.save.initial.lineageId) === session)
         this.owners.delete(session.save.initial.lineageId);
+      await this.options.onSaveLoaded?.(message.lineageId);
       session.save = await this.memory.load(message);
       const previous = this.owners.get(message.lineageId);
       if (previous && previous !== session) {

@@ -17,6 +17,8 @@ const START: WorldState = {
   player: { name: '小林', gender: 'female', farm: '晴空' }, facts: {},
 };
 const standing = { hearts: 4, seenEvents: new Set<string>(), relation: 'friend' as const };
+/** What /sleep records for the robot; these tests do not look at it. */
+const FACTS = { label: 'test', player: START.player, facts: {}, npcs: {}, seenEvents: [] };
 
 /** Replies in order; each reply may ask the NPC to remember something. */
 function fakeModel(replies: { reply: string; remember?: string }[]) {
@@ -85,7 +87,7 @@ test('after sleeping, yesterday is remembered but no longer part of the conversa
     const fake = fakeModel([{ reply: '好呀。', remember: '玩家答应带紫水晶来' }, { reply: '嘿。' }]);
     const say = talk(roster, fake.model, save);
     await say('明天我给你带紫水晶');
-    await save.sleep();
+    await save.sleep(FACTS);
     assert.equal(save.day, absoluteDay(START) + 1);
     await say('早上好');
     assert.match(fake.system(1), /- （昨天）玩家答应带紫水晶来/);
@@ -107,7 +109,7 @@ test('rolling back discards today but keeps everything up to the last save', asy
     ]);
     const say = talk(roster, fake.model, save);
     await say('我喜欢青蛙');
-    await save.sleep();
+    await save.sleep(FACTS);
     await say('我要搬去城里了');
     await save.rollback();
     assert.equal(save.day, absoluteDay(START) + 1, 'reloads the day after the last save');
