@@ -1,5 +1,6 @@
 import { Context, Service } from 'cordis';
 import type { Fiber } from 'cordis';
+import { DayJournal } from './journal.ts';
 import { SaveScope } from './scope.ts';
 import type { LoadSave } from './scope.ts';
 import { requireValue } from '../validation.ts';
@@ -46,6 +47,8 @@ export class SaveManager extends Service {
         await Promise.all(save.agentFibers.map(agentFiber => agentFiber.await()));
         requireValue(save.agents.size === this.config.npcIds.length, 'AGENT_INIT_FAILED', 'Not all NPC session handles initialized');
         this.loaded.set(input.lineageId, { save, fiber });
+        // Only after this load is up, so a failed load never costs the previous one its journal.
+        await DayJournal.prune(this.config.journalDirectory, input.lineageId, input.loadNonce);
         return save;
       } catch (error) { await fiber.dispose(); throw error; }
     });

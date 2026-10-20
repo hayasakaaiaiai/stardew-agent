@@ -17,7 +17,7 @@
 
 | 里程碑 | 状态 | 已完成 | 还没做 | 文档 |
 |---|---|---|---|---|
-| M1 存储与事务 | 完成 | 记忆内核：SQLite 提交树、中文检索、当天事务、存档提交和回滚、后端崩溃恢复 | 自动清理过期的临时日志 | `README.md`、`design.md` §16 |
+| M1 存储与事务 | 完成 | 记忆内核：SQLite 提交树、中文检索、当天事务、存档提交和回滚、后端崩溃恢复；过期临时日志和检查点的清理（`m1-scratch-cleanup`，待合入） | — | `README.md`、`design.md` §16 |
 | M2 Agent | 对话、夜间整合、次日计划、头顶气泡、寄信与格式失败恢复已合入 | 对话；夜间原话校验；首次“继续聊”提计划；头顶气泡和表情；寄信与随信附赠；夜间格式失败有限补跑（2026-10-20 合并进 `main`） | NPC 碰面聊天（`m2b-npc-chat`）、送礼记忆（`m2b-gifts`）、聊天影响好感（`m2b-friendship`），待 Windows 验收；自主行动（调度器、合并场景调用、白名单动作）；观察正常游玩和自由生成内容 | `dialogue-prototype.md`、`nightly-consolidation.md`、`next-day-plans.md`、`npc-bubbles.md`、`npc-mail.md`、`npc-chat.md`、`npc-gifts.md`、`npc-friendship.md` |
 | M3 接入游戏 | 完成（Windows） | 游戏里"继续聊"；真实保存/退出、跨天记忆、回滚、后端进程重启与旧档分叉；拼音输入法、原版台词保留、取消三项手测通过 | — | `game-bridge.md`、`game-memory.md` |
 | M4 内容 | 角色卡已完成 | 34 张角色卡（已审阅），"看过事件之后"共 201 条 | 物品名到 ID 的对应、各动作的上限 | `design.md` §11 |
@@ -46,6 +46,8 @@ M2b 第五步“NPC 记得玩家送的礼物”在 `m2b-gifts` 上实现，建�
 
 M2b 第六步“聊天影响原版好感”在 `m2b-friendship` 上实现，建在 `m2b-gifts` 上：对话每轮模型多给一个 -2 到 2 的 `mood`，代码按每档 10 点换算，每位 NPC 每天合计截在 −40 到 +30（`design.md` §8），随回复发给 Mod，Mod 再核对一次后调用原版 `changeFriendship`；开场一律 0，当天合计从当天日志加总，跟存档保存或回滚。规则最短写法 57 token；真实模型 48 次实测每轮多 59 输入（可缓存）、约 19 输出 token，字段齐全 48/48，讨要好感和奉承没有加分。114/114、类型检查、构建和 Release 编译通过，等 Windows 验收，见 [npc-friendship.md](npc-friendship.md) §7。
 
+M1 剩下的“自动清理过期的临时日志”在 `m1-scratch-cleanup` 上补上，建在 `m2b-friendship` 上：同一存档用新的 nonce 读档成功后，删除这个存档其他 nonce 的当天 JSONL 和桥接检查点，后端中途重启过也一样（同一进程里换 nonce 本来就会删）。只删文件名符合格式的文件，其他存档不动。设计里“启动时删 24 小时前的残留”没做，理由见 `design.md` §6。纯后端改动，116/116、类型检查和构建通过；撤掉实现，两项新测试都失败。
+
 ## 3. 分支
 
 GitHub 私有仓库：https://github.com/hayasakaaiaiai/stardew-agent
@@ -62,7 +64,8 @@ GitHub 私有仓库：https://github.com/hayasakaaiaiai/stardew-agent
 | `codex/mail-windows-tests` | 气泡、寄信验收与修复，追加夜间格式失败恢复；2026-10-20 快进合并进 `main` | Windows：`E:\stardew-agent` |
 | `m2b-npc-chat` | M2b 第四步：NPC 碰面聊天（旁听），建在最新 `main` 上，等 Windows 验收 | `/Users/a11/Documents/ChatGPT/stardew-agent-chat` |
 | `m2b-gifts` | M2b 第五步：NPC 记得玩家送的礼物，建在 `m2b-npc-chat` 上，等 Windows 验收；协议版本 3 | 已提交，目录现在用于下一步 |
-| `m2b-friendship` | M2b 第六步：聊天影响原版好感，建在 `m2b-gifts` 上，等 Windows 验收 | `/Users/a11/Documents/ChatGPT/stardew-agent-gifts` |
+| `m2b-friendship` | M2b 第六步：聊天影响原版好感，建在 `m2b-gifts` 上，等 Windows 验收 | 已提交 |
+| `m1-scratch-cleanup` | M1 补齐：过期临时日志和检查点的清理，建在 `m2b-friendship` 上 | `/Users/a11/Documents/ChatGPT/stardew-agent-gifts` |
 
 Windows 上的目录是 `E:\stardew-agent`。当前从 `m2b-mail` 建立寄信验收分支，并合入本地 `910c127` 的气泡修复；已包含最新远端 `main` / `6c151f2`。本地 `codex/next-day-plans` 的手测入口提交 `2260625` 仍保留，并复用到验收分支。M3b 在 `codex/game-save-memory` 上开发，2026-10-20 快进合并进 `main`；它已经包含的 `codex/abigail-auto-test` 同时删除。
 
@@ -159,7 +162,6 @@ dotnet build mod/StardewAgentBridge   # 编译 Mod，编译完自动装进游戏
 | 群体 10 心事件、科罗布斯 14 心事件还没写"看过事件之后" | `dialogue-prototype.md` §12.6 |
 | 每次都发给模型的卡片核心部分实测 530–690 token，超过最初定的 500 | `design.md` §11 |
 | 真实模型附加字段偶尔解析失败，会走现有回退路径；本次 10 次调用出现 1 次 | `test-results/2026-10-20-retest.md` |
-| 过期的临时日志不会自动清理 | `design.md` §16 |
 | 夜间事实记忆已改为原话引用；印象与计划仍由模型生成，可能夹带具体事实或遗漏内容，需继续观察 | `test-results/2026-10-20-nightly-facts-fix.md` |
 | 计划开场使用保守问句处理，可能回退为较笼统的提问；尚未解析“下周”等任意日期表达，普通对话仍可能出现事实错误 | `test-results/2026-10-20-next-day-plans.md` |
 | 气泡完成动作词过滤较保守，可能丢弃正常句子；模型可能继续追问被否认的话题，不能把规则过滤当成完整事实校验 | `test-results/2026-10-20-bubbles-windows.md` |
@@ -171,8 +173,9 @@ dotnet build mod/StardewAgentBridge   # 编译 Mod，编译完自动装进游戏
 2. **M2b 前三步已合入 `main`**：[次日主动提起计划](next-day-plans.md)、[头顶气泡和表情](npc-bubbles.md)、[寄信与随信附赠](npc-mail.md)，以及[夜间格式失败恢复](test-results/2026-10-20-nightly-recovery.md)。继续观察正常游玩中的自然语言日期、重复邀约、气泡过滤和自由生成内容。
 3. **M2b 第四步：NPC 碰面聊天**：`m2b-npc-chat` 已实现，等 Windows 按 [npc-chat.md](npc-chat.md) §7 验收；通过后合入 `main`。
 4. **M2b 第五步：送礼记忆**：`m2b-gifts` 已实现，等 Windows 按 [npc-gifts.md](npc-gifts.md) §6 验收。Mod 和后端要一起更新（协议 3）。
-5. **M2b 第六步：聊天影响好感**：`m2b-friendship` 已实现，等 Windows 按 [npc-friendship.md](npc-friendship.md) §7 验收。它包含第四、五步，可以一次切到这个分支把三步一起测，都通过后一起合入 `main`。
-6. **自主行动**：调度器、合并场景调用和其余白名单动作另行设计。
+5. **M2b 第六步：聊天影响好感**：`m2b-friendship` 已实现，等 Windows 按 [npc-friendship.md](npc-friendship.md) §7 验收。
+6. **Windows 一次测完**：`m1-scratch-cleanup` 包含第四到六步和临时日志清理，切到这个分支按 `npc-chat.md` §7、`npc-gifts.md` §6、`npc-friendship.md` §7 一起测；都通过后整串快进合入 `main`。
+7. **自主行动**：调度器、合并场景调用和其余白名单动作另行设计。
 
 ## 8. 文档索引
 

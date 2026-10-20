@@ -1,5 +1,5 @@
 /** Game save coordination around the unchanged M1 memory kernel (docs/game-memory.md). */
-import { mkdir, open, readFile, rename } from 'node:fs/promises';
+import { mkdir, open, readdir, readFile, rename, rm } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import type { Consolidator } from '../agent/consolidation.ts';
 import { type Bubble, bubblesFor } from '../agent/bubbles.ts';
@@ -105,9 +105,23 @@ export class GameMemory {
       commitId => void this.nightly?.run(initial.lineageId, commitId));
     await save.restore();
     this.active.set(initial.lineageId, save);
+    await this.prune(dirname(path), path);
     // A crash or a closed backend can leave the last nights unconsolidated.
     void this.nightly?.catchUp(initial.lineageId, save.head);
     return save;
+  }
+
+  /**
+   * Checkpoints of this game save's other loads can never be resumed once a new load is up, just like their day
+   * journals (src/save/journal.ts). Only files named like checkpoints are touched.
+   */
+  private async prune(folder: string, keep: string): Promise<void> {
+    let names: string[];
+    try { names = await readdir(folder); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return; throw error; }
+    const stale = names.filter(name => !join(folder, name).startsWith(keep) && /^[0-9a-f]{64}\.json(\.tmp)?$/.test(name));
+    await Promise.all(stale.map(name => rm(join(folder, name), { force: true })));
+    if (stale.length) this.log(`清理了这个存档以前读档留下的 ${stale.length} 个检查点。`);
   }
 
   async close(): Promise<void> {
