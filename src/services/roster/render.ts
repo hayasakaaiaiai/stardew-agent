@@ -29,7 +29,12 @@ export function renderCard(card: Card, view: CardView): RenderedCard {
   ];
 
   const topics = card.topics.filter((topic) => topic.minHearts <= view.hearts).map((topic) => topic.text);
-  const rules = card.rules.filter((rule) => ruleActive(rule, view)).map(ruleText);
+  // An after-event entry with no rule of its own (usually another NPC's event) would otherwise be a blank the model
+  // fills in when asked; until it is seen, it is stated as not having happened (docs/legacy-cleanup.md §4).
+  const ruled = new Set(card.rules.flatMap((rule) => rule.kind === 'unseen' ? rule.events : []));
+  const notYet = card.afterEvents.filter((entry) => !ruled.has(entry.event) && !view.seenEvents.has(entry.event))
+    .map((entry) => `没发生过：${entry.label}`);
+  const rules = [...card.rules.filter((rule) => ruleActive(rule, view)).map(ruleText), ...notYet];
   const happened = card.afterEvents.filter((entry) => view.seenEvents.has(entry.event)).map((entry) => `${entry.label}：${entry.text}`);
   const gated = [
     section(`现在可以聊的话题（${view.hearts} 心）`, bullets(topics)),

@@ -35,7 +35,8 @@ export function recallPolicy(standing: Pick<Standing, 'hearts' | 'relation'>): R
   if (standing.hearts >= 8 || CLOSE.has(standing.relation)) return { limit: 6, minImportance: 1, maxDays: null, tone: VIVID };
   if (standing.hearts >= 5) return { limit: 5, minImportance: 2, maxDays: 28 };
   if (standing.hearts >= 2) return { limit: 3, minImportance: 3, maxDays: 7 };
-  return { limit: 2, minImportance: 4, maxDays: 3, tone: VAGUE };
+  // 3, not 4, so plans and promises are not forgotten by someone barely known (docs/legacy-cleanup.md §4).
+  return { limit: 2, minImportance: 3, maxDays: 3, tone: VAGUE };
 }
 
 /** Candidates fetched before the standing filter, so it still has enough to choose from. */

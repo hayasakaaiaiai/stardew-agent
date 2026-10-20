@@ -176,5 +176,6 @@ test('how much an NPC remembers about the player depends on hearts and relation'
   assert.deepEqual((await at(0)).today, [{ player: '早', npc: '嘿。' }], 'today’s conversation is never filtered');
 
   assert.deepEqual(recallPolicy({ hearts: 4, relation: 'friend' }), { limit: 3, minImportance: 3, maxDays: 7 });
+  assert.equal(recallPolicy({ hearts: 0, relation: 'friend' }).minImportance, 3, 'plans and promises reach even a stranger');
   assert.equal(recallPolicy({ hearts: 0, relation: 'roommate' }).maxDays, null);
 });

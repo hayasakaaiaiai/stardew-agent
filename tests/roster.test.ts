@@ -123,6 +123,20 @@ test('after-event lines render only once the player has seen the event', () => {
   }
 });
 
+test('an after-event entry with no rule of its own is stated as not having happened until it is seen', async () => {
+  const { roster } = await loadAll();
+  const lewis = (seen: string[]) => roster.render('lewis', { hearts: 6, seenEvents: new Set(seen), purpose: 'dialogue' }).gated;
+  assert.match(lewis([]), /### 必须遵守的限制[\s\S]*\n- 没发生过：艾米丽的 8 心事件，服装疗法/);
+  assert.doesNotMatch(lewis(['2123243']), /没发生过：艾米丽的 8 心事件/);
+  assert.match(lewis(['2123243']), /### 已经发生过的事\n- 艾米丽的 8 心事件，服装疗法：/);
+  const abigail = roster.render('abigail', { hearts: 6, seenEvents: new Set(), purpose: 'dialogue' }).gated;
+  assert.doesNotMatch(abigail, /没发生过：6 心，深夜墓地/, 'her own event already has a rule');
+  assert.match(abigail, /没发生过：艾米丽的 8 心事件，服装疗法/);
+  let lines = 0;
+  for (const id of IDS) lines += (roster.render(id, { hearts: 0, seenEvents: new Set(), purpose: 'dialogue' }).gated.match(/\n- 没发生过：/g) ?? []).length;
+  assert.equal(lines, 85, 'every uncovered entry across the 34 cards');
+});
+
 test('every event a rule hides has an after-event line, so nothing goes blank once the rule lapses', async () => {
   const { roster } = await loadAll();
   for (const id of IDS) {
