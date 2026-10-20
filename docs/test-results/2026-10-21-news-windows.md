@@ -88,7 +88,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\test-game-social
 
 00:38:37（UTC+8）已备份正常 `.runtime/game/` 和旧后端日志至本轮 `normal-backup/`，将正常后端从 PID 1564 重载为 12072。正常启动日志确认 `high/low/disabled`；协议 3 握手和新 `scene.shown` 的无存档校验探测通过，没有加载正常玩家存档。Mod 已安装，编译与安装 DLL 的 SHA256 一致：`3960B5764E71EC2B74F6A75E28BC100EFAB7868BA4396D7B814D0C786AB32879`。
 
-本轮代码在 `codex/news-windows-tests`，未推送、未合入 `main`。结束时同步又出现后续 `m2c-offscreen-news / 3fcfda6` 与 `legacy-cleanup / 6e4800e`，不把它们计入本报告的 `dc6d1d2` 验收范围；后续“全部 high”等变化需要另行验收，不能拿本轮 `low/disabled` 数据代替。
+本轮代码在 `codex/news-windows-tests`，用户随后要求“推”，`7ff44ea` 已推送并核对远端一致，未合入 `main`。结束时同步又出现后续 `m2c-offscreen-news / 3fcfda6` 与 `legacy-cleanup / 6e4800e`，之后查看新提交又发现 `1fbb983`（未发生事件限制、0–1 心回忆门槛调整与卡片标准更新）；这些均不计入本报告的 `dc6d1d2` 验收范围。后续“全部 high”等变化需要另行验收，不能拿本轮 `low/disabled` 数据代替。
 
 ## 5. 覆盖边界
 
