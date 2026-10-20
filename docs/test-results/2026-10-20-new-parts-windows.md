@@ -56,6 +56,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File E:\stardew-agent\tools\t
 
 ## 覆盖范围与观察
 
+后续同步：用户明确要求“推送”后，验收代码 `a966ea6`（包含上一轮 `36999ea`）已上传到 GitHub 的 `codex/new-parts-windows-tests`；未合入 `main`。上节“未推送”描述的是验收刚完成时的状态。
+
 - 特殊礼物过滤逐个创建了花束、枯萎花束、吊坠、虚空幽灵吊坠、电影票这五种原生物品，并强制增加计数后执行实际 `TickGifts`，核对序号不变、没有 `gift.given`；没有实际完成全部求婚/离婚/电影剧情。
 - 婚约/婚姻/室友通过独立副本的原生 `FriendshipStatus` 设置，孩子用实际 `Child` 对象；没有把“设置状态”算作完整婚礼或生育过程。
 - 七天冷却的第 6/7 天、寄信和当面共用冷却由现有离线后端测试覆盖；游戏本轮实际测同日、次日及保存回滚，没有再真实睡七晚。夜间整合使用固定输出，只测状态交互。

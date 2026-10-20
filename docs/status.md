@@ -50,6 +50,8 @@ M2b 第六步“聊天影响原版好感”在 `m2b-friendship` 上实现，建�
 
 随后按“新的部分提交也要测”同步 `c25e331` 及其前面 4 个新提交，在 `codex/new-parts-windows-tests` 保留上一轮测试和冷却修复。统一脚本新增当面赠礼、满背包、特殊物品过滤、家庭公开事实及跨进程清理测试，125/125 Node、20/20 C#、类型检查、构建与 Release 零警告零错误通过；同一游戏进程 115.80 秒、63 项检查、8 次真实调用、2 次真实保存、6 次读档通过。实际送出羊肚菌和樱桃炸弹，皮埃尔知道阿比盖尔搬到农场，原档 6 个文件哈希相同。复现并修复无效新读档先丢弃旧日志的问题，正常 prompt token 增量 0。正常后端 23:49 备份后重载为 PID 1564，DLL 哈希一致、协议 3 握手通过。未推送、未合入 `main`，详见 [新提交组合验收报告](test-results/2026-10-20-new-parts-windows.md)。
 
+用户随后明确要求“推送”。验收代码 `a966ea6`（包含上一轮 `36999ea`）已上传到 GitHub 的 `codex/new-parts-windows-tests`，本分支已设置远端跟踪。前文“未推送”为当时验收完成的状态；目前仍未合入 `main`。
+
 ## 3. 分支
 
 GitHub 私有仓库：https://github.com/hayasakaaiaiai/stardew-agent
@@ -71,7 +73,7 @@ GitHub 私有仓库：https://github.com/hayasakaaiaiai/stardew-agent
 | `m1-scratch-cleanup` | 新读档清理其他 nonce 的临时日志和检查点，上游 `2c12b9f` | 已同步到当前验收分支 |
 | `m2b-in-person-gifts` | 当面送礼及特殊物品过滤，上游 `7a7d52d` | 已同步到当前验收分支 |
 | `world-public-facts` | 公开家庭状态与中文日志，上游 `c25e331` | 已同步到当前验收分支 |
-| `codex/new-parts-windows-tests` | 保留 `36999ea` 并合入上述新提交，统一验收与失败读档保护修复；未推送、未合入 `main` | Windows 当前：`E:\stardew-agent` |
+| `codex/new-parts-windows-tests` | 统一验收与失败读档保护修复；`a966ea6` 已按用户要求推送，未合入 `main` | Windows 当前：`E:\stardew-agent` |
 
 Windows 上的目录是 `E:\stardew-agent`。当前 `codex/new-parts-windows-tests` 从上一轮 `36999ea` 建立，合入 `world-public-facts` / `c25e331`；包含远端 `main` / `db94a12`、M2b 第四至七步、公开家庭信息和临时日志清理。已解决测试记录、场景中文名与 Mod 赠礼分发的合并冲突，旧测试没有覆盖掉新功能。此前所有本地验收分支及 `codex/next-day-plans` / `2260625` 均保留。
 
@@ -182,7 +184,7 @@ dotnet build mod/StardewAgentBridge   # 编译 Mod，编译完自动装进游戏
 4. **M2b 第五步：送礼记忆**：原版赠送、保存、回滚和真实回忆的组合验收通过；生日、任务与节日场景的覆盖边界见 [npc-gifts.md](npc-gifts.md) §7。Mod 与后端均已更新到协议 3。
 5. **M2b 第六步：聊天影响好感**：增减、上限、重复消息、保存与回滚通过，见 [npc-friendship.md](npc-friendship.md) §8。三项在 `codex/social-windows-tests` 一起完成，等待用户决定推送及合入；不自动合并 `main`。
 6. **自主行动**：调度器、合并场景调用和其余白名单动作另行设计。
-7. **本轮新增项已验收，等待用户决定同步及合入**：过期 nonce 清理与失败读档保护、当面赠礼、特殊物品过滤、公开家庭信息，都在 `codex/new-parts-windows-tests`；复现仍是一个 `tools/test-game-social.ps1`。自然婚礼/电影等剧情、全部 NPC 自然游玩和模型事实可靠性仍按 [本轮报告](test-results/2026-10-20-new-parts-windows.md) 的覆盖边界观察。
+7. **本轮新增项已验收并推送，等待用户决定合入**：过期 nonce 清理与失败读档保护、当面赠礼、特殊物品过滤、公开家庭信息，都在 `codex/new-parts-windows-tests`；复现仍是一个 `tools/test-game-social.ps1`。自然婚礼/电影等剧情、全部 NPC 自然游玩和模型事实可靠性仍按 [本轮报告](test-results/2026-10-20-new-parts-windows.md) 的覆盖边界观察。
 
 ## 8. 文档索引
 
