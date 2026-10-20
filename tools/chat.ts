@@ -12,6 +12,7 @@ import { parseArgs } from 'node:util';
 import {
   type DialogueMeta, type Exchange, OPENING_LINE, runTurn, type Standing, type TurnResult, weekday, type WorldState,
 } from '../src/agent/dialogue.ts';
+import { NIGHTLY_THINKING, nightlyConsolidator } from '../src/agent/nightly.ts';
 import { ModelClient, modelConfigFromEnv } from '../src/services/model/client.ts';
 import { type Relation, Roster } from '../src/services/roster/index.ts';
 import { SOCIAL_NPCS } from '../src/types.ts';
@@ -104,12 +105,15 @@ async function chat(npcId: string | undefined) {
   const name = () => roster.get(npcId).name;
 
   // With memory on, the save decides the date and today's conversation lives in the memory system.
+  const note = (line: string) => console.log(`（${line}）`);
   const save = values['no-memory'] ? undefined : await ChatSave.open({
     directory: CHAT_DATA, name: values.save!, fresh: values.fresh ?? false, startDay: absoluteDay(world), npcIds,
+    consolidator: nightlyConsolidator({ roster, model: new ModelClient({ ...model.config, thinking: NIGHTLY_THINKING }), log: note }),
+    log: note,
   });
   const syncDate = () => { if (save) world = { ...world, ...dateOf(save.day) }; };
   syncDate();
-  const memory = save?.memory(npcId, () => absoluteDay(world) * 1440 + minutesOf(world.time));
+  const memory = save?.memory(npcId, () => absoluteDay(world) * 1440 + minutesOf(world.time), () => world.player);
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   // An iterator buffers lines that arrive while a reply is generating, so piped input works too.
   const lines = rl[Symbol.asyncIterator]();
@@ -202,6 +206,7 @@ async function chat(npcId: string | undefined) {
           if (!memory) { console.log('记忆已关闭（--no-memory）'); continue; }
           const recalled = await memory.context(arg, standing);
           if (recalled.tone) console.log(`（${recalled.tone}）`);
+          if (recalled.summary) console.log(recalled.summary);
           console.log(recalled.memories.length ? recalled.memories.map((m) => `- （${m.when}）${m.text}`).join('\n') : '（没有召回到记忆）');
         } else console.log('未知命令，/help 查看命令');
         continue;
@@ -377,7 +382,7 @@ const HELP = `命令：
   /stats               本次会话的统计
   /reload              重新加载角色卡
   /reset               清空今天的对话并重新开场（仅 --no-memory）
-  /sleep               存档并进入下一天
+  /sleep               存档、整合当天，进入下一天
   /rollback            不存档，退回上次存档
   /memories [话题]     查看现在能召回的记忆
   /save                保存对话记录

@@ -120,7 +120,7 @@ await consolidateCommit(runtime.ctx.store, {
 });
 ```
 
-一次 `consolidateCommit` 是该提交的完整整合批次，各 NPC 的输出最终一起提交。输出只追加到来源提交，原始事件不改写；同一提交完成后不再重新调用模型，也不能换一份结果覆盖。`demo.ts` 使用假模型演示这条路径。还没有自动夜间调度、每周/每季摘要或真实 LLM 提取器。
+一次 `consolidateCommit` 是该提交的完整整合批次，各 NPC 的输出最终一起提交。输出只追加到来源提交，原始事件不改写；同一提交完成后不再重新调用模型，也不能换一份结果覆盖。`demo.ts` 使用假模型演示这条路径。用真实模型的整理器和存档后的自动调度在 Agent 层，见 [夜间整合](docs/nightly-consolidation.md)；还没有每周/每季摘要。
 
 ## 实现与学习入口
 

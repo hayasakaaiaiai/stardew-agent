@@ -63,9 +63,9 @@ export interface DialogueMeta {
 export const OPENING_LINE = '（玩家走过来，想和你多聊几句）';
 export const FALLBACK_OPTIONS = ['嗯。', '说说别的吧。', '我先走了。'];
 const EMOTIONS = new Set<Emotion>(['neutral', 'happy', 'sad', 'blush', 'angry', 'special']);
-const SEASONS: Record<Season, string> = { spring: '春季', summer: '夏季', fall: '秋季', winter: '冬季' };
+export const SEASONS: Record<Season, string> = { spring: '春季', summer: '夏季', fall: '秋季', winter: '冬季' };
 const WEEKDAYS = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
-const RELATIONS: Record<Relation, string> = {
+export const RELATIONS: Record<Relation, string> = {
   stranger: '刚认识', friend: '朋友', dating: '正在约会', engaged: '已订婚', married: '已结婚', roommate: '室友',
 };
 

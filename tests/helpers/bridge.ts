@@ -3,6 +3,7 @@ import type { TestContext } from 'node:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { WebSocket } from 'ws';
+import type { Consolidator } from '../../src/agent/consolidation.ts';
 import { BridgeServer } from '../../src/bridge/server.ts';
 import { PROTOCOL_VERSION, type BackendMessage, type LoadedSave, type SavePointer, type WorldSnapshot } from '../../src/bridge/protocol.ts';
 import type { ChatMessage, Completion, ModelClient, StreamHandlers } from '../../src/services/model/client.ts';
@@ -78,13 +79,14 @@ export async function harness(t: TestContext) {
   const fake = fakeModel();
   const servers: BridgeServer[] = [];
   const logs: string[] = [];
-  const start = async () => {
-    const server = await BridgeServer.start({ roster, model: fake.model, memoryDirectory: directory, port: 0, log: line => logs.push(line) });
+  const start = async (consolidator?: Consolidator) => {
+    const server = await BridgeServer.start({ roster, model: fake.model, memoryDirectory: directory, port: 0, log: line => logs.push(line),
+      ...(consolidator ? { consolidator } : {}) });
     servers.push(server); return server;
   };
   const stop = async (server: BridgeServer) => { servers.splice(servers.indexOf(server), 1); await server.close(); };
   t.after(async () => { for (const server of servers) await server.close(); await rm(directory, { recursive: true, force: true }); });
-  return { directory, fake, start, stop, logs };
+  return { directory, roster, fake, start, stop, logs };
 }
 
 export async function sleep(wire: Awaited<ReturnType<typeof connect>>, commitId = 'saved-day-1', dayEnded = 1, parentId: string | null = null) {

@@ -11,7 +11,11 @@ export interface AgentMemoryOptions {
   maxChars?: number;
   /** How many of today's exchanges go back into the prompt; older ones rely on recall. */
   historyTurns?: number;
+  /** Logged with each turn so the nightly consolidation knows who the player is. */
+  player?: () => PlayerIdentity;
 }
+
+export interface PlayerIdentity { name: string; gender: 'male' | 'female' }
 
 /** How much an NPC remembers about the player at a given standing (docs/dialogue-prototype.md §14). */
 export interface RecallPolicy {
@@ -46,7 +50,9 @@ const RECENT_SLOTS = 3;
  */
 export class AgentMemory implements DialogueMemory {
   private readonly agent: () => NpcAgent;
-  private readonly options: Required<AgentMemoryOptions>;
+  private readonly options: Required<Omit<AgentMemoryOptions, 'player'>> & Pick<AgentMemoryOptions, 'player'>;
+  /** From the last recall, so the day log says how close the NPC was when this was said. */
+  private standing: Standing | undefined;
 
   constructor(agent: () => NpcAgent, options: AgentMemoryOptions) {
     this.agent = agent;
@@ -55,6 +61,7 @@ export class AgentMemory implements DialogueMemory {
 
   async context(query: string, standing: Standing): Promise<MemoryContext> {
     const { maxChars, historyTurns } = this.options;
+    this.standing = standing;
     const policy = recallPolicy(standing);
     const nowGameTime = this.options.now();
     const agent = this.agent();
@@ -82,7 +89,10 @@ export class AgentMemory implements DialogueMemory {
       const log = entry.changes[0]?.log;
       return log && typeof log.player === 'string' && typeof log.npc === 'string' ? [{ player: log.player, npc: log.npc }] : [];
     });
+    // Written by the nightly consolidation (docs/nightly-consolidation.md); shown at every standing.
+    const impression = relevant.state.impression;
     return {
+      ...(typeof impression === 'string' && impression ? { summary: `- 你对农场主的整体印象：${impression}` } : {}),
       memories: picked.map((memory) => ({ text: memory.text, when: daysAgo(nowGameTime, memory.gameTime) })),
       today: today.slice(-historyTurns),
       ...(policy.tone ? { tone: policy.tone } : {}),
@@ -93,12 +103,20 @@ export class AgentMemory implements DialogueMemory {
     await this.agent().record({
       seq: this.options.nextSeq(),
       gameTime: this.options.now(),
-      log: { player: exchange.player, npc: exchange.npc },
+      log: { player: exchange.player, npc: exchange.npc, ...turnLog(this.standing, this.options.player?.()) },
       memories: remembered.map((item) => ({
         text: item.text, importance: item.importance, kind: 'conversation', subjects: ['player'], visibility: 'private',
       })),
     });
   }
+}
+
+/** What the nightly consolidation reads back from the day log besides the exchange itself. */
+export function turnLog(standing: Pick<Standing, 'hearts' | 'relation'> | undefined, player: PlayerIdentity | undefined) {
+  return {
+    ...(standing ? { standing: { hearts: standing.hearts, relation: standing.relation } } : {}),
+    ...(player ? { playerInfo: { name: player.name, gender: player.gender } } : {}),
+  };
 }
 
 function dayOf(gameTime: number): number {

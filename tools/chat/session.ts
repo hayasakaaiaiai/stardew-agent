@@ -2,8 +2,10 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { AgentMemory } from '../../src/agent/dialogue-memory.ts';
+import type { Consolidator } from '../../src/agent/consolidation.ts';
+import { AgentMemory, type PlayerIdentity } from '../../src/agent/dialogue-memory.ts';
 import type { Season } from '../../src/agent/dialogue.ts';
+import { Nightly } from '../../src/agent/nightly.ts';
 import { createRuntime, type SaveScope } from '../../src/index.ts';
 
 const SEASONS: Season[] = ['spring', 'summer', 'fall', 'winter'];
@@ -41,21 +43,28 @@ export class ChatSave {
   private readonly runtime: Runtime;
   private readonly file: string;
   private readonly npcIds: readonly string[];
+  private readonly nightly: Nightly | undefined;
   private state: SaveState;
   private scope: SaveScope;
   private seq: number;
 
-  private constructor(runtime: Runtime, file: string, npcIds: readonly string[], state: SaveState, scope: SaveScope) {
+  private constructor(runtime: Runtime, file: string, npcIds: readonly string[], state: SaveState, scope: SaveScope,
+    nightly: Nightly | undefined) {
     this.runtime = runtime;
     this.file = file;
     this.npcIds = npcIds;
     this.state = state;
     this.scope = scope;
+    this.nightly = nightly;
     this.seq = this.lastSeq();
   }
 
-  /** Opens `<directory>/<name>.json`, or starts a new save on `startDay` when it is missing or `fresh` is set. */
-  static async open(options: { directory: string; name: string; fresh: boolean; startDay: number; npcIds: readonly string[] }) {
+  /**
+   * Opens `<directory>/<name>.json`, or starts a new save on `startDay` when it is missing or `fresh` is set.
+   * With a consolidator, each /sleep is consolidated before the next day starts (docs/nightly-consolidation.md).
+   */
+  static async open(options: { directory: string; name: string; fresh: boolean; startDay: number; npcIds: readonly string[];
+    consolidator?: Consolidator; log?: (line: string) => void }) {
     await mkdir(options.directory, { recursive: true });
     const file = join(options.directory, `${options.name}.json`);
     const existing = options.fresh ? undefined
@@ -70,8 +79,12 @@ export class ChatSave {
     });
     try {
       const scope = await ChatSave.load(runtime, state);
-      const save = new ChatSave(runtime, file, options.npcIds, state, scope);
+      const nightly = options.consolidator ? new Nightly({
+        store: runtime.ctx.store, consolidator: options.consolidator, npcIds: options.npcIds, ...(options.log ? { log: options.log } : {}),
+      }) : undefined;
+      const save = new ChatSave(runtime, file, options.npcIds, state, scope, nightly);
       await save.persist();
+      if (state.commitId) await nightly?.catchUp(state.lineageId, state.commitId);
       return save;
     } catch (error) {
       await runtime.close();
@@ -95,11 +108,11 @@ export class ChatSave {
     return this.scope.ledger.currentDay?.overlay(npcId).today.length ?? 0;
   }
 
-  memory(npcId: string, now: () => number): AgentMemory {
-    return new AgentMemory(() => this.scope.agent(npcId), { now, nextSeq: () => ++this.seq });
+  memory(npcId: string, now: () => number, player?: () => PlayerIdentity): AgentMemory {
+    return new AgentMemory(() => this.scope.agent(npcId), { now, nextSeq: () => ++this.seq, ...(player ? { player } : {}) });
   }
 
-  /** Sleep and save: commit today, then open the next day. */
+  /** Sleep and save: commit today, open the next day, then consolidate the saved one. */
   async sleep(): Promise<void> {
     const commitId = `${this.state.lineageId}-day${this.state.day}-${randomUUID().slice(0, 8)}`;
     await this.scope.prepare(commitId);
@@ -107,6 +120,7 @@ export class ChatSave {
     this.state = { ...this.state, day: this.state.day + 1, savedDay: this.state.day + 1, commitId };
     await this.persist();
     await this.scope.startDay(this.state.day);
+    await this.nightly?.run(this.state.lineageId, commitId);
   }
 
   /** Quit to title without saving and load the last save again: today is discarded. */
@@ -119,7 +133,8 @@ export class ChatSave {
   }
 
   /** Like the backend stopping: unsaved events stay in the journal and come back on the next open. */
-  close(): Promise<void> {
+  async close(): Promise<void> {
+    await this.nightly?.close();
     return this.runtime.close();
   }
 

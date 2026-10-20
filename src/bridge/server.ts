@@ -1,6 +1,7 @@
 /** WebSocket service for the SMAPI mod, with save-scoped M1 memory (docs/game-memory.md). */
 import type { AddressInfo } from 'node:net';
 import { type WebSocket, WebSocketServer } from 'ws';
+import type { Consolidator } from '../agent/consolidation.ts';
 import { OPENING_LINE, runTurn, type Standing, type WorldState } from '../agent/dialogue.ts';
 import type { ModelClient } from '../services/model/client.ts';
 import type { Roster } from '../services/roster/index.ts';
@@ -13,6 +14,8 @@ export interface BridgeOptions {
   roster: Roster;
   model: ModelClient;
   memoryDirectory: string;
+  /** Consolidates each confirmed save in the background (docs/nightly-consolidation.md). */
+  consolidator?: Consolidator;
   /** 0 picks a free port (tests). */
   port: number;
   host?: string;
@@ -41,7 +44,7 @@ export class BridgeServer {
   }
 
   static async start(options: BridgeOptions): Promise<BridgeServer> {
-    const memory = await GameMemory.open(options.memoryDirectory, options.log);
+    const memory = await GameMemory.open(options.memoryDirectory, options.log, options.consolidator);
     const server = new WebSocketServer({ port: options.port, host: options.host ?? '127.0.0.1', maxPayload: 256 * 1024 });
     try {
       await new Promise<void>((resolve, reject) => { server.once('listening', resolve); server.once('error', reject); });

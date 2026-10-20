@@ -1,8 +1,10 @@
 /** Game save coordination around the unchanged M1 memory kernel (docs/game-memory.md). */
 import { mkdir, open, readFile, rename } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import { AgentMemory } from '../agent/dialogue-memory.ts';
-import type { DialogueMemory, Exchange, Remembered, TurnResult } from '../agent/dialogue.ts';
+import type { Consolidator } from '../agent/consolidation.ts';
+import { AgentMemory, turnLog } from '../agent/dialogue-memory.ts';
+import type { DialogueMemory, Exchange, Remembered, Standing, TurnResult } from '../agent/dialogue.ts';
+import { Nightly } from '../agent/nightly.ts';
 import { createRuntime, type SaveScope } from '../index.ts';
 import { SOCIAL_NPCS } from '../types.ts';
 import { canonical, digest, requireValue } from '../validation.ts';
@@ -35,16 +37,19 @@ export class GameMemory {
   private readonly runtime: Runtime;
   private readonly directory: string;
   private readonly log: (line: string) => void;
+  private readonly nightly: Nightly | undefined;
   private readonly active = new Map<string, GameSave>();
   private readonly loading = new Map<string, Promise<void>>();
 
-  private constructor(runtime: Runtime, directory: string, log: (line: string) => void) {
-    this.runtime = runtime; this.directory = directory; this.log = log;
+  private constructor(runtime: Runtime, directory: string, log: (line: string) => void, nightly: Nightly | undefined) {
+    this.runtime = runtime; this.directory = directory; this.log = log; this.nightly = nightly;
   }
 
-  static async open(directory: string, log: (line: string) => void = () => {}): Promise<GameMemory> {
+  /** Without a consolidator, saves are never consolidated (docs/nightly-consolidation.md). */
+  static async open(directory: string, log: (line: string) => void = () => {}, consolidator?: Consolidator): Promise<GameMemory> {
     const runtime = await createRuntime({ databasePath: join(directory, 'memory.sqlite'), journalDirectory: join(directory, 'scratch') });
-    return new GameMemory(runtime, directory, log);
+    const nightly = consolidator ? new Nightly({ store: runtime.ctx.store, consolidator, npcIds: SOCIAL_NPCS, log }) : undefined;
+    return new GameMemory(runtime, directory, log, nightly);
   }
 
   load(initial: LoadedSave): Promise<GameSave> {
@@ -85,15 +90,19 @@ export class GameMemory {
       state = { format: 1, initial, day: absoluteDay(initial.date), head: head.id, pointer: initial.commit,
         phase: 'open', pending: null, nextDay: null, lastSeq: 0, receipts: [] };
     }
-    const save = new GameSave(this.runtime, path, state);
+    const save = new GameSave(this.runtime, path, state,
+      commitId => void this.nightly?.run(initial.lineageId, commitId));
     await save.restore();
     this.active.set(initial.lineageId, save);
+    // A crash or a closed backend can leave the last nights unconsolidated.
+    void this.nightly?.catchUp(initial.lineageId, save.head);
     return save;
   }
 
   async close(): Promise<void> {
     await Promise.all(this.loading.values());
     for (const save of this.active.values()) await save.settle();
+    await this.nightly?.close();
     await this.runtime.close();
     this.active.clear();
   }
@@ -104,11 +113,15 @@ export class GameSave {
   private readonly path: string;
   private readonly state: Checkpoint;
   private scope: SaveScope | undefined;
+  private readonly confirmed: (commitId: string) => void;
   private chain: Promise<void> = Promise.resolve();
   private live = true;
 
-  constructor(runtime: Runtime, path: string, state: Checkpoint) { this.runtime = runtime; this.path = path; this.state = state; }
+  constructor(runtime: Runtime, path: string, state: Checkpoint, confirmed: (commitId: string) => void = () => {}) {
+    this.runtime = runtime; this.path = path; this.state = state; this.confirmed = confirmed;
+  }
   get initial(): LoadedSave { return this.state.initial; }
+  get head(): string { return this.state.head; }
   get loadNonce(): string { return this.initial.loadNonce; }
   get day(): number { return this.state.day; }
   get player() { return this.initial.player; }
@@ -217,6 +230,7 @@ export class GameSave {
           this.state.head = p.commitId; this.state.pointer = p; this.state.day = nextDay;
           await this.scope!.startDay(nextDay);
           this.state.phase = 'open'; this.state.pending = null; this.state.nextDay = null;
+          this.confirmed(p.commitId);
           break;
         }
         case 'day.started':
@@ -243,8 +257,9 @@ export class GameSave {
       signal.throwIfAborted();
       const reader = new AgentMemory(() => agent, { now: () => gameMinutes(date), nextSeq: () => message.seq });
       let staged: { exchange: Exchange; remembered: Remembered[] } | undefined;
+      let standing: Standing | undefined;
       const memory: DialogueMemory = {
-        context: async (query, standing) => { signal.throwIfAborted(); return reader.context(query, standing); },
+        context: async (query, current) => { signal.throwIfAborted(); standing = current; return reader.context(query, current); },
         record: async (exchange, remembered) => { signal.throwIfAborted(); staged = { exchange, remembered }; },
       };
       return { memory, signal, finish: (result) => this.enqueue(async () => {
@@ -255,7 +270,8 @@ export class GameSave {
           emotion: result.meta.emotion, options: result.meta.options, end: result.meta.end };
         const receipt: Receipt = { seq: message.seq, hash: digest(canonical(message)), reply };
         if (staged) await agent.record({ seq: message.seq, gameTime: gameMinutes(date),
-          log: { player: staged.exchange.player, npc: staged.exchange.npc, bridgeReceipt: JSON.parse(canonical(receipt)) },
+          log: { player: staged.exchange.player, npc: staged.exchange.npc, ...turnLog(standing, this.player),
+            bridgeReceipt: JSON.parse(canonical(receipt)) },
           memories: staged.remembered.map(item => ({ text: item.text, importance: item.importance,
             kind: 'conversation', subjects: ['player'], visibility: 'private' })),
         });
