@@ -7,16 +7,16 @@ import type { Standing } from './dialogue.ts';
 import type { DayEntry } from '../types.ts';
 
 /**
- * Points per mood step by how well the NPC knows the player: a stranger's opinion swings easily either way, a
- * close friend's hardly moves. The tiers are the ones recall uses (dialogue-memory.ts), so “knowing the player
- * well” means the same everywhere. Gains and losses are separate columns so either can be tuned on its own.
+ * Points per mood step by how well the NPC knows the player: a stranger is hard to win over and quick to take
+ * offence; a close friend warms up easily and forgives easily. The tiers are the ones recall uses
+ * (dialogue-memory.ts), so “knowing the player well” means the same everywhere.
  * 250 points make a heart; a vanilla chat gives 20, a loved gift 80.
  */
 const STEPS = [
-  { minHearts: 8, gain: 5, loss: 5 },
-  { minHearts: 5, gain: 10, loss: 10 },
-  { minHearts: 2, gain: 15, loss: 15 },
-  { minHearts: 0, gain: 20, loss: 20 },
+  { minHearts: 8, gain: 20, loss: 5 },
+  { minHearts: 5, gain: 15, loss: 10 },
+  { minHearts: 2, gain: 10, loss: 15 },
+  { minHearts: 0, gain: 5, loss: 20 },
 ] as const;
 const CLOSE = new Set<Standing['relation']>(['dating', 'engaged', 'married', 'roommate']);
 export const FRIENDSHIP_DAY_MIN = -40;
