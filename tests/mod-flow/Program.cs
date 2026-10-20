@@ -283,5 +283,58 @@ finally
     if (!Directory.EnumerateFileSystemEntries(testDirectory).Any()) Directory.Delete(testDirectory);
 }
 
+object BubbleMod()
+{
+    object mod = TestMod();
+    Set(mod, "initialSave", new Dictionary<string, object?>()); Set(mod, "lineageId", "farm"); Set(mod, "loadNonce", "current");
+    foreach (string field in new[] { "bubbles", "bubblesShown", "bubbleShownAt" })
+        Set(mod, field, Activator.CreateInstance(modType.GetField(field, Fields)!.FieldType)!);
+    return mod;
+}
+JsonDocument BubblePacket(string nonce = "current", string lineage = "farm", object? lines = null) => JsonDocument.Parse(JsonSerializer.Serialize(new
+{
+    type = "day.bubbles", lineageId = lineage, loadNonce = nonce, seq = 0,
+    npcs = new Dictionary<string, object?> { ["abigail"] = lines ?? new[] { new { text = "想做风筝", emote = "happy" } } },
+}));
+Test("bubble packets reject stale identities and replacements preserve already-shown lines", () =>
+{
+    object mod = BubbleMod();
+    var cache = (System.Collections.IDictionary)Get(mod, "bubbles")!;
+    foreach (var identity in new[] { ("old", "farm"), ("current", "other") })
+    {
+        using JsonDocument stale = BubblePacket(identity.Item1, identity.Item2);
+        Check((bool)Invoke(mod, "HandleBubbles", "day.bubbles", stale.RootElement)!, "The packet was not recognized.");
+        Check(cache.Count == 0, "A stale packet changed the active cache.");
+    }
+    using JsonDocument valid = BubblePacket();
+    Invoke(mod, "HandleBubbles", "day.bubbles", valid.RootElement);
+    Check(cache.Count == 1, "The current packet was not accepted.");
+    var shown = (HashSet<string>)Get(mod, "bubblesShown")!;
+    var times = (Dictionary<string, int>)Get(mod, "bubbleShownAt")!;
+    shown.Add("Abigail\n想做风筝"); times["Abigail"] = 650;
+    Invoke(mod, "HandleBubbles", "day.bubbles", valid.RootElement);
+    Check(shown.Count == 1 && times["Abigail"] == 650, "Replacing a packet reset its repetition/cooldown guard.");
+    Invoke(mod, "ClearBubbles");
+    Check(cache.Count == 0 && shown.Count == 0 && times.Count == 0, "A day/load reset left bubble state behind.");
+});
+Test("disabled bubbles do not enter native game logic", () =>
+{
+    object mod = BubbleMod();
+    configType.GetProperty("ShowBubbles")!.SetValue(Get(mod, "config"), false);
+    using JsonDocument valid = BubblePacket();
+    Invoke(mod, "HandleBubbles", "day.bubbles", valid.RootElement);
+    Invoke(mod, "TickBubbles");
+    Check(((HashSet<string>)Get(mod, "bubblesShown")!).Count == 0, "Disabled bubbles were consumed.");
+});
+Test("malformed bubble rows are ignored without losing valid rows", () =>
+{
+    object mod = BubbleMod();
+    using JsonDocument packet = BubblePacket(lines: new object?[] { null, 1, "bad", new { text = 7 },
+        new { text = "想做风筝", emote = 7 }, new { text = "想去矿洞", emote = "question" } });
+    Invoke(mod, "HandleBubbles", "day.bubbles", packet.RootElement);
+    var cache = (System.Collections.IDictionary)Get(mod, "bubbles")!;
+    Check(cache.Count == 1 && ((System.Collections.IList)cache["abigail"]!).Count == 2, "Valid rows were lost with the malformed ones.");
+});
+
 Console.WriteLine($"Mod flow checks: {checks - failures}/{checks} passed.");
 return failures == 0 ? 0 : 1;

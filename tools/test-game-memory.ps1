@@ -2,7 +2,8 @@
 param(
     [string]$GamePath = 'E:\games\steamapps\common\Stardew Valley',
     [switch]$Nightly,
-    [switch]$MorningPlans
+    [switch]$MorningPlans,
+    [switch]$BubblesOnly
 )
 
 $ErrorActionPreference = 'Stop'
@@ -59,7 +60,7 @@ Copy-Item -LiteralPath $taskCopy -Destination (Join-Path $taskRun 'initial-copy'
 $taskConfig = [pscustomobject]@{
     RequestId=[Guid]::NewGuid().ToString(); SaveFolder=$taskFolder; UniqueId=$taskId
     BackendUrl=''; RunDirectory=$taskRun; SaveDirectory=$taskCopy; GamePath=$GamePath
-    Nightly=[bool]($Nightly -or $MorningPlans); MorningPlans=[bool]$MorningPlans
+    Nightly=[bool]($Nightly -or $MorningPlans); MorningPlans=[bool]$MorningPlans; BubblesOnly=[bool]$BubblesOnly
 }
 $taskConfigPath = Join-Path $taskRun 'config.json'
 $taskConfig | ConvertTo-Json | Set-Content -LiteralPath $taskConfigPath -Encoding UTF8
@@ -68,7 +69,8 @@ Write-Output ('备份和证据目录：' + $taskRun)
 $taskExitCode = 1
 try {
     & (Join-Path $PSScriptRoot 'test-abigail.ps1') -GamePath $GamePath -PrepareOnly
-    & node.exe (Join-Path $PSScriptRoot 'test-game-memory.ts') $taskConfigPath
+    $taskRunner = if ($BubblesOnly) { 'test-game-bubbles.ts' } else { 'test-game-memory.ts' }
+    & node.exe (Join-Path $PSScriptRoot $taskRunner) $taskConfigPath
     $taskExitCode = $LASTEXITCODE
 } finally {
     $taskAfter = @(Get-ChildItem -LiteralPath $taskSource -File | ForEach-Object {

@@ -8,6 +8,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { JSON_HINT, OPENING_LINE, parseOutput } from '../src/agent/dialogue.ts';
 import { morningBlock, morningReply, MORNING_HEADING } from '../src/agent/morning.ts';
 import { NIGHTLY_RULES, parseNightly } from '../src/agent/nightly.ts';
+import { parseBubbles } from '../src/agent/bubbles.ts';
 import type { ChatMessage, Completion } from '../src/services/model/client.ts';
 
 interface Config {
@@ -23,12 +24,13 @@ interface Report {
   day: number; nonce: string; pointer: Pointer | null; generation: number;
   saveFolder: string; lineageId: string; worldReady: boolean; saveProcessing: boolean; newDay: boolean;
   replies: Reply[]; events: { name: string; day: number }[]; elapsedSeconds: number;
+  bubblePackets?: { nonce: string; day: number; npcs: Record<string, unknown> }[];
 }
 interface RecordedCall {
   messages: ChatMessage[]; content: string; timing: Completion['timing']; usage: Completion['usage'];
   kind?: 'dialogue' | 'nightly'; thinking?: string; startedAt?: string; finishedAt?: string;
 }
-interface NightState { impression: string; plan: string; day: number }
+interface NightState { impression: string; plan: string; day: number; bubbles?: unknown }
 interface StoredMemory { id: string; text: string; importance: number; kind: string; visibility: string }
 interface NightEvidence {
   pointer: Pointer; state: NightState; summaries: StoredMemory[]; retired: string[];
@@ -142,6 +144,30 @@ function openingLog(pointer: Pointer, report: Report, label: string) {
   assert.equal(entry.changes[0]!.log.player, OPENING_LINE);
   assert.equal(entry.changes[0]!.log.npc, item.reply);
   assert.deepEqual(entry.changes[0]!.memories, [], 'NPC 主动开场被记成了新的玩家事实');
+}
+async function bubblesAt(report: Report, state: NightState, label: string) {
+  assert.equal(state.day, report.day - 1);
+  const lines = parseBubbles(state.bubbles);
+  const expected = lines.length ? { abigail: lines } : {};
+  const deadline = Date.now() + 5000;
+  do {
+    let latest: Report;
+    try { latest = JSON.parse(await readFile(join(directory, 'game-result.json'), 'utf8')) as Report; }
+    catch (error) {
+      if (!(error instanceof SyntaxError)) throw error;
+      await new Promise(resolve => setTimeout(resolve, 100));
+      continue;
+    }
+    const packet = latest.bubblePackets?.findLast(packet => packet.nonce === report.nonce && packet.day === report.day
+      && JSON.stringify(packet.npcs) === JSON.stringify(expected));
+    if (packet) {
+      const deliveries = (evidence.bubbleDeliveries ??= []) as unknown[];
+      deliveries.push({ label, ...packet });
+      return;
+    }
+    await new Promise(resolve => setTimeout(resolve, 100));
+  } while (Date.now() < deadline);
+  throw new Error(`${label} 的实际 Mod 没有收到当前分支的气泡`);
 }
 function sql<T>(query: string, ...parameters: string[]): T[] {
   const db = new DatabaseSync(join(memoryDirectory, 'memory.sqlite'), { readOnly: true });
@@ -278,6 +304,7 @@ try {
           nightA = await night(a);
           openingAt(report, 'learn-cat', undefined, false);
           if (nightA) {
+            await bubblesAt(report, nightA.state, 'A-next-day');
             assert.match(JSON.stringify(nightA.summaries), /星糖/);
             evidence.nightlyA = nightA;
           }
@@ -290,6 +317,7 @@ try {
         }
         case 'rollback-ready': {
           await refreshCalls();
+          if (nightA) await bubblesAt(report, nightA.state, 'A-rollback');
           openingAt(report, 'ask-cat', nightA?.state, true);
           openingAt(report, 'ask-rollback', nightA?.state, true);
           const nextDay = reply(report, 'ask-cat');
@@ -326,6 +354,7 @@ try {
           openingLog(b, report, 'ask-rollback');
           nightlyCallsAfterB = calls.filter(call => call.kind === 'nightly').length;
           if (nightB) {
+            await bubblesAt(report, nightB.state, 'B-next-day');
             assert.match(JSON.stringify(nightB.summaries), /紫色/);
             assert.match(JSON.stringify(nightB.summaries), /风筝/);
             evidence.nightlyB = nightB;
@@ -361,6 +390,7 @@ try {
         }
         case 'fork-loaded': {
           await refreshCalls();
+          if (nightA) await bubblesAt(report, nightA.state, 'A-fork-reload');
           openingAt(report, 'ask-fork', nightA?.state, true);
           const fork = reply(report, 'ask-fork');
           assert.match(fork.reply, /星糖/);
@@ -380,6 +410,7 @@ try {
           nightC = await night(c);
           openingLog(c, report, 'ask-fork');
           if (nightC) {
+            await bubblesAt(report, nightC.state, 'C-next-day');
             assert.match(JSON.stringify(nightC.summaries), /金色/);
             assert.match(JSON.stringify(nightC.summaries), /纸船/);
             assert.doesNotMatch(JSON.stringify(nightC.summaries), /风筝/);

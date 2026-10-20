@@ -305,9 +305,10 @@ export class GameSave {
   async bubbles(): Promise<Record<string, Bubble[]>> {
     const { lineageId } = this.initial;
     const headCommitId = this.state.head;
+    const day = this.state.day;
     const result: Record<string, Bubble[]> = {};
     for (const npcId of SOCIAL_NPCS) {
-      const lines = bubblesFor(await this.runtime.ctx.store.call('state', { lineageId, headCommitId, npcId }), this.state.day);
+      const lines = bubblesFor(await this.runtime.ctx.store.call('state', { lineageId, headCommitId, npcId }), day);
       if (lines.length) result[npcId] = lines;
     }
     return result;

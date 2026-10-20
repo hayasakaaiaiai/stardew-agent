@@ -30,6 +30,7 @@ class Session {
   pending: AbortController | undefined;
   chain: Promise<void> = Promise.resolve();
   send: (message: BackendMessage) => void = () => {};
+  bubbleRevision = 0;
 }
 
 export class BridgeServer {
@@ -73,10 +74,12 @@ export class BridgeServer {
   /** Replaces the Mod's bubbles for the day; sent again when a late consolidation finishes (docs/npc-bubbles.md). */
   private async sendBubbles(session: Session): Promise<void> {
     const save = session.save;
+    const revision = ++session.bubbleRevision;
     if (!save || save.closed) return;
+    const head = save.head, day = save.day;
     try {
       const npcs = await save.bubbles();
-      if (session.save !== save || save.closed) return;
+      if (session.save !== save || save.closed || session.bubbleRevision !== revision || save.head !== head || save.day !== day) return;
       session.send({ type: 'day.bubbles', lineageId: save.initial.lineageId, loadNonce: save.loadNonce, seq: 0, npcs });
       const names = Object.keys(npcs);
       if (names.length) this.log(`今天的气泡：${names.join('、')}`);
