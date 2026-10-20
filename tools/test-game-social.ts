@@ -146,7 +146,7 @@ try {
     'scene-fifty-minute-gap-blocks', 'scene-sixty-minute-gap-allows', 'scene-four-daily-cap',
     'gift-native-amethyst-counter', 'gift-mod-detected-and-acknowledged', 'friendship-opening-zero',
     'friendship-disabled-native-zero', 'friendship-mod-positive-defense', 'friendship-mod-negative-defense', 'friendship-positive-cap',
-    ...Array.from({ length: 8 }, (_, i) => `friendship-native-delta-${i}`), 'friendship-negative-cap',
+    ...Array.from({ length: 11 }, (_, i) => `friendship-native-delta-${i}`), 'friendship-negative-cap',
     'new-day-resets-caps', 'friendship-real-save-and-reload', 'gift-native-clay-counter', 'friendship-unsaved-negative',
     'friendship-unsaved-rollback', 'gift-counter-and-chat-cap-rollback'];
   if (!config.Offline) required.push('scene-real-model-native-lines', 'friendship-real-opening-zero',

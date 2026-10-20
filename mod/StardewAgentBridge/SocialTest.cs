@@ -29,7 +29,32 @@ internal sealed partial class ModEntry
     private string socialTestPartner = "";
     private bool socialTestLive;
     private bool socialTestCaptured;
-    private static readonly int[] SocialDeltas = { 20, 10, 0, -20, -20, -20, -10, 0 };
+    /// <summary>Three good lines reach +30 and eight bad ones reach −40 at any familiarity tier.</summary>
+    private static readonly int[] SocialMoods = { 2, 2, 2, -2, -2, -2, -2, -2, -2, -2, -2 };
+    private int socialTestHearts;
+    private int socialTestSum;
+
+    /// <summary>The backend's points per mood step for a friend (src/agent/friendship.ts STEPS, docs/npc-friendship.md §2.1).</summary>
+    private static int SocialPointsFor(int hearts, int mood) => mood * (mood > 0
+        ? hearts >= 8 ? 20 : hearts >= 5 ? 15 : hearts >= 2 ? 10 : 5
+        : hearts >= 8 ? 5 : hearts >= 5 ? 10 : hearts >= 2 ? 15 : 20);
+
+    /// <summary>The change this line should make, cut at the day's −40/+30 like the backend and the Mod.</summary>
+    private int SocialExpected(int mood)
+    {
+        int after = Math.Clamp(this.socialTestSum + SocialPointsFor(this.socialTestHearts, mood), FriendshipDayMin, FriendshipDayMax);
+        int delta = after - this.socialTestSum;
+        this.socialTestSum = after;
+        return delta;
+    }
+
+    /// <summary>Hearts as the talk.open message will carry them, and a fresh daily total.</summary>
+    private void StartSocialTalk()
+    {
+        this.socialTestHearts = GameState.Hearts(this.SocialNpc);
+        this.socialTestSum = 0;
+        this.StartTalk(this.SocialNpc);
+    }
     private NPC SocialNpc => Game1.getCharacterFromName("Abigail");
     private int SocialPoints => Game1.player.friendshipData["Abigail"].Points;
 
@@ -219,7 +244,7 @@ internal sealed partial class ModEntry
                 // Restore this disposable fixture before exercising the backend's independent accounting.
                 Game1.player.friendshipData["Abigail"].Points = beforeDefense; this.ClearFriendshipToday();
                 this.socialTestBefore = this.SocialPoints;
-                this.StartTalk(this.SocialNpc); this.socialTestStep = 30;
+                this.StartSocialTalk(); this.socialTestStep = 30;
                 break;
             case 30:
                 if (!this.MemoryTestHasReply()) return;
@@ -228,14 +253,14 @@ internal sealed partial class ModEntry
                 break;
             case 31:
                 if (!this.MemoryTestHasReply()) return;
-                this.socialTestExpected = SocialDeltas[this.socialTestTurn];
-                this.SocialLine((this.socialTestTurn < 3 ? "好感2 " : "好感-2 ") + "组合验收第" + this.socialTestTurn + "轮", "fixed-cap-" + this.socialTestTurn, 32);
+                this.socialTestExpected = this.SocialExpected(SocialMoods[this.socialTestTurn]);
+                this.SocialLine((SocialMoods[this.socialTestTurn] > 0 ? "好感2 " : "好感-2 ") + "组合验收第" + this.socialTestTurn + "轮", "fixed-cap-" + this.socialTestTurn, 32);
                 break;
             case 32:
                 this.SocialCheck(this.SocialPoints - this.socialTestBefore == this.socialTestExpected, "friendship-native-delta-" + this.socialTestTurn,
-                    new { expected = this.socialTestExpected, actual = this.SocialPoints - this.socialTestBefore });
+                    new { hearts = this.socialTestHearts, expected = this.socialTestExpected, actual = this.SocialPoints - this.socialTestBefore });
                 if (this.socialTestTurn == 2) this.SocialCheck(this.friendshipToday["Abigail"] == 30, "friendship-positive-cap");
-                if (++this.socialTestTurn < SocialDeltas.Length) this.socialTestStep = 31;
+                if (++this.socialTestTurn < SocialMoods.Length) this.socialTestStep = 31;
                 else
                 {
                     this.SocialCheck(this.friendshipToday["Abigail"] == -40, "friendship-negative-cap");
@@ -263,14 +288,16 @@ internal sealed partial class ModEntry
                 break;
             case 52:
                 this.CloseSocialMenu(); if (!this.CanChat) return;
-                this.StartTalk(this.SocialNpc); this.socialTestStep = 53;
+                this.StartSocialTalk(); this.socialTestStep = 53;
                 break;
             case 53:
                 if (!this.MemoryTestHasReply()) return;
+                this.socialTestExpected = this.SocialExpected(-2);
                 this.SocialLine("好感-2 请记住这份新礼物。", "unsaved-clay", 54);
                 break;
             case 54:
-                this.SocialCheck(this.SocialPoints == this.socialTestBefore - 20, "friendship-unsaved-negative");
+                this.SocialCheck(this.SocialPoints == this.socialTestBefore + this.socialTestExpected, "friendship-unsaved-negative",
+                    new { hearts = this.socialTestHearts, expected = this.socialTestExpected, actual = this.SocialPoints - this.socialTestBefore });
                 this.socialTestStep = 55; this.CloseMemoryTestTalk("social");
                 break;
             case 55:

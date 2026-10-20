@@ -52,6 +52,8 @@ M2b 第六步“聊天影响原版好感”在 `m2b-friendship` 上实现，建�
 
 用户随后明确要求“推送”。验收代码 `a966ea6`（包含上一轮 `36999ea`）已上传到 GitHub 的 `codex/new-parts-windows-tests`，本分支已设置远端跟踪。前文“未推送”为当时验收完成的状态；目前仍未合入 `main`。
 
+按用户“陌生时容易扣、难加，熟悉时不容易扣、容易加”，`m2b-friendship-by-hearts` 把好感换算改成按熟悉程度分档：加分每档 0–1 心 5、2–4 心 10、5–7 心 15、8 心以上或亲密关系 20；扣分反过来是 20、15、10、5；每天 −40 到 +30 的上限不变，token 成本 0。已变基到合并后的 `main`，Windows 组合脚本的好感预期改为按同一张表计算（测试档阿比盖尔 8 心：`+30,0,0,-10×7,0`）。见 [npc-friendship.md](npc-friendship.md) §2.1。
+
 ## 3. 分支
 
 GitHub 私有仓库：https://github.com/hayasakaaiaiai/stardew-agent
