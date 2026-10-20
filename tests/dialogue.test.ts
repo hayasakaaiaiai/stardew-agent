@@ -55,6 +55,10 @@ test('output parsing never throws and falls back to neutral defaults', () => {
   }
   assert.equal(parseOutput('不是 JSON').reply, '不是 JSON', 'plain text becomes the reply when nothing streamed');
 
+  const strings = parseOutput(JSON.stringify({ reply: '嗯，记下了。', emotion: 'happy', options: ['夸老虎有气势', '再看一幅', '先走了'],
+    remember: ['小林下周要去沙漠找桑迪', '夸老虎有气势', '嗯，记下了。', ' ', 7, { text: '小林养了狗', importance: 4 }], end: false }));
+  assert.deepEqual(strings.meta.remember, [{ text: '小林下周要去沙漠找桑迪', importance: 3 }, { text: '小林养了狗', importance: 4 }],
+    'bare strings are kept at importance 3, except echoes of an option or the reply');
   const partial = parseOutput('{"reply":"嗯。","emotion":"furious","options":["只有一条"],"remember":"无"}');
   assert.equal(partial.ok, false);
   assert.equal(partial.meta.emotion, 'neutral');

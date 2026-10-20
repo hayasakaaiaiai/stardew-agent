@@ -12,8 +12,11 @@ import type { Roster } from '../services/roster/index.ts';
 import type { StoreService } from '../services/store/index.ts';
 import type { ConsolidationInput, Memory, NpcChange, NpcState } from '../types.ts';
 
-/** Measured in docs/nightly-consolidation.md §6.2: `disabled` got a fact backwards, `high` was no better. */
-export const NIGHTLY_THINKING: Thinking = 'low';
+/**
+ * Every model call reasons at `high` by the user's choice (2026-10-20). `disabled` got a fact backwards
+ * (docs/nightly-consolidation.md §6.2); `high` writes about a third more than `low` (docs/legacy-cleanup.md §3).
+ */
+export const NIGHTLY_THINKING: Thinking = 'high';
 
 /** The same for every NPC, so the second NPC of a night hits the cached prefix. */
 export const NIGHTLY_RULES = `# 睡前回想

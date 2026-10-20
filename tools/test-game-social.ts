@@ -9,6 +9,7 @@ import { WebSocket, WebSocketServer } from 'ws';
 import { BridgeServer } from '../src/bridge/server.ts';
 import { parseModMessage, PROTOCOL_VERSION } from '../src/bridge/protocol.ts';
 import { NIGHTLY_THINKING, nightlyConsolidator } from '../src/agent/nightly.ts';
+import { SCENE_THINKING } from '../src/agent/scene.ts';
 import { ModelClient, modelConfigFromEnv, type ChatMessage, type Completion, type StreamHandlers, type Thinking } from '../src/services/model/client.ts';
 import { Roster } from '../src/services/roster/index.ts';
 import { SOCIAL_NPCS } from '../src/types.ts';
@@ -44,7 +45,7 @@ const json = async (file: string, value: unknown) => { await writeFile(file + '.
 const log = (line: string) => { console.log(line); void appendFile(join(directory, 'backend.log'), line + '\n'); };
 if (!config.Offline) process.loadEnvFile(join(ROOT, '.env'));
 const paid = config.Offline ? undefined : new ModelClient(modelConfigFromEnv());
-const paidScene = paid ? new ModelClient({ ...paid.config, thinking: 'disabled' }) : undefined;
+const paidScene = paid ? new ModelClient({ ...paid.config, thinking: SCENE_THINKING }) : undefined;
 const paidNightly = paid ? new ModelClient({ ...paid.config, thinking: NIGHTLY_THINKING }) : undefined;
 const calls: { kind: string; real: boolean; thinking: Thinking | null; messages: ChatMessage[]; content: string; usage: Completion['usage']; timing: Completion['timing'] }[] = [];
 let real = false;

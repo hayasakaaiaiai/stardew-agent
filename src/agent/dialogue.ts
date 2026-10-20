@@ -69,6 +69,8 @@ export interface DialogueMeta {
 }
 
 export const OPENING_LINE = '（玩家走过来，想和你多聊几句）';
+/** A remembered item written as a bare string has no importance; this is what objects get for plans and promises. */
+const STRING_IMPORTANCE = 3;
 export const FALLBACK_OPTIONS = ['嗯。', '说说别的吧。', '我先走了。'];
 const EMOTIONS = new Set<Emotion>(['neutral', 'happy', 'sad', 'blush', 'angry', 'special']);
 export const SEASONS: Record<Season, string> = { spring: '春季', summer: '夏季', fall: '秋季', winter: '冬季' };
@@ -241,6 +243,12 @@ export function parseOutput(content: string, streamed = ''): { reply: string; me
     : [];
   const remember = Array.isArray(data.remember)
     ? data.remember.flatMap((item): Remembered[] => {
+      // About 4 in 10 real replies write plain strings (docs/legacy-cleanup.md §1). Keep them at a middle importance,
+      // but not an echo of this turn's options or the reply, which is how a stray string has gone wrong.
+      if (typeof item === 'string') {
+        const text = item.trim();
+        return text && !options.includes(text) && text !== reply ? [{ text, importance: STRING_IMPORTANCE }] : [];
+      }
       if (!item || typeof item !== 'object' || typeof item.text !== 'string' || !item.text.trim()) return [];
       const importance = Math.min(5, Math.max(1, Math.round(Number(item.importance) || 1)));
       return [{ text: item.text.trim(), importance }];

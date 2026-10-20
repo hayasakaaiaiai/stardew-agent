@@ -9,8 +9,11 @@ import { firstSentence } from './nightly.ts';
 import type { ChatMessage, Thinking } from '../services/model/client.ts';
 import type { Roster } from '../services/roster/index.ts';
 
-/** Measured in docs/npc-chat.md §4: as good as `low`, and faster before the NPCs walk off. */
-export const SCENE_THINKING: Thinking = 'disabled';
+/**
+ * Every model call reasons at `high` by the user's choice (2026-10-20). Against `disabled`: about twice the output
+ * and 0.6 s slower, same quality in the measured scenes (docs/legacy-cleanup.md §3).
+ */
+export const SCENE_THINKING: Thinking = 'high';
 /** The Mod enforces these too; the backend checks them again for its own budget. */
 export const SCENES_PER_DAY = 4;
 export const SCENE_GAP_MINUTES = 60;

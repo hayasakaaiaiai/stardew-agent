@@ -16,6 +16,11 @@ test('bubbles reject completed off-screen actions, including the earlier bamboo-
   }
 });
 
+test('a short “太……了” is a feeling, not a claim; anything longer between them is still refused', () => {
+  for (const text of ['这太阳也太晒了，得躲一躲。', '太好了！', '这阵子也太累了吧', '太晚了，回家吧']) assert.equal(safeBubble(text), text);
+  for (const text of ['太阳下山了。', '太快做完了。', '书架修好了，潘妮该开心了吧', '太晒了，东西我带来了。']) assert.equal(safeBubble(text), undefined, text);
+});
+
 test('bubble parsing isolates malformed values, enforces Unicode limits, and revalidates stored states', () => {
   for (const value of [null, 1, false, {}, '[]', [null, 0, 'bad', { text: {} }, { emote: 'happy' }]]) assert.deepEqual(parseBubbles(value), []);
   const line = { text: '紫'.repeat(24), emote: 'bad' };

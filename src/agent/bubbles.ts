@@ -14,8 +14,11 @@ const MAX_CHARS = 24;
 /** Characters the game reads as commands in on-screen text (docs/game-bridge.md §4.2). */
 const COMMANDS = /[\^#$@%{}*[\]|]/g;
 const EMOJI = /[\p{Extended_Pictographic}\u{FE0F}\u{200D}]/gu;
-/** Claims of progress made off-screen, and relative days that would be wrong a day later. */
-const UNSAFE = /已|昨晚|昨夜|刚才|大前天|前天|昨天|今天|明天|大后天|后天|(?<!就好)了/;
+/**
+ * Claims of progress made off-screen, and relative days that would be wrong a day later. Any “了” counts as a claim,
+ * except “就好了” and a short “太……了” such as 太晒了 or 太好了 (docs/legacy-cleanup.md §2).
+ */
+const UNSAFE = /已|昨晚|昨夜|刚才|大前天|前天|昨天|今天|明天|大后天|后天|(?<!就好|太[^，。！？、\s]{1,2})了/;
 
 /** Removes what the game would read as commands, and emoji the fonts cannot draw. */
 export function cleanBubbleText(text: string): string {
