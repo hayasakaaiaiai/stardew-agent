@@ -76,6 +76,20 @@ internal static class GameState
             ["pamHouse"] = main.mailReceived.Contains("pamHouseUpgrade"),
             ["islandOpen"] = main.mailReceived.Contains("willyBoatFixed"),
             ["leoMoved"] = main.mailReceived.Contains("leoMoved"),
+            ["partner"] = Partner(main),
+            ["children"] = main.getChildrenCount(),
         };
+    }
+
+    /// <summary>Whom the player is engaged to, married to or living with; the whole town knows (docs/world-public-facts.md).</summary>
+    private static Dictionary<string, object?>? Partner(Farmer player)
+    {
+        foreach (KeyValuePair<string, Friendship> pair in player.friendshipData.Pairs)
+        {
+            string? status = pair.Value.IsRoommate() ? "roommate" : pair.Value.IsMarried() ? "married" : pair.Value.IsEngaged() ? "engaged" : null;
+            if (status is not null)
+                return new() { ["npc"] = pair.Key, ["status"] = status };
+        }
+        return null;
     }
 }

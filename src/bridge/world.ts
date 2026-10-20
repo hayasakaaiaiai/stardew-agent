@@ -11,8 +11,11 @@ export function clock(time: number): string {
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
 }
 
-/** The facts the cards' natural-language conditions depend on (see tools/chat/scenarios). */
-export function worldFacts(year: number, flags: WorldFlags): Record<string, string> {
+/**
+ * The facts the cards' natural-language conditions depend on (see tools/chat/scenarios), and what the whole town
+ * knows about the player's household (docs/world-public-facts.md). `name` turns a game name into the card's name.
+ */
+export function worldFacts(year: number, flags: WorldFlags, name: (npc: string) => string = npc => npc): Record<string, string> {
   const restored = flags.communityCenter === 'restored';
   const facts: Record<string, string> = {
     肯特: year >= 2 ? '已经退役回家了' : '还在前线打仗，第二年春天才回来',
@@ -26,10 +29,16 @@ export function worldFacts(year: number, flags: WorldFlags): Record<string, stri
     谢恩: restored ? 'Joja 关门后失业了，还住在玛妮的牧场' : '在 Joja 超市上班',
   };
   if (flags.islandOpen) facts.雷欧 = flags.leoMoved ? '已经搬到山谷，住在山上的树屋' : '还住在姜岛';
+  // A wedding is held in front of the whole town; nothing here is private to one NPC.
+  const partner = flags.partner ? name(flags.partner.npc) : '';
+  if (flags.partner?.status === 'roommate') facts.玩家的室友 = `${partner}，住在玩家的农场`;
+  else if (flags.partner?.status === 'married') facts.玩家的配偶 = `${partner}，已搬到玩家的农场`;
+  else if (flags.partner?.status === 'engaged') facts.玩家的婚约 = `和${partner}订婚，婚礼在即`;
+  if (flags.children) facts.玩家的孩子 = `有 ${flags.children} 个孩子`;
   return facts;
 }
 
-export function worldState(snapshot: WorldSnapshot, player: PlayerInfo): WorldState {
+export function worldState(snapshot: WorldSnapshot, player: PlayerInfo, name?: (npc: string) => string): WorldState {
   return {
     year: snapshot.date.year,
     season: snapshot.date.season,
@@ -38,6 +47,6 @@ export function worldState(snapshot: WorldSnapshot, player: PlayerInfo): WorldSt
     weather: WEATHER[snapshot.weather],
     location: snapshot.location,
     player,
-    facts: worldFacts(snapshot.date.year, snapshot.flags),
+    facts: worldFacts(snapshot.date.year, snapshot.flags, name),
   };
 }

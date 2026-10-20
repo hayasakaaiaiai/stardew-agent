@@ -50,6 +50,8 @@ M1 剩下的“自动清理过期的临时日志”在 `m1-scratch-cleanup` 上�
 
 M2b 第七步“关系好的 NPC 当面送东西”在 `m2b-in-person-gifts` 上实现，建在 `m1-scratch-cleanup` 上：6 心以上的 NPC 当天第一次开场时，代码从角色卡里挑一样能当面给的（不选“随信寄来”的条目和钱），在“当前情况”末尾加一行（48–57 token），模型决定送不送；和寄信附赠共用 7 天冷却，冷却从送礼时记下的记忆里取，不依赖夜间整合。真实模型 6 次开场 5 次送出。120/120、类型检查、构建和 Release 编译通过，等 Windows 验收，见 [npc-in-person-gifts.md](npc-in-person-gifts.md) §7。
 
+“全镇都知道的家庭状况”在 `world-public-facts` 上实现，建在 `m2b-in-person-gifts` 上：玩家结婚、订婚、和科罗布斯同住、有孩子时，所有 NPC 的世界事实里多一行（11–20 token，之前为 0）。以前只有配偶自己知道，问皮埃尔“阿比盖尔最近还好吗”，他会当她还住在家里；加上之后知道她嫁到了玩家的农场。123/123、类型检查、构建和 Release 编译通过，见 [world-public-facts.md](world-public-facts.md)。
+
 ## 3. 分支
 
 GitHub 私有仓库：https://github.com/hayasakaaiaiai/stardew-agent
@@ -68,7 +70,8 @@ GitHub 私有仓库：https://github.com/hayasakaaiaiai/stardew-agent
 | `m2b-gifts` | M2b 第五步：NPC 记得玩家送的礼物，建在 `m2b-npc-chat` 上，等 Windows 验收；协议版本 3 | 已提交，目录现在用于下一步 |
 | `m2b-friendship` | M2b 第六步：聊天影响原版好感，建在 `m2b-gifts` 上，等 Windows 验收 | 已提交 |
 | `m1-scratch-cleanup` | M1 补齐：过期临时日志和检查点的清理，建在 `m2b-friendship` 上 | 已提交 |
-| `m2b-in-person-gifts` | M2b 第七步：关系好的 NPC 当面送东西，建在 `m1-scratch-cleanup` 上 | `/Users/a11/Documents/ChatGPT/stardew-agent-gifts` |
+| `m2b-in-person-gifts` | M2b 第七步：关系好的 NPC 当面送东西，建在 `m1-scratch-cleanup` 上 | 已提交 |
+| `world-public-facts` | 全镇都知道的家庭状况（配偶、婚约、室友、孩子），建在 `m2b-in-person-gifts` 上 | `/Users/a11/Documents/ChatGPT/stardew-agent-gifts` |
 
 Windows 上的目录是 `E:\stardew-agent`。当前从 `m2b-mail` 建立寄信验收分支，并合入本地 `910c127` 的气泡修复；已包含最新远端 `main` / `6c151f2`。本地 `codex/next-day-plans` 的手测入口提交 `2260625` 仍保留，并复用到验收分支。M3b 在 `codex/game-save-memory` 上开发，2026-10-20 快进合并进 `main`；它已经包含的 `codex/abigail-auto-test` 同时删除。
 
@@ -178,7 +181,7 @@ dotnet build mod/StardewAgentBridge   # 编译 Mod，编译完自动装进游戏
 4. **M2b 第五步：送礼记忆**：`m2b-gifts` 已实现，等 Windows 按 [npc-gifts.md](npc-gifts.md) §6 验收。Mod 和后端要一起更新（协议 3）。
 5. **M2b 第六步：聊天影响好感**：`m2b-friendship` 已实现，等 Windows 按 [npc-friendship.md](npc-friendship.md) §7 验收。
 6. **M2b 第七步：当面送东西**：`m2b-in-person-gifts` 已实现，等 Windows 按 [npc-in-person-gifts.md](npc-in-person-gifts.md) §7 验收。
-7. **Windows 一次测完**：`m2b-in-person-gifts` 包含第四到七步和临时日志清理，切到这个分支按 `npc-chat.md` §7、`npc-gifts.md` §6、`npc-friendship.md` §7、`npc-in-person-gifts.md` §7 一起测；都通过后整串快进合入 `main`。
+7. **Windows 一次测完**：`world-public-facts` 是这一串的最前端，包含第四到七步、临时日志清理和家庭状况，切到这个分支按 `npc-chat.md` §7、`npc-gifts.md` §6、`npc-friendship.md` §7、`npc-in-person-gifts.md` §7、`world-public-facts.md` §5 一起测；都通过后整串快进合入 `main`。
 8. **自主行动**：调度器、合并场景调用另行设计。白名单动作里和对话相关的（好感、当面送礼）已经做了。
 
 ## 8. 文档索引
@@ -194,6 +197,7 @@ dotnet build mod/StardewAgentBridge   # 编译 Mod，编译完自动装进游戏
 | `docs/game-bridge.md` | M3a：Mod 和后端的协议、原版界面怎么复用、游戏内测试清单 |
 | `docs/game-memory.md` | M3b：存档同步、跨天记忆、确认补发与崩溃恢复 |
 | `docs/nightly-consolidation.md` | 夜间整合：产出、输入、触发时机、出错处理、实测 token 和真实模型结果 |
+| `docs/world-public-facts.md` | 全镇都知道的家庭状况：写法、实测、测试和 Windows 清单 |
 | `docs/npc-in-person-gifts.md` | M2b 第七步：当面送东西的决定、冷却、实测、测试和 Windows 清单 |
 | `docs/npc-friendship.md` | M2b 第六步：聊天影响原版好感的决定、规则写法对比、真实模型实测、测试和 Windows 清单 |
 | `docs/npc-gifts.md` | M2b 第五步：送礼记忆的决定、模板、实测 token、测试和 Windows 清单 |

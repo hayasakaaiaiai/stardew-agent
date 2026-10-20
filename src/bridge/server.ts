@@ -79,6 +79,12 @@ export class BridgeServer {
 
   private log(line: string) { this.options.log?.(line); }
 
+  /** A game name such as "Abigail" as the card calls her; unknown NPCs keep their game name. */
+  private readonly cardName = (npc: string) => {
+    const id = npc.toLowerCase();
+    return this.options.roster.has(id) ? this.options.roster.get(id).name : npc;
+  };
+
   /** Runs outside the lifecycle queue like a talk turn; the Mod gets empty lines whenever nothing should show. */
   private async scene(session: Session, message: Extract<ModMessage, { type: 'scene.request' }>, send: (message: BackendMessage) => void) {
     const save = session.save!;
@@ -94,7 +100,7 @@ export class BridgeServer {
     }
     session.scenes.pairs.add(pair);
     try {
-      const completion = await sceneModel.chat(scenePrompt(roster, a!, b!, worldState(message.world, save.player)), {}, { json: true });
+      const completion = await sceneModel.chat(scenePrompt(roster, a!, b!, worldState(message.world, save.player, this.cardName)), {}, { json: true });
       if (save.closed) return;
       const lines = parseScene(completion.content, a!, b!, save.player.name);
       reply(lines);
@@ -197,7 +203,7 @@ export class BridgeServer {
       }
       const talk: OpenTalk = { npcId,
         standing: { hearts: message.hearts, relation: message.relation, seenEvents: new Set(message.seenEvents) },
-        world: worldState(message.world, save.player) };
+        world: worldState(message.world, save.player, this.cardName) };
       session.open.set(message.npc, talk);
       void this.turn(session, talk, message, OPENING_LINE, send);
       return;

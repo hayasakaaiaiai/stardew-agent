@@ -33,6 +33,10 @@ export interface WorldFlags {
   pamHouse: boolean;
   islandOpen: boolean;
   leoMoved: boolean;
+  /** Whom the player is engaged to, married to or living with, by game name (docs/world-public-facts.md). */
+  partner?: { npc: string; status: 'engaged' | 'married' | 'roommate' } | null;
+  /** Children living on the farm. */
+  children?: number;
 }
 
 export interface WorldSnapshot {
@@ -153,6 +157,11 @@ export function parseModMessage(raw: string): ModMessage {
   const world = (value: unknown) => {
     const w = value as Record<string, unknown> | null;
     if (!w || typeof w.location !== 'string' || !w.flags || typeof w.flags !== 'object') fail('world is invalid');
+    const { partner, children } = w!.flags as Record<string, unknown>;
+    const p = partner as Record<string, unknown> | null | undefined;
+    if (p !== undefined && p !== null && (typeof p !== 'object' || typeof p.npc !== 'string' || !p.npc || p.npc.length > 50
+      || /[\u0000-\u001f]/u.test(p.npc) || !['engaged', 'married', 'roommate'].includes(p.status as string))) fail('world.flags.partner is invalid');
+    if (children !== undefined && (!Number.isSafeInteger(children) || (children as number) < 0 || (children as number) > 9)) fail('world.flags.children is invalid');
     date(w!.date);
     weather(w!.weather);
   };
