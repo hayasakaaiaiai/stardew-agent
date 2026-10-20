@@ -18,11 +18,11 @@
 | 里程碑 | 状态 | 已完成 | 还没做 | 文档 |
 |---|---|---|---|---|
 | M1 存储与事务 | 完成 | 记忆内核：SQLite 提交树、中文检索、当天事务、存档提交和回滚、后端崩溃恢复 | 自动清理过期的临时日志 | `README.md`、`design.md` §16 |
-| M2 Agent | 对话和夜间整合已合入；次日主动提计划在功能分支完成 | 和玩家对话；夜间整合原话校验；首次“继续聊”按昨天计划主动询问，日期由代码换算 | 自主行动（调度器、合并场景调用、白名单动作）；次日计划待用户决定合入 | `dialogue-prototype.md`、`nightly-consolidation.md`、`next-day-plans.md` |
+| M2 Agent | 对话、夜间整合、次日主动提计划已合入 | 和玩家对话；夜间整合原话校验；首次“继续聊”按昨天计划主动询问，日期由代码换算（2026-10-20 合并进 `main`） | 自主行动（调度器、合并场景调用、白名单动作） | `dialogue-prototype.md`、`nightly-consolidation.md`、`next-day-plans.md` |
 | M3 接入游戏 | M3a/M3b 已实现，Windows 真机组合通过 | 游戏里"继续聊"；真实保存/退出、跨天记忆、回滚、后端进程重启与旧档分叉 | M3a 剩下三项手测：输入法、原版台词保留、取消 | `game-bridge.md`、`game-memory.md` |
 | M4 内容 | 角色卡已完成 | 34 张角色卡（已审阅），"看过事件之后"共 201 条 | 物品名到 ID 的对应、各动作的上限 | `design.md` §11 |
 
-`main` 上后端 76 个测试、类型检查和构建通过，另有 13 项 C# 流程检查。10 月 20 日阿比盖尔三轮真机回归通过，随后在独立副本中用真实模型完成跨天保留、不保存回滚、后端进程重启、旧档分叉四项真机验收：76.77 秒，13 次模型调用，3 次真实睡觉保存，原测试档 6 个文件哈希均相同。详见 [真机组合验收报告](test-results/2026-10-20-game-memory.md)。
+`main` 上后端 84 个测试、类型检查和构建通过，另有 13 项 C# 流程检查。10 月 20 日阿比盖尔三轮真机回归通过，随后在独立副本中用真实模型完成跨天保留、不保存回滚、后端进程重启、旧档分叉四项真机验收：76.77 秒，13 次模型调用，3 次真实睡觉保存，原测试档 6 个文件哈希均相同。详见 [真机组合验收报告](test-results/2026-10-20-game-memory.md)。
 
 12:38 的初版夜间整合技术链路通过，但内容复核发现 NPC 的墓地计划被写成农场主说过的事，且进入次日 prompt。失败证据保留在 [夜间整合 Windows 报告](test-results/2026-10-20-nightly-windows.md)。
 
@@ -44,13 +44,13 @@ GitHub 私有仓库：https://github.com/hayasakaaiaiai/stardew-agent
 | `main` | 已合入的基线：记忆内核 + 对话 + M3a + M3b | `/Users/a11/Documents/ChatGPT/stardew-agent-dialogue`（目录名是以前留下的） |
 | `codex/npc-memory-store` | 记忆系统的开发分支，做完一步快进合并回 `main` | `/Users/a11/Documents/ChatGPT/stardew-agent` |
 | `hardware-companion` | `main` + 硬件陪伴（机器人），还没合并 | `/Users/a11/Documents/ChatGPT/stardew-agent-hardware` |
-| `codex/next-day-plans` | 最新 `main` + M2b 首次开场主动提计划，完成后按用户要求上传，暂不合入 | Windows：`E:\stardew-agent` |
+| `codex/next-day-plans` | M2b 首次开场主动提计划，2026-10-20 已快进合并进 `main` | Windows：`E:\stardew-agent` |
 
 Windows 上的目录是 `E:\stardew-agent`，测试前切到 `main` 拉最新代码。M3b 在 `codex/game-save-memory` 上开发，2026-10-20 快进合并进 `main`；它已经包含的 `codex/abigail-auto-test` 同时删除。
 
 本次按用户“拉下来测”“修复”的要求，Windows 在 `nightly-consolidation` 上完成远端 `3f70b27` 验证和事实归属修复。本机常驻后端已重新启动，日志确认对话 `high`、夜间整合 `low`；原游戏记忆库、临时日志及旧后端日志在更新前已备份。
 
-夜间整合的修复和验收记录 `e49535b`、`5896878` 已先推送到 `nightly-consolidation`，随后由上游合入 `main` / `7b3d6df`。Windows 的 `codex/next-day-plans` 已变基到该提交；用户已确认复用“继续聊”并要求完成后上传 GitHub，明确这次不合入 `main`。
+夜间整合的修复和验收记录 `e49535b`、`5896878` 已先推送到 `nightly-consolidation`，随后由上游合入 `main` / `7b3d6df`。Windows 的 `codex/next-day-plans` 已变基到该提交；用户已确认复用“继续聊”并要求完成后上传 GitHub；验收后用户同意，2026-10-20 快进合并进 `main`。
 
 - Mac 上的三个目录是同一个仓库的三个 git worktree。同一个分支只能在一个目录里打开。
 - 2026-10-19 把记忆系统和对话合并进了 `main`，原来的 `dialogue-prototype` 分支已删除。
@@ -149,7 +149,7 @@ dotnet build mod/StardewAgentBridge   # 编译 Mod，编译完自动装进游戏
 
 1. **H4 机器人接回游戏存档**：夜间整合已在 2026-10-20 按用户“全部按推荐来”的授权快进合并进 `main`；接着把 `hardware-companion` 变基上来，按 `companion-device.md` §13 实现 H4。Windows 上测试前切回 `main` 拉最新代码。
 2. **补齐 Windows M3a 手测**：中文输入法、原版台词保留、取消，随时可做，不挡开发。脚本已覆盖原版输入回调，但不能代替拼音输入法的实际操作。
-3. **M2b 第一步已完成，等待用户决定合入**：[次日主动提起计划](next-day-plans.md) 在功能分支验证并按要求上传；继续观察自然语言日期与重复邀约。实际行动、调度器和白名单动作另行设计，不在这次变更里。
+3. **M2b 第一步已合入 `main`**：[次日主动提起计划](next-day-plans.md)；继续观察自然语言日期与重复邀约。实际行动、调度器和白名单动作另行设计。
 
 ## 8. 文档索引
 
