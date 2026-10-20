@@ -18,7 +18,7 @@
 | 里程碑 | 状态 | 已完成 | 还没做 | 文档 |
 |---|---|---|---|---|
 | M1 存储与事务 | 完成 | 记忆内核；当天事务；存档与回滚；崩溃恢复；过期临时日志/检查点清理，失败新读档保护旧日志（2026-10-20 合入 `main`） | — | `README.md`、`design.md` §16 |
-| M2 Agent | 第一至八步、公开家庭信息、好感分档已合入 | 对话、夜间整合、次日计划、气泡、寄信、恢复；碰面、送礼、好感（按熟悉程度分档）、当面赠礼、家庭信息、在场传话（2026-10-21 Windows 验收后合入 `main`） | 不在场传话（`m2c-offscreen-news`）与遗留清理/全部改用 high（`legacy-cleanup`）待验收；观察正常游玩和自由生成内容 | `dialogue-prototype.md`、`nightly-consolidation.md`、`next-day-plans.md`、`npc-bubbles.md`、`npc-mail.md`、`npc-chat.md`、`npc-gifts.md`、`npc-friendship.md`、`npc-in-person-gifts.md`、`world-public-facts.md`、`npc-news.md` |
+| M2 Agent | 第一至八步、公开家庭信息、好感分档已合入 | 对话、夜间整合、次日计划、气泡、寄信、恢复；碰面、送礼、好感（按熟悉程度分档）、当面赠礼、家庭信息、在场传话（2026-10-21 Windows 验收后合入 `main`） | 不在场传话（`m2c-offscreen-news`）与遗留清理/全部改用 high（`legacy-cleanup`）待验收；观察正常游玩和自由生成内容 | `dialogue-prototype.md`、`nightly-consolidation.md`、`next-day-plans.md`、`npc-bubbles.md`、`npc-mail.md`、`npc-chat.md`、`npc-gifts.md`、`npc-friendship.md`、`npc-in-person-gifts.md`、`world-public-facts.md`、`npc-news.md`、`offscreen-news.md`、`legacy-cleanup.md` |
 | M3 接入游戏 | 完成（Windows） | 游戏里"继续聊"；真实保存/退出、跨天记忆、回滚、后端进程重启与旧档分叉；拼音输入法、原版台词保留、取消三项手测通过 | — | `game-bridge.md`、`game-memory.md` |
 | M4 内容 | 角色卡已完成 | 34 张角色卡（已审阅），"看过事件之后"共 201 条 | 物品名到 ID 的对应、各动作的上限 | `design.md` §11 |
 
@@ -57,6 +57,10 @@ M2b 第六步“聊天影响原版好感”在 `m2b-friendship` 上实现，建�
 M2b 第八步“NPC 之间传话”在 `m2b-npc-news` 上实现：当晚和玩家聊过的 NPC 在夜间整合时自己决定一件愿意告诉别人的事（谁要求保密的、自己的秘密和心事、普通寒暄都不写），第二天碰面聊天时可以说出来；Mod 显示完后发 `scene.shown`，听到的人记“阿比盖尔跟我说：“……””，跟当天保存或回滚。真实模型：夜间 48 次全部符合预期，16 次秘密都没说出去；碰面聊天 9 次转述都没超出给定内容。每晚每位 NPC +77 输入（可缓存）、约 +45 输出；碰面规则 +62（可缓存），有新鲜事时 +约 32。已和 Windows 的碰面冷却修复合在一起，变基后 130/130、类型检查、构建和 Release 编译通过，见 [npc-news.md](npc-news.md)。
 
 2026-10-21 按用户“又提交了新的 测试”扩展统一入口，分支已变基到 `main / ed9eb28`，纳入 `m2b-npc-news / dc6d1d2`（含 `6774889`）。11 种好感状态、原生传话、公开/保密、显示中断、重复确认及保存回滚全部通过；修复听者离场仍确认、同连接新读档继承旧场景预算，正常 token 增量 0。最终 132/132 Node、20/20 C#、类型检查、构建、Release 零警告/错误通过；115 项真机检查、250.33 秒、22 次真实调用、4 次保存、8 次读档，原档 6 文件哈希一致。正常后端 00:38:37 备份后更新为 PID 12072，DLL 哈希一致，新协议消息探测通过。截图中“我弟”原始回复属于山姆，塞巴的卡片仍正确写妹妹玛鲁；添写文森特也听说了的内容未当成真实事件。完整证据、采样限制和错误/中止记录见 [本轮报告](test-results/2026-10-21-news-windows.md)。
+
+自主行动第一步“玩家不在场时也传话”在 `m2c-offscreen-news` 上实现。用户选定：不在场也传话、可以再传一手、白天 0 次额外模型调用。每到游戏整点，Mod 报告玩家看不到的地方哪些 NPC 待在一起（室内同一张地图，室外 6 格以内），后端用代码传话：当事人说出去是第一手，听到的人当天还能再转告一次（第二手），第二手不再往下传；每人对同一件事只记一次，跟当天保存或回滚。碰面聊天也能说第二手的新鲜事。0 token。见 [offscreen-news.md](offscreen-news.md)。
+
+遗留问题清理在 `legacy-cleanup` 上（建在 `m2c-offscreen-news` 上）：实测 48 次对话里 42% 把 `remember` 写成字符串数组、记忆被整条丢掉，改为接收；气泡放过“太……了”；对话推理强度用 66 道探测题重测后保持 `high`，按用户要求夜间整合和碰面聊天也改成 `high`（夜间输出约 +31%，碰面输出约 2.1 倍、+0.6 秒）；85 条没有禁忌的事件在没看过时显示“没发生过：……”（合计 1433 token）；0–1 心回忆门槛降到 3；卡片核心标准改为不超过 700。2026-10-21 两条分支变基到合入分档与在场传话后的 `main` / `35affae`，和 Windows 的场景中断、读档预算修复合在一起，138/138、类型检查、构建和 Release 编译通过。见 [legacy-cleanup.md](legacy-cleanup.md)。
 
 ## 3. 分支
 
@@ -212,6 +216,8 @@ dotnet build mod/StardewAgentBridge   # 编译 Mod，编译完自动装进游戏
 | `docs/game-bridge.md` | M3a：Mod 和后端的协议、原版界面怎么复用、游戏内测试清单 |
 | `docs/game-memory.md` | M3b：存档同步、跨天记忆、确认补发与崩溃恢复 |
 | `docs/nightly-consolidation.md` | 夜间整合：产出、输入、触发时机、出错处理、实测 token 和真实模型结果 |
+| `docs/offscreen-news.md` | 自主行动第一步：玩家不在场时也传话的决定、消息、成本、测试和 Windows 清单 |
+| `docs/legacy-cleanup.md` | 遗留问题清理：字符串记忆、气泡过滤、三档推理强度实测、没发生过的事件、0 心门槛、卡片标准 |
 | `docs/npc-news.md` | M2b 第八步：NPC 之间传话的决定、规则写法对比、真实模型实测、测试和 Windows 清单 |
 | `docs/npc-friendship.md` | M2b 第六步：聊天影响原版好感的决定、规则写法对比、真实模型实测、测试和 Windows 清单 |
 | `docs/npc-in-person-gifts.md` | M2b 第七步：当面送礼、与寄信共用冷却、背包满、实测和组合脚本 |
