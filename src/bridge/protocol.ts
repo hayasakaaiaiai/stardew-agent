@@ -99,6 +99,8 @@ export type TalkReply = {
   type: 'talk.reply'; npc: string; reply: string; emotion: Emotion; options: string[]; end: boolean;
   /** Points the Mod adds to vanilla friendship with this reply, already within the day's range (docs/npc-friendship.md). */
   friendship: number;
+  /** A card gift the NPC hands over with this reply, by its name in the game (docs/npc-in-person-gifts.md). */
+  gift?: string;
 } & Envelope;
 
 export function absoluteDay(date: Pick<GameDate, 'year' | 'season' | 'day'>): number {

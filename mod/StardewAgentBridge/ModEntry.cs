@@ -362,6 +362,8 @@ internal sealed partial class ModEntry : Mod
                 if (message.TryGetProperty("friendship", out JsonElement points) && points.ValueKind == JsonValueKind.Number
                     && points.TryGetInt32(out int delta))
                     this.ApplyFriendship(t.Npc, delta);
+                if (message.TryGetProperty("gift", out JsonElement gift) && gift.ValueKind == JsonValueKind.String && gift.GetString() is { Length: > 0 } present)
+                    this.GivePresent(t.Npc, present);
                 this.OnReply(t,
                     message.GetProperty("reply").GetString() ?? "",
                     message.GetProperty("emotion").GetString() ?? "neutral",

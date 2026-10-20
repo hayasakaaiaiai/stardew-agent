@@ -239,7 +239,8 @@ export class BridgeServer {
     let signal = cancel.signal;
     const active = () => !signal.aborted && session.open.get(message.npc) === talk;
     try {
-      const lease = await session.save!.begin(message, message.type === 'talk.open' ? message.world.date : message.date, cancel.signal);
+      const lease = await session.save!.begin(message, message.type === 'talk.open' ? message.world.date : message.date, cancel.signal,
+        this.options.roster.get(talk.npcId).gifts);
       if ('type' in lease) { if (active()) send(lease); return; }
       signal = lease.signal;
       const result = await runTurn({ roster: this.options.roster, model: this.options.model, memory: lease.memory },
@@ -249,6 +250,7 @@ export class BridgeServer {
       if (active()) send(reply);
       const usage = result.usage ? `输入 ${result.usage.inputTokens}，输出 ${result.usage.outputTokens}` : '无用量';
       this.log(`${talk.npcId}：首字 ${result.timing.firstReplyMs ?? '—'}ms，总 ${result.timing.totalMs}ms，${usage}${result.metaOk ? '' : '，格式解析失败'}`);
+      if (reply.gift) this.log(`${this.options.roster.get(talk.npcId).name}当面送了：${reply.gift}`);
     } catch (error) {
       if (active()) {
         const reason = error instanceof Error ? error.message : String(error);

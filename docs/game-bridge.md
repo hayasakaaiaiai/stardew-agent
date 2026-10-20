@@ -57,7 +57,7 @@ Mod → 后端：
 | `day.letters` | 今早最多一封信：信件键、npc、正文、附带物品；Mod 已有的信忽略（见 `npc-mail.md`） |
 | `scene.lines` | 回应 `scene.request`，同一序号；2–4 句台词，不显示时为空（见 `npc-chat.md`） |
 | `talk.delta` | npc、台词的一段（流式） |
-| `talk.reply` | npc、完整台词、表情、3 个选项、是否想结束 |
+| `talk.reply` | npc、完整台词、表情、3 个选项、是否想结束；好感变化点数 `friendship`（见 `npc-friendship.md`）；当面送的东西 `gift`（可选，见 `npc-in-person-gifts.md`） |
 | `talk.error` | npc、原因（Mod 显示一句提示后关闭界面） |
 
 对话回复同时带存档身份和请求序号。Mod 必须同时匹配当前读档、NPC 和等待中的那一轮，才显示回复。

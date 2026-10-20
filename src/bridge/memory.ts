@@ -7,10 +7,12 @@ import { AgentMemory, turnLog } from '../agent/dialogue-memory.ts';
 import type { DialogueMemory, Exchange, Remembered, Standing, TurnResult } from '../agent/dialogue.ts';
 import { friendshipPoints, friendshipSoFar } from '../agent/friendship.ts';
 import { giftItemName, giftMemory } from '../agent/gifts.ts';
+import { GIVEN_TOPIC, givenMemory, withInPersonGift } from '../agent/in-person-gifts.ts';
 import { type DeliveredLetter, type Letter, letterFor, letterKey } from '../agent/letters.ts';
 import { Nightly } from '../agent/nightly.ts';
 import { withMorningPlan } from '../agent/morning.ts';
 import { createRuntime, type SaveScope } from '../index.ts';
+import type { Gift } from '../services/roster/index.ts';
 import { SOCIAL_NPCS } from '../types.ts';
 import { canonical, digest, requireValue } from '../validation.ts';
 import { absoluteDay, gameMinutes, type Envelope, type GameDate, type LoadedSave, type ModMessage, type SavePointer, type TalkReply } from './protocol.ts';
@@ -272,7 +274,8 @@ export class GameSave {
     });
   }
 
-  begin(message: TalkRequest, date: GameDate, cancel: AbortSignal): Promise<TalkReply | TurnLease> {
+  /** `gifts` are the NPC's card gifts, one of which a close NPC may hand over (docs/npc-in-person-gifts.md). */
+  begin(message: TalkRequest, date: GameDate, cancel: AbortSignal, gifts: readonly Gift[] = []): Promise<TalkReply | TurnLease> {
     return this.enqueue(async () => {
       const duplicate = this.check(message);
       if (duplicate?.reply) return duplicate.reply;
@@ -284,14 +287,20 @@ export class GameSave {
       const reader = new AgentMemory(() => agent, { now: () => gameMinutes(date), nextSeq: () => message.seq });
       let staged: { exchange: Exchange; remembered: Remembered[] } | undefined;
       let standing: Standing | undefined;
-      const memory = withMorningPlan({
-        context: async (query, current) => { signal.throwIfAborted(); standing = current; return reader.context(query, current); },
-        record: async (exchange, remembered) => { signal.throwIfAborted(); staged = { exchange, remembered }; },
-      }, { now: () => gameMinutes(date), read: async () => {
+      const read = async () => {
         signal.throwIfAborted();
         const context = await agent.context({ nowGameTime: gameMinutes(date), limit: 1, maxChars: 1 });
         signal.throwIfAborted();
         return context;
+      };
+      const memory = withInPersonGift(withMorningPlan({
+        context: async (query, current) => { signal.throwIfAborted(); standing = current; return reader.context(query, current); },
+        record: async (exchange, remembered) => { signal.throwIfAborted(); staged = { exchange, remembered }; },
+      }, { now: () => gameMinutes(date), read }), { gifts, now: () => gameMinutes(date), read: async () => {
+        signal.throwIfAborted();
+        const found = await agent.context({ topics: [GIVEN_TOPIC], nowGameTime: gameMinutes(date), limit: 5, maxChars: 1000 });
+        signal.throwIfAborted();
+        return { state: found.state, given: found.memories };
       } });
       return { memory, signal, finish: (result) => this.enqueue(async () => {
         signal.throwIfAborted(); this.check(message);
@@ -301,14 +310,16 @@ export class GameSave {
         // could not be counted against the day's range (docs/npc-friendship.md).
         const friendship = message.type === 'talk.open' || !staged ? 0
           : friendshipPoints(result.meta.mood, friendshipSoFar(this.scope!.ledger.currentDay?.overlay(npcId).today ?? [], npcId));
+        // Only the item the code offered, only with a reply that is logged, so the cooldown can see it.
+        const gave = staged && result.meta.give ? memory.offered()?.item : undefined;
         const reply: TalkReply = { ...envelope, type: 'talk.reply', npc: message.npc, reply: result.reply,
-          emotion: result.meta.emotion, options: result.meta.options, end: result.meta.end, friendship };
+          emotion: result.meta.emotion, options: result.meta.options, end: result.meta.end, friendship, ...(gave ? { gift: gave } : {}) };
         const receipt: Receipt = { seq: message.seq, hash: digest(canonical(message)), reply };
         if (staged) await agent.record({ seq: message.seq, gameTime: gameMinutes(date),
           log: { player: staged.exchange.player, npc: staged.exchange.npc, ...turnLog(standing, this.player),
-            ...(friendship ? { friendship } : {}), bridgeReceipt: JSON.parse(canonical(receipt)) },
-          memories: staged.remembered.map(item => ({ text: item.text, importance: item.importance,
-            kind: 'conversation', subjects: ['player'], visibility: 'private' })),
+            ...(friendship ? { friendship } : {}), ...(gave ? { gave } : {}), bridgeReceipt: JSON.parse(canonical(receipt)) },
+          memories: [...staged.remembered.map(item => ({ text: item.text, importance: item.importance,
+            kind: 'conversation' as const, subjects: ['player'], visibility: 'private' as const })), ...(gave ? [givenMemory(gave)] : [])],
         });
         this.addReceipt(receipt);
         await this.persist();

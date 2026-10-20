@@ -36,6 +36,8 @@ export interface MemoryContext {
   today?: Exchange[];
   /** How the NPC should treat these memories, e.g. vaguely when it barely knows the player. */
   tone?: string;
+  /** Something from the card the NPC could hand the player in this reply (docs/npc-in-person-gifts.md). */
+  offer?: { item: string; text: string };
   /** A constrained opening is presented only after this view has processed the complete reply. */
   replyView?: (reply: string, meta: DialogueMeta) => { reply: string; meta: DialogueMeta };
 }
@@ -61,6 +63,8 @@ export interface DialogueMeta {
   remember: Remembered[];
   /** How the player's line moved the NPC's feeling, −2 to 2 (docs/npc-friendship.md); 0 when missing or invalid. */
   mood: number;
+  /** Hands over the offered gift; meaningless without an offer (docs/npc-in-person-gifts.md). */
+  give: boolean;
   end: boolean;
 }
 
@@ -138,7 +142,11 @@ export function weekday(day: number): string {
   return WEEKDAYS[(day - 1) % 7]!;
 }
 
-function situation({ npcName, world, standing }: PromptInput): string {
+export function offerLine(offer: { item: string; text: string }): string {
+  return `- 可以当面送给玩家的东西：${offer.item}（${offer.text}）觉得合适就在台词里自然地递给玩家，JSON 加 "give":true；玩家开口讨要不算理由。`;
+}
+
+function situation({ npcName, world, standing, memory }: PromptInput): string {
   const { player } = world;
   const facts = Object.entries(world.facts).map(([key, value]) => `  - ${key}：${value}`);
   return [
@@ -149,6 +157,7 @@ function situation({ npcName, world, standing }: PromptInput): string {
     `- 玩家：${player.name}（${player.gender === 'female' ? '女' : '男'}），经营${player.farm}农场`,
     `- 你对玩家的好感：${standing.hearts} 心；关系：${RELATIONS[standing.relation]}`,
     ...(facts.length ? ['- 世界事实：', ...facts] : []),
+    ...(memory.offer ? [offerLine(memory.offer)] : []),
   ].join('\n');
 }
 
@@ -214,7 +223,7 @@ export class ReplyStream {
  * reply already shown to the player, used when the JSON as a whole cannot be parsed.
  */
 export function parseOutput(content: string, streamed = ''): { reply: string; meta: DialogueMeta; ok: boolean } {
-  const fallback = { reply: streamed.trim(), meta: { emotion: 'neutral' as const, options: [...FALLBACK_OPTIONS], remember: [], mood: 0, end: false }, ok: false };
+  const fallback = { reply: streamed.trim(), meta: { emotion: 'neutral' as const, options: [...FALLBACK_OPTIONS], remember: [], mood: 0, give: false, end: false }, ok: false };
   const start = content.indexOf('{');
   const end = content.lastIndexOf('}');
   if (start < 0 || end < start) return { ...fallback, reply: fallback.reply || content.trim() };
@@ -245,6 +254,7 @@ export function parseOutput(content: string, streamed = ''): { reply: string; me
       options: options.length ? [...options, ...FALLBACK_OPTIONS].slice(0, 3) : [...FALLBACK_OPTIONS],
       remember,
       mood: Number.isInteger(data.mood) && Math.abs(data.mood as number) <= 2 ? data.mood as number : 0,
+      give: data.give === true,
       end: data.end === true,
     },
     ok: reply !== '' && options.length === 3 && validEmotion && typeof data.end === 'boolean',
