@@ -39,23 +39,26 @@ const voices = JSON.parse(await readFile(join(ROOT, 'data/voices.json'), 'utf8')
 const dashScope = dashScopeConfigFromEnv();
 const speech = dashScope ? new DashScopeSpeech(dashScope) : new SilentSpeech();
 
+const GAME_DATA = join(ROOT, '.runtime', 'game');
+// The robot starts after the game backend and shares its memory (docs/companion-device.md §13).
+let beforeGameLoad = async (_lineageId: string): Promise<void> => {};
+const server = await BridgeServer.start({
+  roster, model,
+  memoryDirectory: GAME_DATA,
+  consolidator: nightlyConsolidator({ roster, model: nightlyModel, log }),
+  port: Number(process.env.NPC_BRIDGE_PORT ?? 47711),
+  log,
+  onSaveLoaded: (lineageId) => beforeGameLoad(lineageId),
+});
 const companion = await CompanionService.start({
-  dataDirectory: join(ROOT, '.runtime/chat'),
+  dataDirectory: GAME_DATA, game: server,
   roster, model: voiceModel, speech, npcIds: SOCIAL_NPCS,
   voiceFor: (npcId) => voices.npcs[npcId] ?? voices.default,
   port: Number(process.env.NPC_DEVICE_PORT ?? 47712),
   faces: new PortraitPacks(join(ROOT, '.runtime/companion/assets')),
   log,
 });
-const server = await BridgeServer.start({
-  roster, model,
-  memoryDirectory: join(ROOT, '.runtime', 'game'),
-  consolidator: nightlyConsolidator({ roster, model: nightlyModel, log }),
-  port: Number(process.env.NPC_BRIDGE_PORT ?? 47711),
-  log,
-  onSaveLoaded: (lineageId) => companion.gameLoaded(lineageId),
-  onDisconnected: () => companion.gameClosed(),
-});
+beforeGameLoad = (lineageId) => companion.gameLoaded(lineageId);
 
 log(`后端已启动：游戏 ws://127.0.0.1:${server.port}，角色卡 ${loaded.loaded.length} 张，模型 ${model.config.model}（游戏 thinking=${model.config.thinking}，夜间整合 thinking=${NIGHTLY_THINKING}，机器人 thinking=${voiceThinking}）`);
 log(`机器人：语音 ${speech.name}。配置地址填下面任意一个（机器人和电脑要在同一个网络）：`);
@@ -100,7 +103,7 @@ async function command(input: string) {
 async function pick() {
   const saves = await companion.saves();
   if (!saves.length) {
-    log('还没有可用的存档。命令行聊天的存档要先 /sleep 存一次档才会出现在这里。');
+    log('还没有可用的存档：用更新过的 Mod 在游戏里睡觉存一次档，存档才会出现在这里。');
     return;
   }
   const seasons = { spring: '春', summer: '夏', fall: '秋', winter: '冬' } as const;

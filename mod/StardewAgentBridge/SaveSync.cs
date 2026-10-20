@@ -107,7 +107,7 @@ internal sealed partial class ModEntry
         {
             this.Helper.Data.WriteSaveData(MemorySaveKey, pointer);
             this.pendingCommit = pointer;
-            this.Send("save.saving", new() { ["commit"] = pointer.Message() });
+            this.Send("save.saving", new() { ["commit"] = pointer.Message(), ["snapshot"] = GameState.Snapshot(SocialNpcs) });
         }
         catch (Exception ex) { this.FailSync(ex.Message); }
     }

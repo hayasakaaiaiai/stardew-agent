@@ -1,15 +1,18 @@
 /** Game save coordination around the unchanged M1 memory kernel (docs/game-memory.md). */
-import { mkdir, open, readFile, rename } from 'node:fs/promises';
+import { mkdir, open, readdir, readFile, rename } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import type { Consolidator } from '../agent/consolidation.ts';
 import { AgentMemory, turnLog } from '../agent/dialogue-memory.ts';
 import type { DialogueMemory, Exchange, Remembered, Standing, TurnResult } from '../agent/dialogue.ts';
 import { Nightly } from '../agent/nightly.ts';
 import { withMorningPlan } from '../agent/morning.ts';
+import { CompanionRegistry, isCompanionCommit } from '../companion/registry.ts';
+import { SnapshotStore } from '../companion/snapshot.ts';
 import { createRuntime, type SaveScope } from '../index.ts';
 import { SOCIAL_NPCS } from '../types.ts';
 import { canonical, digest, requireValue } from '../validation.ts';
-import { absoluteDay, gameMinutes, type Envelope, type GameDate, type LoadedSave, type ModMessage, type SavePointer, type TalkReply } from './protocol.ts';
+import { absoluteDay, gameMinutes, type Envelope, type GameDate, type GameSnapshot, type LoadedSave, type ModMessage, type SavePointer, type TalkReply } from './protocol.ts';
+import { worldState } from './world.ts';
 
 type Runtime = Awaited<ReturnType<typeof createRuntime>>;
 type Event = Exclude<ModMessage, { type: 'hello' } | LoadedSave>;
@@ -26,6 +29,25 @@ interface Checkpoint {
   nextDay: number | null;
   lastSeq: number;
   receipts: Receipt[];
+  /** Closed because the companion robot used the save while the game was away (docs/companion-device.md §13.3). */
+  takenOver?: true;
+}
+
+interface SaveHooks {
+  /** A save was confirmed: consolidate it. */
+  confirmed?: (commitId: string) => void;
+  /** A save is about to be prepared, with what the robot needs to know about it. */
+  saving?: (pointer: SavePointer, snapshot: GameSnapshot) => Promise<void>;
+}
+
+/** Atomic and flushed, so a crash leaves either the old checkpoint or the new one. */
+async function writeCheckpoint(path: string, state: Checkpoint): Promise<void> {
+  await mkdir(dirname(path), { recursive: true });
+  const temporary = `${path}.tmp`;
+  const handle = await open(temporary, 'w', 0o600);
+  try { await handle.writeFile(`${canonical(state)}\n`); await handle.sync(); }
+  finally { await handle.close(); }
+  await rename(temporary, path);
 }
 
 export interface TurnLease {
@@ -35,21 +57,27 @@ export interface TurnLease {
 }
 
 export class GameMemory {
-  private readonly runtime: Runtime;
+  /** Shared with the companion robot, so the database has one writer (docs/companion-device.md §13.2). */
+  readonly runtime: Runtime;
   private readonly directory: string;
   private readonly log: (line: string) => void;
   private readonly nightly: Nightly | undefined;
+  private readonly registry: CompanionRegistry;
+  private readonly snapshots: SnapshotStore;
   private readonly active = new Map<string, GameSave>();
   private readonly loading = new Map<string, Promise<void>>();
 
   private constructor(runtime: Runtime, directory: string, log: (line: string) => void, nightly: Nightly | undefined) {
     this.runtime = runtime; this.directory = directory; this.log = log; this.nightly = nightly;
+    this.registry = new CompanionRegistry(join(directory, 'companion/registry'));
+    this.snapshots = new SnapshotStore(join(directory, 'saves'));
   }
 
   /** Without a consolidator, saves are never consolidated (docs/nightly-consolidation.md). */
   static async open(directory: string, log: (line: string) => void = () => {}, consolidator?: Consolidator): Promise<GameMemory> {
     const runtime = await createRuntime({ databasePath: join(directory, 'memory.sqlite'), journalDirectory: join(directory, 'scratch') });
-    const nightly = consolidator ? new Nightly({ store: runtime.ctx.store, consolidator, npcIds: SOCIAL_NPCS, log }) : undefined;
+    const nightly = consolidator
+      ? new Nightly({ store: runtime.ctx.store, consolidator, npcIds: SOCIAL_NPCS, log, skip: isCompanionCommit }) : undefined;
     return new GameMemory(runtime, directory, log, nightly);
   }
 
@@ -88,16 +116,58 @@ export class GameMemory {
           this.log(`记忆缺口：${pointer.commitId} 不存在，仅恢复档内指定父提交 ${head.id}。`);
         }
       }
+      if (initial.commit && head.id === initial.commit.commitId) {
+        // Robot sessions after this save point continue it; the save file still names the save point.
+        const latest = await this.registry.resume(this.runtime.ctx.store, initial.lineageId, head.id);
+        const robot = latest === head.id ? null
+          : await this.runtime.ctx.store.call('getCommit', { lineageId: initial.lineageId, commitId: latest });
+        if (robot?.status === 'confirmed') {
+          head = robot;
+          this.log(`接上机器人上的聊天：${robot.id}`);
+        }
+      }
       state = { format: 1, initial, day: absoluteDay(initial.date), head: head.id, pointer: initial.commit,
         phase: 'open', pending: null, nextDay: null, lastSeq: 0, receipts: [] };
     }
-    const save = new GameSave(this.runtime, path, state,
-      commitId => void this.nightly?.run(initial.lineageId, commitId));
+    const save = new GameSave(this.runtime, path, state, {
+      confirmed: commitId => void this.nightly?.run(initial.lineageId, commitId),
+      saving: (pointer, snapshot) => this.writeSnapshot(initial, pointer, snapshot),
+    });
     await save.restore();
     this.active.set(initial.lineageId, save);
     // A crash or a closed backend can leave the last nights unconsolidated.
     void this.nightly?.catchUp(initial.lineageId, save.head);
     return save;
+  }
+
+  /**
+   * Before the robot opens a save the game is not holding (docs/companion-device.md §13.3): a load the game left
+   * behind, e.g. on a disconnect, is closed as taken over, so it cannot come back on the older head.
+   */
+  async takeOver(lineageId: string): Promise<void> {
+    await this.loading.get(lineageId);
+    await this.active.get(lineageId)?.takeOver();
+    // After a backend restart only the checkpoints know about the game's load.
+    const directory = join(this.directory, 'bridge', digest(lineageId));
+    for (const name of await readdir(directory).catch(() => [] as string[])) {
+      if (!name.endsWith('.json')) continue;
+      const path = join(directory, name);
+      const state = JSON.parse(await readFile(path, 'utf8')) as Checkpoint;
+      if (state.phase === 'closed') continue;
+      requireValue(state.phase === 'open', 'SAVE_BUSY', '游戏正在保存这个存档，稍后再试');
+      await writeCheckpoint(path, { ...state, phase: 'closed', takenOver: true });
+    }
+  }
+
+  /** The robot reads these while the game is closed; written before the save is prepared. */
+  private writeSnapshot(initial: LoadedSave, pointer: SavePointer, snapshot: GameSnapshot): Promise<void> {
+    const { name, gender, farm } = initial.player;
+    return this.snapshots.write({
+      lineageId: initial.lineageId, commitId: pointer.commitId, dayEnded: pointer.dayEnded, savedAt: new Date().toISOString(),
+      label: snapshot.label, player: { name, gender, farm }, facts: worldState(snapshot.world, initial.player).facts,
+      npcs: Object.fromEntries(Object.entries(snapshot.npcs).map(([npc, standing]) => [npc.toLowerCase(), standing])),
+      seenEvents: snapshot.seenEvents,
+    });
   }
 
   async close(): Promise<void> {
@@ -114,14 +184,16 @@ export class GameSave {
   private readonly path: string;
   private readonly state: Checkpoint;
   private scope: SaveScope | undefined;
-  private readonly confirmed: (commitId: string) => void;
+  private readonly hooks: SaveHooks;
   private chain: Promise<void> = Promise.resolve();
   private live = true;
 
-  constructor(runtime: Runtime, path: string, state: Checkpoint, confirmed: (commitId: string) => void = () => {}) {
-    this.runtime = runtime; this.path = path; this.state = state; this.confirmed = confirmed;
+  constructor(runtime: Runtime, path: string, state: Checkpoint, hooks: SaveHooks = {}) {
+    this.runtime = runtime; this.path = path; this.state = state; this.hooks = hooks;
   }
   get initial(): LoadedSave { return this.state.initial; }
+  get takenOver(): boolean { return this.state.takenOver === true; }
+  get closed(): boolean { return !this.live || this.state.phase === 'closed'; }
   get head(): string { return this.state.head; }
   get loadNonce(): string { return this.initial.loadNonce; }
   get day(): number { return this.state.day; }
@@ -134,14 +206,7 @@ export class GameSave {
   }
   settle(): Promise<void> { return this.chain; }
 
-  private async persist(): Promise<void> {
-    await mkdir(dirname(this.path), { recursive: true });
-    const temporary = `${this.path}.tmp`;
-    const handle = await open(temporary, 'w', 0o600);
-    try { await handle.writeFile(`${canonical(this.state)}\n`); await handle.sync(); }
-    finally { await handle.close(); }
-    await rename(temporary, this.path);
-  }
+  private persist(): Promise<void> { return writeCheckpoint(this.path, this.state); }
 
   private async openScope(head: string, day: number): Promise<void> {
     this.scope = await this.runtime.ctx.saves.load({ lineageId: this.initial.lineageId, loadNonce: this.loadNonce, day, commitId: head });
@@ -210,6 +275,7 @@ export class GameSave {
           else {
             requireValue(this.state.phase === 'open' && p.dayEnded === this.day
               && p.parentId === (this.state.pointer?.commitId ?? null), 'COMMIT_CONFLICT', '存档日期或父提交不匹配');
+            if (message.snapshot) await this.hooks.saving?.(p, message.snapshot);
             this.state.phase = 'preparing'; this.state.pending = p;
             await this.persist();
           }
@@ -231,7 +297,7 @@ export class GameSave {
           this.state.head = p.commitId; this.state.pointer = p; this.state.day = nextDay;
           await this.scope!.startDay(nextDay);
           this.state.phase = 'open'; this.state.pending = null; this.state.nextDay = null;
-          this.confirmed(p.commitId);
+          this.hooks.confirmed?.(p.commitId);
           break;
         }
         case 'day.started':
@@ -295,4 +361,14 @@ export class GameSave {
     this.scope = undefined;
   }
   discard(): Promise<void> { return this.enqueue(() => this.discardNow()); }
+
+  /** The robot is about to use this save; refused while the game is in the middle of saving it. */
+  takeOver(): Promise<void> {
+    return this.enqueue(async () => {
+      if (this.state.phase === 'closed') return;
+      requireValue(this.state.phase === 'open', 'SAVE_BUSY', '游戏正在保存这个存档，稍后再试');
+      this.state.takenOver = true;
+      await this.discardNow();
+    });
+  }
 }

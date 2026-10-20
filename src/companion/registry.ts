@@ -3,6 +3,7 @@
  * at its own commit, so loading it has to continue from the newest companion commit after it.
  */
 import { join } from 'node:path';
+import type { StoreService } from '../services/store/index.ts';
 import { fileKey, readJson, writeJson } from './snapshot.ts';
 
 /** Companion commits are recognisable by ID, e.g. to skip them when looking for the last talk in town. */
@@ -43,6 +44,19 @@ export class CompanionRegistry {
       file.heads[saveCommitId] = commitId;
       delete file.pending[saveCommitId];
     });
+  }
+
+  /**
+   * Where a load of this save continues, after settling what a crash left half-written: a pending robot
+   * commit that reached the store is confirmed and becomes the head; one that did not is forgotten.
+   */
+  async resume(store: StoreService, lineageId: string, saveCommitId: string): Promise<string> {
+    await this.reconcile(lineageId, async (commitId) => {
+      const commit = await store.call('getCommit', { lineageId, commitId });
+      if (commit?.status === 'prepared') await store.call('confirm', { lineageId, commitId });
+      return commit !== null;
+    });
+    return this.head(lineageId, saveCommitId);
   }
 
   /** A pending commit that reached the store becomes the head; one that did not is forgotten. */

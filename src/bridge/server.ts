@@ -22,7 +22,6 @@ export interface BridgeOptions {
   log?: (line: string) => void;
   /** The companion robot gives up a save the game loads (docs/companion-device.md §5.4). */
   onSaveLoaded?: (lineageId: string) => Promise<void> | void;
-  onDisconnected?: () => void;
 }
 
 interface OpenTalk { npcId: string; standing: Standing; world: WorldState }
@@ -66,6 +65,18 @@ export class BridgeServer {
     await this.memory.close();
   }
 
+  /** The memory runtime the companion robot shares, so the database has one writer (docs/companion-device.md §13). */
+  get runtime(): GameMemory['runtime'] { return this.memory.runtime; }
+
+  /** A connected game has this save loaded and has not gone back to the title screen. */
+  holds(lineageId: string): boolean {
+    const save = this.owners.get(lineageId)?.save;
+    return save !== undefined && !save.closed;
+  }
+
+  /** Closes a load the game left behind before the robot opens the save (docs/companion-device.md §13.3). */
+  takeOver(lineageId: string): Promise<void> { return this.memory.takeOver(lineageId); }
+
   private log(line: string) { this.options.log?.(line); }
 
   private accept(socket: WebSocket) {
@@ -77,10 +88,8 @@ export class BridgeServer {
       session.pending?.abort('Mod disconnected');
       void session.chain.finally(() => {
         this.sessions.delete(session);
-        if (session.save && this.owners.get(session.save.initial.lineageId) === session) {
+        if (session.save && this.owners.get(session.save.initial.lineageId) === session)
           this.owners.delete(session.save.initial.lineageId);
-          this.options.onDisconnected?.();
-        }
       });
       this.log('Mod 已断开；保留同次读档的当天工作区');
     });
@@ -119,6 +128,12 @@ export class BridgeServer {
         previous.save = undefined; previous.open.clear();
       }
       this.owners.set(message.lineageId, session);
+      if (session.save.takenOver) {
+        // The load stays open only so a queued title.returned can still be acknowledged.
+        send({ type: 'sync.error', ...envelope(message), message: '机器人在这期间用过这个存档，回到标题重新读档后 AI 才能继续' });
+        this.log(`拒绝继续：${message.player.name}的这次读档已被机器人接管，需要回到标题重新读档`);
+        return;
+      }
       send({ type: 'save.ready', ...envelope(message), day: session.save.day });
       this.log(`记忆已就绪：${message.player.name}，${message.player.farm}农场，第 ${session.save.day} 天`);
       return;

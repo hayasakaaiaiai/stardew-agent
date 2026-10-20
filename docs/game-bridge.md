@@ -37,7 +37,7 @@ Mod → 后端：
 | `hello` | 连上时 | Mod 版本、协议版本 |
 | `save.loaded` | 读档及重连握手 | 存档 ID、本次读档最初的日期、玩家信息和档内提交指针；后端恢复该 nonce 最新检查点 |
 | `day.started` | 每天开始 | 日期、天气 |
-| `save.saving` | 保存前 | 本次提交的 `commitId`、`parentId`、`dayEnded` |
+| `save.saving` | 保存前 | 本次提交的 `commitId`、`parentId`、`dayEnded`；可选 `snapshot`（存档文件夹名、34 人心数和关系、看过的事件、世界状态，给机器人用，见 `companion-device.md` §13） |
 | `save.saved` | 确认游戏保存成功 | `commitId`、实际保存后的日期 |
 | `title.returned` | 不保存退出 / 回到标题 | 丢弃未保存工作区，保留已经准备或确认的数据库节点 |
 | `talk.open` | 选了“继续聊” | npc、心数、关系、看过的事件、世界状态 |

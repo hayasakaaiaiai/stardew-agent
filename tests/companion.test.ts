@@ -3,15 +3,13 @@ import { once } from 'node:events';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { test } from 'node:test';
+import { afterEach, test } from 'node:test';
 import WebSocket, { WebSocketServer } from 'ws';
-import {
-  buildMessages, parseOutput, runTurn, VOICE_JSON_HINT, type WorldState,
-} from '../src/agent/dialogue.ts';
 import type { Consolidator } from '../src/agent/consolidation.ts';
+import { buildMessages, parseOutput, VOICE_JSON_HINT, type WorldState } from '../src/agent/dialogue.ts';
 import { Nightly } from '../src/agent/nightly.ts';
+import { BridgeServer } from '../src/bridge/server.ts';
 import { PortraitPacks } from '../src/companion/assets.ts';
-import { DatabaseBusyError } from '../src/companion/locks.ts';
 import { OpusEncoder } from '../src/companion/opus.ts';
 import { CompanionRegistry, isCompanionCommit } from '../src/companion/registry.ts';
 import { type DeviceLink, OTA_PATH } from '../src/companion/server.ts';
@@ -19,11 +17,10 @@ import { CompanionError, CompanionService } from '../src/companion/service.ts';
 import { CompanionSession, SentenceSplitter, spokenPart } from '../src/companion/session.ts';
 import { type SaveSnapshot, SnapshotStore, writeJson } from '../src/companion/snapshot.ts';
 import { DashScopeSpeech, INPUT_RATE, OUTPUT_RATE, type SpeechServices } from '../src/companion/voice.ts';
-import { createRuntime } from '../src/index.ts';
 import type { ChatMessage, Completion, ModelClient, StreamHandlers } from '../src/services/model/client.ts';
 import { Roster } from '../src/services/roster/index.ts';
 import { SOCIAL_NPCS } from '../src/types.ts';
-import { ChatSave } from '../tools/chat/session.ts';
+import { connect, initial, openTalk, WORLD as GAME_WORLD } from './helpers/bridge.ts';
 import { writePortraits } from './helpers/faces.ts';
 
 const WORLD: WorldState = {
@@ -135,51 +132,102 @@ async function connectDevice(port: number, deviceId = '02:00:00:00:00:01') {
   return { socket, messages, frames, closed, stops, send: (message: object) => socket.send(JSON.stringify(message)) };
 }
 
+const TOWN = 'farm-1';
+
+/** What the Mod sends with each save for the robot (docs/companion-device.md §13.2). */
+function snapshotFor(day: number) {
+  return { label: '测试存档', npcs: { Haley: { hearts: 4, relation: 'friend' } }, seenEvents: ['14'],
+    world: { ...GAME_WORLD, date: { ...GAME_WORLD.date, day } } };
+}
+
+type Context = Awaited<ReturnType<typeof setup>>;
+
+/** A failed assertion skips a test's own cleanup, and an open server would keep the run from ending. */
+const pending: (() => Promise<void>)[] = [];
+afterEach(async () => {
+  for (const cleanup of pending.splice(0)) await cleanup();
+});
+
 async function setup() {
   const directory = await mkdtemp(join(tmpdir(), 'companion-'));
   const roster = new Roster({ directory: resolve(import.meta.dirname, '../data/npcs'), npcIds: SOCIAL_NPCS });
   await roster.load();
-  return { directory, roster, cleanup: () => rm(directory, { recursive: true, force: true }) };
+  const servers: BridgeServer[] = [];
+  const services: CompanionService[] = [];
+  const hooks: { service?: CompanionService } = {};
+  /** The game backend: the robot shares its memory, and a game loading a save first lets the robot finish. */
+  const game = async (town = townModel(['嗨。', '今天海滩风好大。', '早。', '早啊。'])) => {
+    const server = await BridgeServer.start({
+      roster, model: town.model, memoryDirectory: directory, port: 0, onSaveLoaded: (lineageId) => hooks.service?.gameLoaded(lineageId),
+    });
+    servers.push(server);
+    return { server, town };
+  };
+  const stopGame = async (server: BridgeServer) => {
+    servers.splice(servers.indexOf(server), 1);
+    await server.close();
+  };
+  const cleanup = async () => {
+    for (const service of services.splice(0)) await service.close();
+    for (const server of servers.splice(0)) await server.close();
+    await rm(directory, { recursive: true, force: true });
+  };
+  pending.push(cleanup);
+  return { directory, roster, game, stopGame, hooks, services, cleanup };
 }
 
-/** Talks to Haley in town and saves once per day, as session A. Returns the saves' snapshots, oldest first. */
-async function townSave(directory: string, roster: Roster, days = 1): Promise<SaveSnapshot[]> {
-  const save = await ChatSave.open({ directory, name: 'town', fresh: true, startDay: 17, npcIds: SOCIAL_NPCS });
-  const town = townModel(['今天海滩风好大。', '明天见。']);
-  const snapshots = new SnapshotStore(join(directory, 'saves'));
+type Wire = Awaited<ReturnType<typeof connect>>;
+type SavePoint = { commitId: string; parentId: string | null; dayEnded: number };
+
+/** Sleeping in the game: the save point carries the snapshot, then the next day starts. */
+async function sleepWithSnapshot(wire: Wire, commit: SavePoint) {
+  const next = { ...GAME_WORLD.date, day: commit.dayEnded + 1 };
+  wire.send({ type: 'save.saving', commit, snapshot: snapshotFor(commit.dayEnded) }); await wire.until('ack');
+  wire.send({ type: 'save.saved', commitId: commit.commitId, date: next }); await wire.until('ack');
+  wire.send({ type: 'day.started', date: next, weather: 'sunny' }); await wire.until('ack');
+}
+
+/** Talks to Haley in town through a simulated Mod and sleeps, once a day, as session A; then back to the title. */
+async function townSave(context: Context, server: BridgeServer, days = 1): Promise<SaveSnapshot[]> {
+  const wire = await connect(server, initial('town', 17, null, TOWN));
   const saved: SaveSnapshot[] = [];
-  try {
-    for (let i = 0; i < days; i++) {
-      const memory = save.memory('haley', () => save.day * 1440 + 900);
-      await runTurn({ roster, model: town.model, memory }, { npcId: 'haley', world: WORLD, standing: FRIEND, playerLine: i ? '早' : '你在拍照吗？' });
-      await save.sleep({ label: 'town', player: WORLD.player, facts: {}, npcs: { haley: { hearts: 4, relation: 'friend' } }, seenEvents: [] });
-      saved.push((await snapshots.latest())[0]!);
-    }
-  } finally {
-    await save.close();
+  let parentId: string | null = null;
+  for (let i = 0; i < days; i++) {
+    const day = 17 + i;
+    wire.send(openTalk(day, 'Haley')); await wire.until('talk.reply');
+    wire.send({ type: 'talk.say', npc: 'Haley', text: i ? '早' : '你在拍照吗？', date: { ...GAME_WORLD.date, day } });
+    await wire.until('talk.reply');
+    const commit: SavePoint = { commitId: `town-day-${day}`, parentId, dayEnded: day };
+    await sleepWithSnapshot(wire, commit);
+    saved.push((await new SnapshotStore(join(context.directory, 'saves')).read(TOWN, commit.commitId))!);
+    parentId = commit.commitId;
   }
+  wire.send({ type: 'title.returned' }); await wire.until('ack');
+  await wire.close();
   return saved;
 }
 
-async function startCompanion(directory: string, roster: Roster, model: ModelClient, speech: SpeechServices, idleMs = 60_000,
+/** A new load of a save in the game, e.g. back in town after the robot. */
+function loadAgain(nonce: string, snapshot: SaveSnapshot, parentId: string | null = null) {
+  return initial(nonce, snapshot.dayEnded + 1, { commitId: snapshot.commitId, parentId, dayEnded: snapshot.dayEnded }, TOWN);
+}
+
+async function startCompanion(context: Context, server: BridgeServer, model: ModelClient, speech: SpeechServices, idleMs = 60_000,
   faces?: PortraitPacks) {
   const service = await CompanionService.start({
-    dataDirectory: directory, roster, model, speech, voiceFor: () => 'voice', npcIds: SOCIAL_NPCS, port: 0, host: '127.0.0.1', idleMs,
-    ...(faces ? { faces } : {}),
+    dataDirectory: context.directory, game: server, roster: context.roster, model, speech, voiceFor: () => 'voice',
+    npcIds: SOCIAL_NPCS, port: 0, host: '127.0.0.1', idleMs, ...(faces ? { faces } : {}),
   });
+  context.hooks.service = service;
+  context.services.push(service);
   service.pairing.open(60_000);
   return service;
 }
 
-async function robotLogs(directory: string, snapshot: SaveSnapshot) {
-  const commitId = await new CompanionRegistry(join(directory, 'companion/registry')).head(snapshot.lineageId, snapshot.commitId);
-  const runtime = await createRuntime({ databasePath: join(directory, 'memory.sqlite'), journalDirectory: join(directory, 'scratch'), npcIds: SOCIAL_NPCS });
-  try {
-    const { npcs } = await runtime.ctx.store.call('consolidationInput', { lineageId: snapshot.lineageId, commitId, npcIds: ['haley'] });
-    return { commitId, logs: npcs[0]!.logs.map((entry) => entry.changes[0]!.log as { player: string; npc: string }) };
-  } finally {
-    await runtime.close();
-  }
+async function robotLogs(context: Context, server: BridgeServer, snapshot: SaveSnapshot) {
+  const commitId = await new CompanionRegistry(join(context.directory, 'companion/registry')).head(snapshot.lineageId, snapshot.commitId);
+  const { npcs } = await server.runtime.ctx.store.call('consolidationInput', { lineageId: snapshot.lineageId, commitId, npcIds: ['haley'] });
+  return { commitId, logs: npcs[0]!.logs.map((entry) => entry.changes[0]!.log as { player: string; npc: string }) };
 }
 
 test('speech is cut at sentences or long clauses, and a cut-off reply keeps the part that was heard', () => {
@@ -222,9 +270,10 @@ test('voice prompts put the NPC in the real world, show the last talk in town, a
 });
 
 test('only paired devices get the token, and a wrong token cannot connect', async () => {
-  const { directory, roster, cleanup } = await setup();
+  const { directory, roster, game, cleanup } = await setup();
+  const { server } = await game();
   const service = await CompanionService.start({
-    dataDirectory: directory, roster, model: voiceModel([]).model, speech: fakeSpeech().speech, voiceFor: () => 'voice',
+    dataDirectory: directory, game: server, roster, model: voiceModel([]).model, speech: fakeSpeech().speech, voiceFor: () => 'voice',
     npcIds: SOCIAL_NPCS, port: 0, host: '127.0.0.1',
   });
   try {
@@ -245,14 +294,16 @@ test('only paired devices get the token, and a wrong token cannot connect', asyn
 });
 
 test('a robot session greets, answers with a face, sentences and audio, and writes the talk back to the save on goodbye', async () => {
-  const { directory, roster, cleanup } = await setup();
-  const [snapshot] = await townSave(directory, roster);
+  const context = await setup();
+  const { directory, cleanup } = context;
+  const { server, town } = await context.game();
+  const [snapshot] = await townSave(context, server);
   const voice = voiceModel([
     { reply: '哇，这就是你的世界？好安静。', emotion: 'happy' },
     { reply: '考试？那你可要加油。', emotion: 'special', remember: '农场主说下周要考试' },
     { reply: '好吧，拜拜！', emotion: 'neutral', end: true },
   ]);
-  const service = await startCompanion(directory, roster, voice.model, fakeSpeech().speech);
+  const service = await startCompanion(context, server, voice.model, fakeSpeech().speech);
   try {
     const robot = await connectDevice(service.port);
     await service.begin(snapshot!, 'haley');
@@ -261,7 +312,8 @@ test('a robot session greets, answers with a face, sentences and audio, and writ
     assert.deepEqual(greeting.map((m) => `${m.type}:${m.state ?? m.emotion ?? ''}`).slice(0, 3), ['llm:happy', 'tts:start', 'tts:sentence_start']);
     assert.ok(robot.frames.length > 0, 'audio was sent');
     const system = voice.sent[0]![0]!.content;
-    assert.match(system, /上次在镇上和农场主的对话（第 1 年春季 17 日）\n- 农场主：你在拍照吗？\n- 你：今天海滩风好大。/);
+    // The opening is the game's “继续聊”: its stage direction is left out, Haley's first line is kept.
+    assert.match(system, /上次在镇上和农场主的对话（第 1 年春季 17 日）\n- 你：嗨。\n- 农场主：你在拍照吗？\n- 你：今天海滩风好大。/);
 
     robot.send({ type: 'text', text: '我下周要考试' });
     await until(() => robot.stops() === 2, 'the answer');
@@ -276,34 +328,34 @@ test('a robot session greets, answers with a face, sentences and audio, and writ
     await service.close();
   }
   try {
-    const { commitId, logs } = await robotLogs(directory, snapshot!);
+    const { commitId, logs } = await robotLogs(context, server, snapshot!);
     assert.ok(isCompanionCommit(commitId), 'the save continues from a companion commit');
     assert.equal(logs.length, 3);
 
-    // Back in town, Haley remembers what was said through the robot.
-    const save = await ChatSave.open({ directory, name: 'town', fresh: false, startDay: 17, npcIds: SOCIAL_NPCS });
-    try {
-      assert.equal(save.continuedFromRobot, true);
-      const town = townModel(['嗯。']);
-      const memory = save.memory('haley', () => save.day * 1440 + 900);
-      await runTurn({ roster, model: town.model, memory }, { npcId: 'haley', world: WORLD, standing: FRIEND, playerLine: '考试的事你还记得吗' });
-      const system = town.sent[0]![0]!.content;
-      assert.match(system, /- （现实里 \d+ 月 \d+ 日）农场主说下周要考试/);
-      assert.match(system, /标着“现实里”的/);
-    } finally {
-      await save.close();
-    }
+    // Back in town, a new load of the save continues after the robot, and Haley remembers what was said there.
+    const wire = await connect(server, loadAgain('back-in-town', snapshot!));
+    wire.send(openTalk(18, 'Haley')); await wire.until('talk.reply');
+    const system = town.sent.at(-1)![0]!.content;
+    assert.match(system, /- （现实里 \d+ 月 \d+ 日）农场主说下周要考试/);
+    assert.match(system, /标着“现实里”的/);
+    // The save file still names the save point; the next save continues the robot commit.
+    await sleepWithSnapshot(wire, { commitId: 'town-day-18', parentId: snapshot!.commitId, dayEnded: 18 });
+    const next = await server.runtime.ctx.store.call('getCommit', { lineageId: TOWN, commitId: 'town-day-18' });
+    assert.equal(next?.parentId, commitId);
+    await wire.close();
   } finally {
     await cleanup();
   }
 });
 
 test("a robot with another NPC's face downloads this one and restarts before the NPC talks", async () => {
-  const { directory, roster, cleanup } = await setup();
-  const [snapshot] = await townSave(directory, roster);
+  const context = await setup();
+  const { directory, cleanup } = context;
+  const { server, town } = await context.game();
+  const [snapshot] = await townSave(context, server);
   await writePortraits(join(directory, 'faces'), 'haley');
   const voice = voiceModel([{ reply: '嗨，又见面了。', emotion: 'happy' }]);
-  const service = await startCompanion(directory, roster, voice.model, fakeSpeech().speech, 60_000, new PortraitPacks(join(directory, 'faces')));
+  const service = await startCompanion(context, server, voice.model, fakeSpeech().speech, 60_000, new PortraitPacks(join(directory, 'faces')));
   try {
     const robot = await connectDevice(service.port);
     const calls = () => robot.messages.filter((m) => m.type === 'mcp').map((m) => m.payload!);
@@ -340,10 +392,12 @@ test("a robot with another NPC's face downloads this one and restarts before the
 });
 
 test("nightly consolidation skips the robot's commits but still catches up the save before them", async () => {
-  const { directory, roster, cleanup } = await setup();
-  const [snapshot] = await townSave(directory, roster);
+  const context = await setup();
+  const { directory, cleanup } = context;
+  const { server, town } = await context.game();
+  const [snapshot] = await townSave(context, server);
   // Three robot sessions in a row: catching up looks three commits back, and robot commits must not use them up.
-  const service = await startCompanion(directory, roster, voiceModel([]).model, fakeSpeech().speech);
+  const service = await startCompanion(context, server, voiceModel([]).model, fakeSpeech().speech);
   try {
     for (let i = 0; i < 3; i++) {
       const robot = await connectDevice(service.port);
@@ -355,28 +409,28 @@ test("nightly consolidation skips the robot's commits but still catches up the s
   } finally {
     await service.close();
   }
-  const { commitId: robotCommit } = await robotLogs(directory, snapshot!);
+  const { commitId: robotCommit } = await robotLogs(context, server, snapshot!);
   assert.ok(isCompanionCommit(robotCommit));
-  const runtime = await createRuntime({ databasePath: join(directory, 'memory.sqlite'), journalDirectory: join(directory, 'scratch'), npcIds: SOCIAL_NPCS });
   try {
     const consolidated: string[] = [];
     const consolidator: Consolidator = async (input) => { consolidated.push(input.commit.id); return []; };
-    const nightly = new Nightly({ store: runtime.ctx.store, consolidator, npcIds: SOCIAL_NPCS, skip: isCompanionCommit });
+    const nightly = new Nightly({ store: server.runtime.ctx.store, consolidator, npcIds: SOCIAL_NPCS, skip: isCompanionCommit });
     await nightly.catchUp(snapshot!.lineageId, robotCommit);
     await nightly.run(snapshot!.lineageId, robotCommit);
     await nightly.close();
     assert.deepEqual(consolidated, [snapshot!.commitId], '“现实里” memories stay as they were said');
   } finally {
-    await runtime.close();
     await cleanup();
   }
 });
 
 test('an older save does not see a robot session that happened after it', async () => {
-  const { directory, roster, cleanup } = await setup();
-  const [older, newer] = await townSave(directory, roster, 2);
+  const context = await setup();
+  const { directory, cleanup } = context;
+  const { server } = await context.game();
+  const [older, newer] = await townSave(context, server, 2);
   const voice = voiceModel([{ reply: '嗨！', remember: '农场主说最喜欢下雨天' }]);
-  const service = await startCompanion(directory, roster, voice.model, fakeSpeech().speech);
+  const service = await startCompanion(context, server, voice.model, fakeSpeech().speech);
   try {
     const robot = await connectDevice(service.port);
     await service.begin(newer!, 'haley');
@@ -390,26 +444,23 @@ test('an older save does not see a robot session that happened after it', async 
     assert.equal(await registry.head(older!.lineageId, older!.commitId), older!.commitId);
     const head = await registry.head(newer!.lineageId, newer!.commitId);
     assert.ok(isCompanionCommit(head));
-    const runtime = await createRuntime({ databasePath: join(directory, 'memory.sqlite'), journalDirectory: join(directory, 'scratch'), npcIds: SOCIAL_NPCS });
-    try {
-      const search = (headCommitId: string) => runtime.ctx.store.call('search', {
-        scope: { lineageId: older!.lineageId, headCommitId, npcId: 'haley' }, query: '', topics: [], sharedScene: false, limit: 50,
-      });
-      assert.ok((await search(head)).some((memory) => memory.text.includes('最喜欢下雨天')));
-      assert.ok(!(await search(older!.commitId)).some((memory) => memory.text.includes('最喜欢下雨天')));
-    } finally {
-      await runtime.close();
-    }
+    const search = (headCommitId: string) => server.runtime.ctx.store.call('search', {
+      scope: { lineageId: older!.lineageId, headCommitId, npcId: 'haley' }, query: '', topics: [], sharedScene: false, limit: 50,
+    });
+    assert.ok((await search(head)).some((memory) => memory.text.includes('最喜欢下雨天')));
+    assert.ok(!(await search(older!.commitId)).some((memory) => memory.text.includes('最喜欢下雨天')));
   } finally {
     await cleanup();
   }
 });
 
 test('cutting in stops the audio and records only the part that was heard', async () => {
-  const { directory, roster, cleanup } = await setup();
-  const [snapshot] = await townSave(directory, roster);
+  const context = await setup();
+  const { directory, cleanup } = context;
+  const { server, town } = await context.game();
+  const [snapshot] = await townSave(context, server);
   const voice = voiceModel([{ reply: '今天海滩的风好大。我差点被吹跑了！' }, { reply: '怎么了？' }]);
-  const service = await startCompanion(directory, roster, voice.model, fakeSpeech({ msPerPiece: 3000 }).speech);
+  const service = await startCompanion(context, server, voice.model, fakeSpeech({ msPerPiece: 3000 }).speech);
   try {
     const robot = await connectDevice(service.port);
     await service.begin(snapshot!, 'haley');
@@ -424,7 +475,7 @@ test('cutting in stops the audio and records only the part that was heard', asyn
     await service.close();
   }
   try {
-    const { logs } = await robotLogs(directory, snapshot!);
+    const { logs } = await robotLogs(context, server, snapshot!);
     assert.ok(logs[0]!.npc.endsWith('……'));
     assert.ok(logs[0]!.npc.length < '今天海滩的风好大。我差点被吹跑了！'.length);
   } finally {
@@ -432,54 +483,114 @@ test('cutting in stops the audio and records only the part that was heard', asyn
   }
 });
 
-test('the game loading the save ends the robot session first, and a save the game holds is refused', async () => {
-  const { directory, roster, cleanup } = await setup();
-  const [snapshot] = await townSave(directory, roster);
-  const service = await startCompanion(directory, roster, voiceModel([{ reply: '嗨！' }]).model, fakeSpeech().speech);
+test('a game loading the save ends the robot session first, and a save a connected game holds is refused', async () => {
+  const context = await setup();
+  const { directory, cleanup } = context;
+  const { server } = await context.game();
+  const [snapshot] = await townSave(context, server);
+  const service = await startCompanion(context, server, voiceModel([{ reply: '嗨！' }]).model, fakeSpeech().speech);
   try {
     const robot = await connectDevice(service.port);
     await service.begin(snapshot!, 'haley');
     await until(() => robot.stops() === 1, 'the greeting');
-    await service.gameLoaded(snapshot!.lineageId);
-    assert.equal(service.session, undefined);
+    const game = await connect(server, loadAgain('load-2', snapshot!));
+    assert.equal(service.session, undefined, 'written back before the game loaded');
     assert.ok(isCompanionCommit(await new CompanionRegistry(join(directory, 'companion/registry')).head(snapshot!.lineageId, snapshot!.commitId)));
     await assert.rejects(service.begin(snapshot!, 'haley'), (error) => error instanceof CompanionError && /游戏开着这个存档/.test(error.message));
-    service.gameClosed();
+    game.send({ type: 'title.returned' }); await game.until('ack');
     await service.begin(snapshot!, 'haley');
+    await game.close();
   } finally {
     await service.close();
     await cleanup();
   }
 });
 
-test('the chat CLI and the robot never hold the memory database at once', async () => {
-  const { directory, roster, cleanup } = await setup();
-  const [snapshot] = await townSave(directory, roster);
-  const service = await startCompanion(directory, roster, voiceModel([]).model, fakeSpeech().speech);
-  const open = () => ChatSave.open({ directory, name: 'town', fresh: false, startDay: 17, npcIds: SOCIAL_NPCS });
+test('the robot lists the newest confirmed save point of each game save, with what the game reported', async () => {
+  const context = await setup();
+  const { server } = await context.game();
+  const [older, newer] = await townSave(context, server, 2);
+  const service = await startCompanion(context, server, voiceModel([]).model, fakeSpeech().speech);
+  try {
+    // A save the game prepared but never confirmed, e.g. it crashed while saving, is not offered.
+    const game = await connect(server, loadAgain('load-3', newer!, older!.commitId));
+    game.send({ type: 'save.saving', commit: { commitId: 'unconfirmed', parentId: newer!.commitId, dayEnded: 19 }, snapshot: snapshotFor(19) });
+    await game.until('ack');
+    await game.close();
+    const listed = await service.saves();
+    assert.deepEqual(listed.map((save) => save.commitId), [newer!.commitId]);
+    const [save] = listed;
+    assert.equal(save!.label, '测试存档');
+    assert.deepEqual(save!.player, { name: '测试', gender: 'female', farm: '测试' });
+    assert.deepEqual(save!.npcs, { haley: { hearts: 4, relation: 'friend' } }, 'game names become NPC ids');
+    assert.deepEqual(save!.seenEvents, ['14']);
+    assert.equal(save!.facts['社区中心'], '玩家正在修复，还没修好', 'world flags become the facts the cards use');
+    assert.equal(save!.dayEnded, 18);
+  } finally {
+    await service.close();
+    await context.cleanup();
+  }
+});
+
+test('a load the game left behind on a disconnect is taken over, and the game has to load the save again', async () => {
+  const context = await setup();
+  const { server, town } = await context.game();
+  const [snapshot] = await townSave(context, server);
+  const service = await startCompanion(context, server, voiceModel([{ reply: '嗨！', remember: '农场主说今晚要熬夜' }]).model, fakeSpeech().speech);
+  try {
+    const game = await connect(server, loadAgain('load-2', snapshot!));
+    await assert.rejects(service.begin(snapshot!, 'haley'), /游戏开着这个存档/);
+    // The game drops off without going back to the title, e.g. the backend connection broke.
+    await game.close();
+    const robot = await connectDevice(service.port);
+    await service.begin(snapshot!, 'haley');
+    await until(() => robot.stops() === 1, 'the greeting');
+    assert.ok(await service.stop());
+
+    // Coming back on the same load would continue on the head from before the robot, so the AI stays off.
+    const again = await connect(server, game.loaded, game.cursor(), 'sync.error');
+    assert.match(JSON.stringify(again.inbox.find((m) => m.type === 'sync.error')), /机器人在这期间用过这个存档/);
+    again.send({ type: 'title.returned' }); await again.until('ack');
+    await again.close();
+    const reload = await connect(server, loadAgain('load-3', snapshot!));
+    reload.send(openTalk(18, 'Haley')); await reload.until('talk.reply');
+    assert.match(town.sent.at(-1)![0]!.content, /农场主说今晚要熬夜/);
+    await reload.close();
+  } finally {
+    await service.close();
+    await context.cleanup();
+  }
+});
+
+test('after a backend restart, the load a game left open is taken over from its checkpoint', async () => {
+  const context = await setup();
+  const first = await context.game();
+  const [snapshot] = await townSave(context, first.server);
+  const game = await connect(first.server, loadAgain('load-2', snapshot!));
+  game.send(openTalk(18, 'Haley')); await game.until('talk.reply');
+  await game.close();
+  await context.stopGame(first.server);
+  const { server } = await context.game();
+  const service = await startCompanion(context, server, voiceModel([]).model, fakeSpeech().speech);
   try {
     await service.begin(snapshot!, 'haley');
-    await assert.rejects(open(), DatabaseBusyError);
     await service.stop();
-    const save = await open();
-    try {
-      await assert.rejects(service.begin(snapshot!, 'haley'), (error) => error instanceof CompanionError && /命令行聊天/.test(error.message));
-    } finally {
-      await save.close();
-    }
+    const again = await connect(server, game.loaded, game.cursor(), 'sync.error');
+    await again.close();
   } finally {
     await service.close();
-    await cleanup();
+    await context.cleanup();
   }
 });
 
-test('a session cut short by a crash is written back on the next start', async () => {
-  const { directory, roster, cleanup } = await setup();
-  const [snapshot] = await townSave(directory, roster);
+test('a session cut short by a crash is written back when the service starts again', async () => {
+  const context = await setup();
+  const { directory, roster, cleanup } = context;
+  const first = await context.game();
+  const [snapshot] = await townSave(context, first.server);
   const registry = new CompanionRegistry(join(directory, 'companion/registry'));
-  const runtime = await createRuntime({ databasePath: join(directory, 'memory.sqlite'), journalDirectory: join(directory, 'scratch'), npcIds: SOCIAL_NPCS });
   const session = await CompanionSession.open({
-    runtime, roster, model: voiceModel([{ reply: '嗨！', remember: '农场主养了一只猫' }]).model, speech: fakeSpeech().speech,
+    runtime: first.server.runtime, roster, model: voiceModel([{ reply: '嗨！', remember: '农场主养了一只猫' }]).model, speech: fakeSpeech().speech,
     registry, snapshot: snapshot!, npcId: 'haley', voice: 'voice', idleMs: 60_000, onFinish: () => {},
   });
   const link: DeviceLink = {
@@ -490,30 +601,30 @@ test('a session cut short by a crash is written back on the next start', async (
   await until(() => session.exchanges === 1, 'the greeting to be recorded');
   await writeJson(join(directory, 'companion/active.json'), session.identity);
   // The backend dies: nothing is committed, the journal keeps today.
-  await runtime.close();
+  await context.stopGame(first.server);
   assert.equal(await registry.head(snapshot!.lineageId, snapshot!.commitId), snapshot!.commitId);
 
-  const service = await startCompanion(directory, roster, voiceModel([]).model, fakeSpeech().speech);
+  const { server } = await context.game();
+  const service = await startCompanion(context, server, voiceModel([]).model, fakeSpeech().speech);
   try {
-    const next = await service.begin(snapshot!, 'haley');
     const head = await registry.head(snapshot!.lineageId, snapshot!.commitId);
-    assert.ok(isCompanionCommit(head));
+    assert.ok(isCompanionCommit(head), 'written back as the service started');
+    const next = await service.begin(snapshot!, 'haley');
     assert.equal(next.identity.headCommitId, head, 'the new session continues after the recovered one');
-  } finally {
-    await service.close();
-  }
-  try {
-    const { logs } = await robotLogs(directory, snapshot!);
+    const { logs } = await robotLogs(context, server, snapshot!);
     assert.equal(logs[0]!.npc, '嗨！');
   } finally {
+    await service.close();
     await cleanup();
   }
 });
 
 test('the session ends by itself when the player goes quiet', async () => {
-  const { directory, roster, cleanup } = await setup();
-  const [snapshot] = await townSave(directory, roster);
-  const service = await startCompanion(directory, roster, voiceModel([{ reply: '嗨！' }]).model, fakeSpeech().speech, 300);
+  const context = await setup();
+  const { directory, cleanup } = context;
+  const { server, town } = await context.game();
+  const [snapshot] = await townSave(context, server);
+  const service = await startCompanion(context, server, voiceModel([{ reply: '嗨！' }]).model, fakeSpeech().speech, 300);
   try {
     const robot = await connectDevice(service.port);
     await service.begin(snapshot!, 'haley');
@@ -529,10 +640,12 @@ test('the session ends by itself when the player goes quiet', async () => {
 });
 
 test('microphone audio goes through recognition and becomes the player line', async () => {
-  const { directory, roster, cleanup } = await setup();
-  const [snapshot] = await townSave(directory, roster);
+  const context = await setup();
+  const { directory, cleanup } = context;
+  const { server, town } = await context.game();
+  const [snapshot] = await townSave(context, server);
   const voice = voiceModel([{ reply: '嗨！' }, { reply: '欢迎回来。' }]);
-  const service = await startCompanion(directory, roster, voice.model, fakeSpeech({ heard: ['我回来了'] }).speech);
+  const service = await startCompanion(context, server, voice.model, fakeSpeech({ heard: ['我回来了'] }).speech);
   try {
     const robot = await connectDevice(service.port);
     await service.begin(snapshot!, 'haley');

@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using StardewModdingAPI;
 using StardewValley;
 
 namespace StardewAgentBridge;
@@ -44,11 +45,15 @@ internal static class GameState
         ["farm"] = Game1.player.farmName.Value,
     };
 
-    public static int Hearts(NPC npc) => Game1.player.getFriendshipHeartLevelForNPC(npc.Name);
+    public static int Hearts(NPC npc) => Hearts(npc.Name);
 
-    public static string Relation(NPC npc)
+    public static int Hearts(string name) => Game1.player.getFriendshipHeartLevelForNPC(name);
+
+    public static string Relation(NPC npc) => Relation(npc.Name);
+
+    public static string Relation(string name)
     {
-        if (!Game1.player.friendshipData.TryGetValue(npc.Name, out Friendship? friendship))
+        if (!Game1.player.friendshipData.TryGetValue(name, out Friendship? friendship))
             return "stranger";
         if (friendship.IsRoommate())
             return "roommate";
@@ -60,6 +65,19 @@ internal static class GameState
     }
 
     public static string[] SeenEvents() => Game1.player.eventsSeen.ToArray();
+
+    /// <summary>What the companion robot needs while the game is closed (docs/companion-device.md §13.2).</summary>
+    public static Dictionary<string, object?> Snapshot(IEnumerable<string> npcs) => new()
+    {
+        ["label"] = Constants.SaveFolderName ?? "",
+        ["npcs"] = npcs.ToDictionary(name => name, name => (object?)new Dictionary<string, object?>
+        {
+            ["hearts"] = Hearts(name),
+            ["relation"] = Relation(name),
+        }),
+        ["seenEvents"] = SeenEvents(),
+        ["world"] = World(),
+    };
 
     /// <summary>Story progress shared by the whole farm, so it is read from the main player.</summary>
     private static Dictionary<string, object?> Flags()

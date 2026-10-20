@@ -78,13 +78,9 @@ export class CompanionSession {
   static async open(deps: SessionDeps): Promise<CompanionSession> {
     const { runtime, snapshot, registry, npcId } = deps;
     const { lineageId } = snapshot;
-    const store = runtime.ctx.store;
-    await registry.reconcile(lineageId, async (commitId) => {
-      const commit = await store.call('getCommit', { lineageId, commitId });
-      if (commit?.status === 'prepared') await store.call('confirm', { lineageId, commitId });
-      return commit !== null;
-    });
-    const headCommitId = deps.resume?.headCommitId ?? await registry.head(lineageId, snapshot.commitId);
+    // Settled even when resuming, so a commit a crash left half-registered is not lost.
+    const latest = await registry.resume(runtime.ctx.store, lineageId, snapshot.commitId);
+    const headCommitId = deps.resume?.headCommitId ?? latest;
     const loadNonce = deps.resume?.loadNonce ?? randomUUID();
     const scope = await runtime.ctx.saves.load({ lineageId, loadNonce, day: snapshot.dayEnded, commitId: headCommitId });
     const earlier = await lastTownTalk(runtime, lineageId, snapshot.commitId, npcId);

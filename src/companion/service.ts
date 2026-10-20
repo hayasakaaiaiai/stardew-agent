@@ -1,24 +1,33 @@
 /**
- * Owns the device server and at most one robot session (docs/companion-device.md §4–5). The memory database
- * is open only while a session runs, so the chat CLI can use it in between; a save the game holds is refused,
- * and a session cut short by a crash is committed on the next start.
+ * Owns the device server and at most one robot session (docs/companion-device.md §4–5, §13). The robot uses the
+ * game's memory runtime, so the database has one writer. A save a connected game holds is refused, a load the
+ * game left behind is taken over, and a session cut short by a crash is committed before the game or the robot
+ * opens that save again.
  */
 import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import { createRuntime } from '../index.ts';
 import type { ModelClient } from '../services/model/client.ts';
 import type { Roster } from '../services/roster/index.ts';
 import type { PortraitPacks } from './assets.ts';
-import { DatabaseBusyError, DatabaseLock, SaveLocks } from './locks.ts';
 import { CompanionRegistry } from './registry.ts';
 import { type DeviceConnection, type DeviceHandler, DevicePairing, DeviceServer } from './server.ts';
 import { CompanionSession, type Runtime, type SessionIdentity } from './session.ts';
 import { readJson, type SaveSnapshot, SnapshotStore, writeJson } from './snapshot.ts';
 import type { Recognizer, SpeechServices } from './voice.ts';
 
+/** What the robot needs from the game backend (src/bridge/server.ts). */
+export interface GameAccess {
+  readonly runtime: Runtime;
+  /** A connected game has the save loaded. */
+  holds(lineageId: string): boolean;
+  /** Closes a load the game left behind; rejects while the game is saving it. */
+  takeOver(lineageId: string): Promise<void>;
+}
+
 export interface CompanionOptions {
-  /** Shared with the chat CLI: memory.sqlite, scratch/, saves/ and companion/. */
+  /** The game's memory directory: saves/ holds the snapshots the game writes, companion/ the robot's own files. */
   dataDirectory: string;
+  game: GameAccess;
   roster: Roster;
   model: ModelClient;
   speech: SpeechServices;
@@ -41,23 +50,14 @@ export type EndReason = 'stop' | 'farewell' | 'idle' | 'game';
 const REASONS: Record<EndReason, string> = { stop: '手动结束', farewell: '道别', idle: '太久没说话', game: '游戏读了这个存档' };
 const HINT = '还没选好要和谁聊，请在电脑上输入 /robot 选一下。';
 
-interface Active {
-  runtime: Runtime;
-  lock: DatabaseLock;
-  session: CompanionSession;
-  releaseSave: () => void;
-}
-
 export class CompanionService {
   readonly snapshots: SnapshotStore;
   readonly pairing: DevicePairing;
   private readonly options: CompanionOptions;
   private readonly registry: CompanionRegistry;
-  private readonly locks = new SaveLocks();
   private server!: DeviceServer;
-  private active: Active | undefined;
+  private active: CompanionSession | undefined;
   private device: DeviceConnection | undefined;
-  private releaseGame: (() => void) | undefined;
   private chain: Promise<unknown> = Promise.resolve();
   private facesMissingLogged = false;
 
@@ -76,6 +76,9 @@ export class CompanionService {
       ...(options.faces ? { faces: (npcId: string) => options.faces!.pack(npcId) } : {}),
       ...(options.host ? { host: options.host } : {}), ...(options.log ? { log: options.log } : {}),
     });
+    await service.serial(() => service.recover()).catch((error: unknown) => {
+      service.log(`补写上次的机器人聊天失败，下次再试：${error instanceof Error ? error.message : String(error)}`);
+    });
     return service;
   }
 
@@ -84,11 +87,14 @@ export class CompanionService {
   }
 
   get session(): CompanionSession | undefined {
-    return this.active?.session;
+    return this.active;
   }
 
+  /** The newest confirmed save point of each game save. */
   saves(): Promise<SaveSnapshot[]> {
-    return this.snapshots.latest();
+    const store = this.options.game.runtime.ctx.store;
+    return this.snapshots.latest(async (snapshot) =>
+      (await store.call('getCommit', { lineageId: snapshot.lineageId, commitId: snapshot.commitId }))?.status === 'confirmed');
   }
 
   begin(snapshot: SaveSnapshot, npcId: string): Promise<CompanionSession> {
@@ -110,18 +116,12 @@ export class CompanionService {
     });
   }
 
-  /** The game loaded a save: a robot session on it is committed first, so the game continues from it. */
+  /** The game is loading a save: robot talk on it is committed first, so the game continues from it. */
   gameLoaded(lineageId: string): Promise<void> {
     return this.serial(async () => {
-      if (this.active?.session.identity.lineageId === lineageId) await this.finish('game');
-      this.releaseGame?.();
-      this.releaseGame = this.locks.acquire(lineageId, 'game');
+      if (this.active?.identity.lineageId === lineageId) await this.finish('game');
+      await this.recover();
     });
-  }
-
-  gameClosed(): void {
-    this.releaseGame?.();
-    this.releaseGame = undefined;
   }
 
   async close(): Promise<void> {
@@ -130,66 +130,55 @@ export class CompanionService {
   }
 
   private async open(snapshot: SaveSnapshot, npcId: string): Promise<CompanionSession> {
-    if (this.active) throw new CompanionError(`机器人正在和${this.active.session.npcName}聊天，先输入 /robot stop`);
-    if (this.locks.holder(snapshot.lineageId) === 'game') throw new CompanionError('游戏开着这个存档，先回到标题画面');
-    let lock: DatabaseLock;
+    if (this.active) throw new CompanionError(`机器人正在和${this.active.npcName}聊天，先输入 /robot stop`);
+    await this.recover();
+    await this.claim(snapshot.lineageId);
+    const session = await CompanionSession.open({
+      ...this.sessionDeps(), snapshot, npcId, voice: this.options.voiceFor(npcId),
+      onFinish: (reason) => void this.stop(reason),
+    });
+    await writeJson(this.file('companion/active.json'), session.identity);
+    this.active = session;
+    if (this.device) await this.present(this.device);
+    return session;
+  }
+
+  /** Only a save no connected game holds; a load the game left behind is closed first. */
+  private async claim(lineageId: string): Promise<void> {
+    if (this.options.game.holds(lineageId)) throw new CompanionError('游戏开着这个存档，先回到标题画面');
     try {
-      lock = await DatabaseLock.acquire(this.file('memory.lock'), '后端（机器人）');
+      await this.options.game.takeOver(lineageId);
     } catch (error) {
-      if (error instanceof DatabaseBusyError) throw new CompanionError(`记忆数据库正被${error.holder}使用，先退出它`);
-      throw error;
-    }
-    let runtime: Runtime | undefined;
-    try {
-      runtime = await createRuntime({
-        databasePath: this.file('memory.sqlite'), journalDirectory: this.file('scratch'), npcIds: this.options.npcIds,
-      });
-      await this.recover(runtime);
-      const session = await CompanionSession.open({
-        ...this.sessionDeps(runtime), snapshot, npcId, voice: this.options.voiceFor(npcId),
-        onFinish: (reason) => void this.stop(reason),
-      });
-      await writeJson(this.file('companion/active.json'), session.identity);
-      const releaseSave = this.locks.acquire(snapshot.lineageId, 'companion');
-      this.active = { runtime, lock, session, releaseSave };
-      if (this.device) await this.present(this.device);
-      return session;
-    } catch (error) {
-      await runtime?.close();
-      await lock.release();
-      throw error;
+      throw new CompanionError(error instanceof Error ? error.message : String(error));
     }
   }
 
   private async finish(reason: EndReason): Promise<string | null> {
-    const active = this.active;
-    if (!active) return null;
+    const session = this.active;
+    if (!session) return null;
     this.active = undefined;
-    const { session } = active;
-    try {
-      const commitId = await session.end();
-      await rm(this.file('companion/active.json'), { force: true });
-      this.log(commitId
-        ? `和${session.npcName}的聊天已写回存档：${session.exchanges} 轮（${REASONS[reason]}）`
-        : `和${session.npcName}的聊天结束，没有要写回的内容（${REASONS[reason]}）`);
-      // The device goes back to idle and reconnects on its wake word.
-      this.device?.close();
-      return commitId;
-    } finally {
-      active.releaseSave();
-      await active.runtime.close();
-      await active.lock.release();
-    }
+    const commitId = await session.end();
+    await rm(this.file('companion/active.json'), { force: true });
+    this.log(commitId
+      ? `和${session.npcName}的聊天已写回存档：${session.exchanges} 轮（${REASONS[reason]}）`
+      : `和${session.npcName}的聊天结束，没有要写回的内容（${REASONS[reason]}）`);
+    // The device goes back to idle and reconnects on its wake word.
+    this.device?.close();
+    return commitId;
   }
 
-  /** A session the backend never finished: reopen its load so the journal restores it, then commit. */
-  private async recover(runtime: Runtime): Promise<void> {
+  /**
+   * A session the backend never finished: reopen its load so the journal restores it, then commit. Left for later
+   * while a connected game holds that save, since opening it would discard the game's unsaved day.
+   */
+  private async recover(): Promise<void> {
     const saved = await readJson<SessionIdentity>(this.file('companion/active.json'));
-    if (!saved) return;
+    if (!saved || this.active || this.options.game.holds(saved.lineageId)) return;
     const snapshot = await this.snapshots.read(saved.lineageId, saved.saveCommitId);
     if (snapshot) {
+      await this.claim(saved.lineageId);
       const session = await CompanionSession.open({
-        ...this.sessionDeps(runtime), snapshot, npcId: saved.npcId, voice: this.options.voiceFor(saved.npcId),
+        ...this.sessionDeps(), snapshot, npcId: saved.npcId, voice: this.options.voiceFor(saved.npcId),
         onFinish: () => {}, resume: { loadNonce: saved.loadNonce, headCommitId: saved.headCommitId },
       });
       if (await session.end()) this.log(`上次没写回的 ${session.exchanges} 轮聊天已补写进存档`);
@@ -197,9 +186,9 @@ export class CompanionService {
     await rm(this.file('companion/active.json'), { force: true });
   }
 
-  private sessionDeps(runtime: Runtime) {
-    const { roster, model, speech, idleMs = 120_000, log } = this.options;
-    return { runtime, roster, model, speech, registry: this.registry, idleMs, ...(log ? { log } : {}) };
+  private sessionDeps() {
+    const { game, roster, model, speech, idleMs = 120_000, log } = this.options;
+    return { runtime: game.runtime, roster, model, speech, registry: this.registry, idleMs, ...(log ? { log } : {}) };
   }
 
   /** One robot at a time: a new connection replaces the old one. */
@@ -213,7 +202,7 @@ export class CompanionService {
 
   /** Attaches the session, unless the device first has to restart with this NPC's face. */
   private async present(connection: DeviceConnection): Promise<void> {
-    const session = this.active?.session;
+    const session = this.active;
     if (!session || this.device !== connection) return;
     if (!await this.changeFace(connection, session.identity.npcId, session.npcName)) session.attach(connection);
   }
@@ -243,14 +232,14 @@ export class CompanionService {
     let hinted = false;
     const hear = (text: string) => {
       connection.showUserText(text);
-      if (this.active) this.active.session.hear(text);
+      if (this.active) this.active.hear(text);
       else if (!hinted) {
         hinted = true;
         this.hint(connection);
       }
     };
     const listening = () => recognizer ??= this.options.speech.recognize({
-      onPartial: () => this.active?.session.warm(),
+      onPartial: () => this.active?.warm(),
       onSentence: hear,
       onError: (error) => {
         recognizer = undefined;
@@ -261,7 +250,7 @@ export class CompanionService {
     return {
       listen: (state) => {
         // The wake word means the player is about to talk.
-        if (state === 'detect') this.active?.session.warm();
+        if (state === 'detect') this.active?.warm();
         if (state !== 'stop') return;
         const finishing = recognizer;
         recognizer = undefined;
@@ -269,11 +258,11 @@ export class CompanionService {
       },
       audio: (pcm) => listening().write(pcm),
       text: hear,
-      abort: () => this.active?.session.interrupt(),
+      abort: () => this.active?.interrupt(),
       closed: () => {
         recognizer?.close();
         if (this.device === connection) this.device = undefined;
-        this.active?.session.detach(connection);
+        this.active?.detach(connection);
         this.log('机器人已断开');
       },
     };

@@ -232,8 +232,7 @@ test('the chat CLI uses the same plan wrapper and persists only the opening exch
       reasoning: '', usage: null, timing: { firstReasoningMs: null, firstContentMs: 1, totalMs: 1 }, finishReason: 'stop' }; } } as unknown as ModelClient;
     const say = (playerLine: string) => runTurn({ roster, model, memory: save.memory('abigail', () => save.day * 1440 + 600) },
       { npcId: 'abigail', world: { ...dateOf(save.day), time: '10:00', weather: '晴', location: '农场', player: { name: '测试', gender: 'female', farm: '测试' }, facts: {} }, standing, playerLine });
-    await say('明天一起做紫色风筝');
-    await save.sleep({ label: 'test', player: { name: '测试', gender: 'female', farm: '测试' }, facts: {}, npcs: {}, seenEvents: [] });
+    await say('明天一起做紫色风筝'); await save.sleep();
     db = new DatabaseSync(join(directory, 'memory.sqlite'), { readOnly: true });
     const count = () => db!.prepare('SELECT COUNT(*) AS n FROM memory').get()!.n;
     const before = count();

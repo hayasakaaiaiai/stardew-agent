@@ -270,12 +270,23 @@ test('an unknown commit and unknown parent stop AI rather than guessing a saved 
   assert.equal(h.fake.sent.length, 0);
 });
 
-test('protocol rejects invalid identities, dates, sequences, pointers, and old protocol versions', { timeout: 10000 }, async t => {
+test('protocol rejects invalid identities, dates, sequences, pointers, snapshots, and old protocol versions', { timeout: 10000 }, async t => {
   const good = initial();
   for (const bad of [null, [], { ...good, seq: 1 }, { ...good, lineageId: '' }, { ...good, date: { ...good.date, day: 29 } },
     { ...good, date: { ...good.date, time: 1560 } }, { ...good, commit: { commitId: 'bad', parentId: 1, dayEnded: 1 } },
     { ...openTalk(), lineageId: 'a', loadNonce: 'b', seq: -1 }, { ...good, loadNonce: '../x\n' }]) {
     assert.throws(() => parseModMessage(JSON.stringify(bad)));
+  }
+  // The optional snapshot for the companion robot (docs/companion-device.md §13.2).
+  const saving = (snapshot: unknown) => JSON.stringify({ type: 'save.saving', lineageId: 'a', loadNonce: 'b', seq: 1,
+    commit: { commitId: 'c', parentId: null, dayEnded: 1 }, snapshot });
+  const snapshot = { label: '测试', npcs: { Abigail: { hearts: 4, relation: 'friend' } }, seenEvents: ['14'], world: WORLD };
+  assert.deepEqual((parseModMessage(saving(snapshot)) as { snapshot: unknown }).snapshot, snapshot);
+  assert.equal((parseModMessage(saving(undefined)) as { snapshot?: unknown }).snapshot, undefined, 'older mods send none');
+  for (const bad of [null, { ...snapshot, npcs: { Abigail: { hearts: 15, relation: 'friend' } } },
+    { ...snapshot, npcs: { Abigail: { hearts: 4, relation: 'boss' } } }, { ...snapshot, seenEvents: [1] }, { ...snapshot, world: {} },
+    { ...snapshot, label: 'x'.repeat(201) }]) {
+    assert.throws(() => parseModMessage(saving(bad)), /snapshot|world/);
   }
   assert.equal(absoluteDay({ year: 2, season: 'spring', day: 1 }), 113);
   assert.equal(Math.floor(gameMinutes({ ...WORLD.date, time: 2530 }) / 1440), 1);

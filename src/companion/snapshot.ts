@@ -62,15 +62,17 @@ export class SnapshotStore {
     return readJson<SaveSnapshot>(this.file(lineageId, commitId));
   }
 
-  /** The newest snapshot of each save line, newest first. */
-  async latest(): Promise<SaveSnapshot[]> {
+  /** The newest snapshot of each save line that passes `accept`, newest first. */
+  async latest(accept: (snapshot: SaveSnapshot) => Promise<boolean> = async () => true): Promise<SaveSnapshot[]> {
     const lines = await readdir(this.directory).catch(() => [] as string[]);
     const newest: SaveSnapshot[] = [];
     for (const line of lines) {
       const files = (await readdir(join(this.directory, line)).catch(() => [] as string[])).filter((file) => file.endsWith('.json'));
       const snapshots = (await Promise.all(files.map((file) => readJson<SaveSnapshot>(join(this.directory, line, file)))))
         .filter((snapshot): snapshot is SaveSnapshot => snapshot !== undefined);
-      const best = snapshots.sort((a, b) => b.savedAt.localeCompare(a.savedAt))[0];
+      const accepted = (await Promise.all(snapshots.map(async (snapshot) => await accept(snapshot) ? snapshot : undefined)))
+        .filter((snapshot): snapshot is SaveSnapshot => snapshot !== undefined);
+      const best = accepted.sort((a, b) => b.savedAt.localeCompare(a.savedAt))[0];
       if (best) newest.push(best);
     }
     return newest.sort((a, b) => b.savedAt.localeCompare(a.savedAt));

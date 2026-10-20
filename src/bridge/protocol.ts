@@ -45,6 +45,16 @@ export interface PlayerInfo {
   farm: string;
 }
 
+/** What the robot needs while the game is closed, sent with each save (docs/companion-device.md §13.2). */
+export interface GameSnapshot {
+  /** The save folder, e.g. 测试_436774213. */
+  label: string;
+  /** Game names, e.g. "Abigail". */
+  npcs: Record<string, { hearts: number; relation: Relation }>;
+  seenEvents: string[];
+  world: WorldSnapshot;
+}
+
 export interface SavePointer {
   commitId: string;
   parentId: string | null;
@@ -57,7 +67,7 @@ export type ModMessage =
   | { type: 'hello'; modVersion: string; protocol: number }
   | LoadedSave
   | ({ type: 'day.started'; date: GameDate; weather: Weather } & Envelope)
-  | ({ type: 'save.saving'; commit: SavePointer } & Envelope)
+  | ({ type: 'save.saving'; commit: SavePointer; snapshot?: GameSnapshot } & Envelope)
   | ({ type: 'save.saved'; commitId: string; date: GameDate } & Envelope)
   | ({ type: 'title.returned' } & Envelope)
   | ({
@@ -130,6 +140,12 @@ export function parseModMessage(raw: string): ModMessage {
     if (int(p!.dayEnded, 'commit.dayEnded') < 1) fail('commit.dayEnded is invalid');
   };
   const weather = (value: unknown) => { if (!WEATHERS.has(value as Weather)) fail('weather is invalid'); };
+  const world = (value: unknown) => {
+    const w = value as Record<string, unknown> | null;
+    if (!w || typeof w.location !== 'string' || !w.flags || typeof w.flags !== 'object') fail('world is invalid');
+    date(w!.date);
+    weather(w!.weather);
+  };
 
   switch (data.type) {
     case 'hello':
@@ -146,8 +162,22 @@ export function parseModMessage(raw: string): ModMessage {
       if (data.commit !== null) pointer(data.commit);
       break;
     }
-    case 'save.saving':
-      envelope(); pointer(data.commit); break;
+    case 'save.saving': {
+      envelope(); pointer(data.commit);
+      if (data.snapshot === undefined) break;
+      const snapshot = data.snapshot as Record<string, unknown> | null;
+      if (!snapshot || typeof snapshot.label !== 'string' || snapshot.label.length > 200) fail('snapshot.label is invalid');
+      const npcs = snapshot!.npcs as Record<string, Record<string, unknown> | null> | null;
+      if (!npcs || typeof npcs !== 'object' || Array.isArray(npcs) || Object.keys(npcs).length > 100) fail('snapshot.npcs is invalid');
+      for (const [name, standing] of Object.entries(npcs!)) {
+        if (!name || name.length > 50 || !standing || !Number.isInteger(standing.hearts) || (standing.hearts as number) < 0
+          || (standing.hearts as number) > 14 || !RELATIONS.has(standing.relation as Relation)) fail(`snapshot.npcs.${name} is invalid`);
+      }
+      const seen = snapshot!.seenEvents;
+      if (!Array.isArray(seen) || seen.length > 5000 || seen.some((e) => typeof e !== 'string' || e.length > 100)) fail('snapshot.seenEvents is invalid');
+      world(snapshot!.world);
+      break;
+    }
     case 'save.saved':
       envelope(); text('commitId', 200); date(data.date); break;
     case 'title.returned':
@@ -164,10 +194,7 @@ export function parseModMessage(raw: string): ModMessage {
       if ((data.hearts as number) < 0 || (data.hearts as number) > 14) fail('hearts is out of range');
       if (!RELATIONS.has(data.relation as Relation)) fail('relation is invalid');
       if (!Array.isArray(data.seenEvents) || data.seenEvents.some((e) => typeof e !== 'string')) fail('seenEvents must be strings');
-      const world = data.world as Record<string, unknown> | null;
-      if (!world || typeof world.location !== 'string' || !world.flags || typeof world.flags !== 'object') fail('world is invalid');
-      date(world!.date);
-      weather(world!.weather);
+      world(data.world);
       break;
     }
     case 'talk.say':
