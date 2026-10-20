@@ -18,13 +18,15 @@
 | 里程碑 | 状态 | 已完成 | 还没做 | 文档 |
 |---|---|---|---|---|
 | M1 存储与事务 | 完成 | 记忆内核：SQLite 提交树、中文检索、当天事务、存档提交和回滚、后端崩溃恢复 | 自动清理过期的临时日志 | `README.md`、`design.md` §16 |
-| M2 Agent | 完成一半 | 和玩家对话；夜间整合在 `nightly-consolidation` 分支，Windows 真机触发/保存/恢复链路通过 | 夜间摘要说话人归属错误待修；自主行动 | `dialogue-prototype.md`、`nightly-consolidation.md` |
+| M2 Agent | 对话和夜间整合已实现 | `nightly-consolidation` 改为原话引用并校验说话人，Windows 真机链路及事实回归通过 | 自主行动；夜间分支待按用户决定合入 | `dialogue-prototype.md`、`nightly-consolidation.md` |
 | M3 接入游戏 | M3a/M3b 已实现，Windows 真机组合通过 | 游戏里"继续聊"；真实保存/退出、跨天记忆、回滚、后端进程重启与旧档分叉 | M3a 剩下三项手测：输入法、原版台词保留、取消 | `game-bridge.md`、`game-memory.md` |
 | M4 内容 | 角色卡已完成 | 34 张角色卡（已审阅），"看过事件之后"共 201 条 | 物品名到 ID 的对应、各动作的上限 | `design.md` §11 |
 
-`main` 上后端 67 个测试、类型检查和构建通过（`nightly-consolidation` 分支上 73 个），另有 13 项 C# 流程检查。10 月 20 日阿比盖尔三轮真机回归通过，随后在独立副本中用真实模型完成跨天保留、不保存回滚、后端进程重启、旧档分叉四项真机验收：76.77 秒，13 次模型调用，3 次真实睡觉保存，原测试档 6 个文件哈希均相同。详见 [真机组合验收报告](test-results/2026-10-20-game-memory.md)。
+`main` 上后端 67 个测试、类型检查和构建通过（`nightly-consolidation` 分支上 76 个），另有 13 项 C# 流程检查。10 月 20 日阿比盖尔三轮真机回归通过，随后在独立副本中用真实模型完成跨天保留、不保存回滚、后端进程重启、旧档分叉四项真机验收：76.77 秒，13 次模型调用，3 次真实睡觉保存，原测试档 6 个文件哈希均相同。详见 [真机组合验收报告](test-results/2026-10-20-game-memory.md)。
 
-12:38 的夜间整合真机复测：73/73、类型检查、构建和 13/13 C# 检查通过；3 次真实整合均写入摘要、印象、计划并退役当天零碎记忆，回滚、进程重启及旧档分叉通过。但内容复核发现 NPC 的墓地计划被写成农场主说过的事，且进入次日 prompt，整体验收仍待修复。详见 [夜间整合 Windows 报告](test-results/2026-10-20-nightly-windows.md)。
+12:38 的初版夜间整合技术链路通过，但内容复核发现 NPC 的墓地计划被写成农场主说过的事，且进入次日 prompt。失败证据保留在 [夜间整合 Windows 报告](test-results/2026-10-20-nightly-windows.md)。
+
+按用户“调整防止记错”的要求，现已用代码核对原话来源，禁止模型自由改写长期记忆。76/76、类型检查、构建和 13/13 C# 检查通过；5 类真实模型样本各 3 次通过。13:01 的真机组合验收 103.42 秒、13 次对话 + 3 次夜间整合通过，原档 6 文件哈希相同；原话确实落库并进入次日 prompt。固定输入每晚增加 195 输入 token，正常调用次数不变。常驻后端已备份并更新，最终 PID 25704。详见 [事实归属修复报告](test-results/2026-10-20-nightly-facts-fix.md)。
 
 **游戏内验证只在 Windows 上做**，Mac 只做自动测试、类型检查和编译 Mod。M3a 按 `game-bridge.md` §7 的清单还剩三项：
 - "自己说"的输入框能不能用拼音输入法打中文。
@@ -43,7 +45,7 @@ GitHub 私有仓库：https://github.com/hayasakaaiaiai/stardew-agent
 
 Windows 上的目录是 `E:\stardew-agent`，测试前切到 `main` 拉最新代码。M3b 在 `codex/game-save-memory` 上开发，2026-10-20 快进合并进 `main`；它已经包含的 `codex/abigail-auto-test` 同时删除。
 
-本次按用户“拉下来测”的要求，Windows 已切到 `nightly-consolidation`，测试基线为远端 `3f70b27`。本机常驻后端已重新启动，日志确认对话 `high`、夜间整合 `low`；原游戏记忆库、临时日志及旧后端日志在更新前已备份。
+本次按用户“拉下来测”“修复”的要求，Windows 在 `nightly-consolidation` 上完成远端 `3f70b27` 验证和事实归属修复。本机常驻后端已重新启动，日志确认对话 `high`、夜间整合 `low`；原游戏记忆库、临时日志及旧后端日志在更新前已备份。
 
 - Mac 上的三个目录是同一个仓库的三个 git worktree。同一个分支只能在一个目录里打开。
 - 2026-10-19 把记忆系统和对话合并进了 `main`，原来的 `dialogue-prototype` 分支已删除。
@@ -135,11 +137,11 @@ dotnet build mod/StardewAgentBridge   # 编译 Mod，编译完自动装进游戏
 | 每次都发给模型的卡片核心部分实测 530–690 token，超过最初定的 500 | `design.md` §11 |
 | 真实模型附加字段偶尔解析失败，会走现有回退路径；本次 10 次调用出现 1 次 | `test-results/2026-10-20-retest.md` |
 | 过期的临时日志不会自动清理 | `design.md` §16 |
-| 夜间摘要把 NPC 说的“我打算去墓地”写成玩家计划，已落库并进入次日 prompt | `test-results/2026-10-20-nightly-windows.md` |
+| 夜间事实记忆已改为原话引用；印象与计划仍由模型生成，可能夹带具体事实或遗漏内容，需继续观察 | `test-results/2026-10-20-nightly-facts-fix.md` |
 
 ## 7. 下一步
 
-1. **修复夜间整合的事实归属并复测**：`nightly-consolidation` 的 Windows 真机技术链路已通过，仍有 NPC 台词被当成玩家经历的内容错误。保留当前失败内容案例，修复后再完成验收并决定合并；涉及规则改动按约定先给 token 实测。
+1. **夜间整合等待用户决定合入**：事实归属修复、用量实测和 Windows 真机复测已完成；当前在 `nightly-consolidation`，历史失败证据保留，不自动合并 `main`。
 2. **补齐 Windows M3a 手测**：中文输入法、原版台词保留、取消，随时可做，不挡开发。脚本已覆盖原版输入回调，但不能代替拼音输入法的实际操作。
 3. 之后的候选：自主行动（M2b，依赖夜间整合生成的计划）、机器人接入游戏记忆（H4）。
 
@@ -157,6 +159,7 @@ dotnet build mod/StardewAgentBridge   # 编译 Mod，编译完自动装进游戏
 | `docs/game-memory.md` | M3b：存档同步、跨天记忆、确认补发与崩溃恢复 |
 | `docs/nightly-consolidation.md` | 夜间整合：产出、输入、触发时机、出错处理、实测 token 和真实模型结果 |
 | `docs/test-results/2026-10-20-nightly-windows.md` | 夜间整合 Windows 真机技术验证及说话人归属错误证据 |
+| `docs/test-results/2026-10-20-nightly-facts-fix.md` | 原话来源校验、实际 token 差值、15 次真实模型和修复后的真机验收 |
 | `docs/test-results/2026-10-19-abigail.md` | 第二轮回复丢失的根因、修复验证、阿比盖尔三轮真机自动测试结果 |
 | `docs/test-results/2026-10-20-memory.md` | M3b 代码、67 项测试及真机握手成功/模型网络失败的验证记录 |
 | `docs/test-results/2026-10-20-retest.md` | 网络恢复后的三轮真机、真实模型记忆链路、存档指针对齐和失败暂停修复 |

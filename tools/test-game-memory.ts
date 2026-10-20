@@ -6,7 +6,7 @@ import { fork, spawn } from 'node:child_process';
 import { join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { JSON_HINT } from '../src/agent/dialogue.ts';
-import { NIGHTLY_RULES } from '../src/agent/nightly.ts';
+import { NIGHTLY_RULES, parseNightly } from '../src/agent/nightly.ts';
 import type { ChatMessage, Completion } from '../src/services/model/client.ts';
 
 interface Config {
@@ -171,6 +171,21 @@ async function night(pointer: Pointer): Promise<NightEvidence | undefined> {
   assert.equal(call.messages[0]!.content, NIGHTLY_RULES);
   assert.match(call.messages[1]!.content, /农场主：记忆验收（[男女]）/);
   assert.match(call.messages[1]!.content, /8 心/);
+  const output = parseNightly(call.content);
+  assert.ok(output, '整合输出没有有效的原话引用');
+  const sourceRows = call.messages[1]!.content.split('## 今天的对话（NPC=你，玩家=农场主）\n')[1]!
+    .split('\n\n## 今天当场记下的')[0]!.split('\n');
+  const sources = sourceRows.map(line => {
+    const match = /^- (t\d+) (NPC|玩家)：(".*")$/.exec(line);
+    assert.ok(match, '说话人和原话没有正确隔离');
+    return { id: match[1]!, speaker: match[2]!, text: JSON.parse(match[3]!) as string };
+  });
+  const expected = output.memories.map(memory => {
+    assert.ok(memory.sources.every(id => sources.some(source => source.id === id)), '整合引用了不存在的原话');
+    return sources.filter(source => memory.sources.includes(source.id))
+      .map(source => `${source.speaker === '玩家' ? '农场主说' : '我说'}：${JSON.stringify(source.text)}`).join('\n');
+  });
+  assert.deepEqual(summaries.map(memory => memory.text).sort(), expected.sort(), '数据库中的摘要必须保留原说话人和完整原话');
   return { pointer, state, summaries, retired, call, ackObservedBeforeCompletion };
 }
 function impressionAt(item: Reply, state: NightState | undefined) {
