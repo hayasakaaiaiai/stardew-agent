@@ -31,6 +31,7 @@ internal sealed partial class ModEntry
     private void LoadLetters()
     {
         this.letters = this.activeLoad ? this.Helper.Data.ReadSaveData<Dictionary<string, string>>(LettersSaveKey) ?? new() : new();
+        this.RecordLetterTestLoad();
         this.objectIds = null;
         this.Helper.GameContent.InvalidateCache(MailAsset);
     }
@@ -57,26 +58,31 @@ internal sealed partial class ModEntry
             return true;
         foreach (JsonElement letter in list.EnumerateArray())
         {
-            string key = letter.TryGetProperty("key", out JsonElement k) ? k.GetString() ?? "" : "";
-            string npcId = letter.TryGetProperty("npc", out JsonElement n) ? n.GetString() ?? "" : "";
-            string text = letter.TryGetProperty("text", out JsonElement t) ? VanillaDialogue.Escape(t.GetString() ?? "") : "";
-            string item = letter.TryGetProperty("item", out JsonElement i) ? i.GetString() ?? "" : "";
+            if (letter.ValueKind != JsonValueKind.Object)
+                continue;
+            string key = letter.TryGetProperty("key", out JsonElement k) && k.ValueKind == JsonValueKind.String ? k.GetString() ?? "" : "";
+            string npcId = letter.TryGetProperty("npc", out JsonElement n) && n.ValueKind == JsonValueKind.String ? n.GetString() ?? "" : "";
+            string text = letter.TryGetProperty("text", out JsonElement t) && t.ValueKind == JsonValueKind.String ? VanillaDialogue.Escape(t.GetString() ?? "").Trim() : "";
+            string item = letter.TryGetProperty("item", out JsonElement i) && i.ValueKind == JsonValueKind.String ? i.GetString() ?? "" : "";
+            string? npcName = SocialNpcs.FirstOrDefault(name => name.Equals(npcId, StringComparison.OrdinalIgnoreCase));
+            if (npcName is null)
+                continue;
             if (!key.StartsWith("StardewAgent.") || text.Length == 0 || this.letters.ContainsKey(key)
                 || Game1.player.mailbox.Contains(key) || Game1.player.mailReceived.Contains(key))
                 continue;
-            string? npcName = SocialNpcs.FirstOrDefault(name => name.Equals(npcId, StringComparison.OrdinalIgnoreCase));
-            string from = npcName is null ? npcId : Game1.getCharacterFromName(npcName)?.displayName ?? npcName;
+            string from = Game1.getCharacterFromName(npcName)?.displayName ?? npcName;
             string refusal = "";
             string? attachment = item.Length > 0 ? this.Attachment(item, out refusal) : null;
             if (item.Length > 0 && attachment is null)
                 this.Monitor.Log($"{from}想随信附上“{item}”，但{refusal}，信照常寄出、不附东西。", LogLevel.Warn);
             // The vanilla attachment: the item or money is added when the player reads the letter.
-            this.letters[key] = $"{text}^^   -{from}" + (attachment is null ? "" : $"%item {attachment} %%");
+            this.letters[key] = $"{text}^^   -{from}" + (attachment is null ? "" : $"%item {attachment} %%") + $"[#]{from}的来信";
             this.Helper.Data.WriteSaveData(LettersSaveKey, this.letters);
             this.Helper.GameContent.InvalidateCache(MailAsset);
             Game1.player.mailbox.Add(key);
             this.Monitor.Log($"{from}寄来一封信{(attachment is null ? "" : $"，附带“{item}”")}。", LogLevel.Info);
         }
+        this.RecordLetterTestPacket(list);
         return true;
     }
 

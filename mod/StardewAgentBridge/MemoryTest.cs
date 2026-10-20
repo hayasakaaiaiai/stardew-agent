@@ -20,6 +20,8 @@ internal sealed class MemoryTestConfig
     public string BackendUrl { get; set; } = "";
     public string RunDirectory { get; set; } = "";
     public bool MorningPlans { get; set; }
+    public bool BubblesOnly { get; set; }
+    public bool MailOnly { get; set; }
 }
 
 internal sealed partial class ModEntry
@@ -129,6 +131,17 @@ internal sealed partial class ModEntry
                     this.CheckMemoryTestSave();
                     // This is a disposable save; high hearts avoid the documented low-heart recall filter.
                     Game1.player.friendshipData["Abigail"] = new Friendship(2000);
+                    if (test.MailOnly)
+                    {
+                        this.BeginLetterTest();
+                        break;
+                    }
+                    if (test.BubblesOnly)
+                    {
+                        this.memoryTestFirstDay = this.currentDay;
+                        this.WarpForMemoryTest("bubbles");
+                        break;
+                    }
                     if (this.memoryTestStage == "loaded-first")
                     {
                         this.memoryTestFirstDay = this.currentDay;
@@ -151,6 +164,11 @@ internal sealed partial class ModEntry
                     NPC npc = Game1.getCharacterFromName("Abigail");
                     if (npc.currentLocation != Game1.currentLocation)
                         throw new InvalidOperationException("阿比盖尔已离开目标地点。");
+                    if (test.BubblesOnly)
+                    {
+                        this.BeginBubbleTest(npc);
+                        break;
+                    }
                     this.StartTalk(npc);
                     this.MemoryTestProgress("opening", "等待阿比盖尔的开场回复。");
                     break;
@@ -282,9 +300,32 @@ internal sealed partial class ModEntry
                     Game1.ExitToTitle();
                     this.MemoryTestProgress("wait-title-finish", "验收完成，回到标题页。");
                     break;
+                case "bubbles-only":
+                    this.TickBubbleTest();
+                    break;
+                case "mail-only":
+                    this.TickLetterTest();
+                    break;
+                case "mail-title":
+                    if (Game1.activeClickableMenu is TitleMenu && !Context.IsWorldReady && this.lifecycle.Count == 0)
+                        this.MemoryTestProgress("reload-menu", "重新加载副本，核对信件和附件存档状态。");
+                    break;
+                case "mail-sleep-wait":
+                    if (Context.IsWorldReady && this.CanChat && Game1.activeClickableMenu is null && !Game1.newDay
+                        && this.currentDay == this.memoryTestSleepDay + 1 && this.savedCommit?.DayEnded == this.memoryTestSleepDay)
+                    {
+                        this.LetterCheck(true, "real-sleep-save-completed");
+                        Game1.ExitToTitle();
+                        this.MemoryTestProgress("mail-title", "真实睡觉保存后重新读档。");
+                    }
+                    break;
+                case "wait-bubbles-title":
+                    if (Game1.activeClickableMenu is TitleMenu && !Context.IsWorldReady && this.lifecycle.Count == 0)
+                        this.MemoryTestProgress("reload-menu", "重新加载独立副本，验证气泡可重新出现。");
+                    break;
                 case "wait-title-finish":
                     if (Game1.activeClickableMenu is TitleMenu && !Context.IsWorldReady && this.lifecycle.Count == 0)
-                        this.FinishMemoryTest(true, "跨天、未保存回滚、后端重启和旧档分叉的真机流程完成。");
+                        this.FinishMemoryTest(true, test.MailOnly ? "原生信箱、附件领取、回滚和保存检查完成。" : test.BubblesOnly ? "原生气泡显示、距离、冷却与读档检查完成。" : "跨天、未保存回滚、后端重启和旧档分叉的真机流程完成。");
                     break;
 
                 case "saved-a":
@@ -432,6 +473,8 @@ internal sealed partial class ModEntry
         string report = JsonSerializer.Serialize(new { requestId = test.RequestId, stage, message, completed, success,
             saveFolder = test.SaveFolder, lineageId = this.lineageId, nonce = this.loadNonce, day = this.currentDay,
             pointer = this.savedCommit, generation = this.bridge.Generation, replies = this.memoryTestReplies,
+            bubbleChecks = this.bubbleTestChecks, bubblePackets = this.bubbleTestPackets,
+            letterChecks = this.letterTestChecks, letterPackets = this.letterTestPackets,
             worldReady = Context.IsWorldReady, saveProcessing = SaveGame.IsProcessing, newDay = Game1.newDay,
             events = this.memoryTestEvents, elapsedSeconds = Math.Round((DateTime.UtcNow - this.memoryTestStarted).TotalSeconds, 2) },
             new JsonSerializerOptions { WriteIndented = true });

@@ -15,7 +15,7 @@ const MAX_CHARS = 24;
 const COMMANDS = /[\^#$@%{}*[\]|]/g;
 const EMOJI = /[\p{Extended_Pictographic}\u{FE0F}\u{200D}]/gu;
 /** Claims of progress made off-screen, and relative days that would be wrong a day later. */
-const UNSAFE = /已|昨晚|昨夜|刚才|大前天|前天|昨天|今天|明天|大后天|后天|(?<!就)(?:好|完|齐)了/;
+const UNSAFE = /已|昨晚|昨夜|刚才|大前天|前天|昨天|今天|明天|大后天|后天|(?<!就好)了/;
 
 /** Undefined when the line must not be shown; the text is cleaned, never rewritten. */
 export function safeBubble(text: string): string | undefined {

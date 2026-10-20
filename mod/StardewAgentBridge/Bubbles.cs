@@ -53,14 +53,19 @@ internal sealed partial class ModEntry
             List<(string Text, string Emote)> lines = new();
             foreach (JsonElement line in npc.Value.EnumerateArray())
             {
-                string text = line.TryGetProperty("text", out JsonElement t) ? VanillaDialogue.Escape(t.GetString() ?? "") : "";
-                string emote = line.TryGetProperty("emote", out JsonElement e) ? e.GetString() ?? "none" : "none";
+                if (line.ValueKind != JsonValueKind.Object)
+                    continue;
+                string text = line.TryGetProperty("text", out JsonElement t) && t.ValueKind == JsonValueKind.String
+                    ? VanillaDialogue.Escape(t.GetString() ?? "").Trim() : "";
+                string emote = line.TryGetProperty("emote", out JsonElement e) && e.ValueKind == JsonValueKind.String
+                    ? e.GetString() ?? "none" : "none";
                 if (text.Length > 0)
                     lines.Add((text, emote));
             }
             if (lines.Count > 0)
                 this.bubbles[npc.Name] = lines;
         }
+        this.RecordBubbleTestPacket();
         return true;
     }
 

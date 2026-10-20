@@ -170,6 +170,8 @@ powershell -NoProfile -File .\tools\test-abigail.ps1
 
 先正常退出当前游戏。脚本会编译并安装 Mod、启动或复用后端，然后启动 SMAPI。游戏路径默认 `E:\games\steamapps\common\Stardew Valley`，可用 `-GamePath` 覆盖。
 
+只需传送后接手手测时，运行 `powershell -NoProfile -File .\tools\test-abigail.ps1 -Manual`。会加载指定测试档并传送到阿比盖尔旁边，停在原版提示框；关闭后由玩家点击 NPC，不自动进入 AI 对话。此入口由本地 `2260625` 复用，用户此前已报告拼音输入、原版台词及取消三项没有问题。
+
 自动流程是：原版主菜单执行“加载” → 按存档标识精确选择 `测试_436774213` → 等待存档和后端就绪 → 查找阿比盖尔的当前地图 → 在她相邻的可通行空格落地 → 调用现有 `StartTalk` → 用原版选项回调连续对话三轮。三轮回复都进入原版对话框后停止自动选择，保留第三轮对话框供继续手测。
 
 脚本只给新游戏进程设置 `STARDEW_AGENT_TEST_ABIGAIL` 请求标记。普通游戏启动保持原有流程。测试期间按 Esc 可取消，测试流程不调用睡觉存档。

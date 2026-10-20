@@ -30,6 +30,7 @@ class Session {
   pending: AbortController | undefined;
   chain: Promise<void> = Promise.resolve();
   send: (message: BackendMessage) => void = () => {};
+  todayRevision = 0;
 }
 
 export class BridgeServer {
@@ -76,10 +77,12 @@ export class BridgeServer {
    */
   private async sendToday(session: Session): Promise<void> {
     const save = session.save;
+    const revision = ++session.todayRevision;
     if (!save || save.closed) return;
+    const head = save.head, day = save.day;
     try {
       const { bubbles, letters } = await save.today();
-      if (session.save !== save || save.closed) return;
+      if (session.save !== save || save.closed || session.todayRevision !== revision || save.head !== head || save.day !== day) return;
       const envelope = { lineageId: save.initial.lineageId, loadNonce: save.loadNonce, seq: 0 };
       session.send({ type: 'day.bubbles', ...envelope, npcs: bubbles });
       session.send({ type: 'day.letters', ...envelope, letters });

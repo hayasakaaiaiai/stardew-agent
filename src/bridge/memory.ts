@@ -309,13 +309,14 @@ export class GameSave {
   async today(): Promise<{ bubbles: Record<string, Bubble[]>; letters: DeliveredLetter[] }> {
     const { lineageId } = this.initial;
     const headCommitId = this.state.head;
+    const day = this.state.day;
     const bubbles: Record<string, Bubble[]> = {};
     let best: { npcId: string; letter: Letter } | undefined;
     for (const npcId of SOCIAL_NPCS) {
       const state = await this.runtime.ctx.store.call('state', { lineageId, headCommitId, npcId });
-      const lines = bubblesFor(state, this.state.day);
+      const lines = bubblesFor(state, day);
       if (lines.length) bubbles[npcId] = lines;
-      const letter = letterFor(state, this.state.day);
+      const letter = letterFor(state, day);
       if (letter && (!best || letter.importance > best.letter.importance)) best = { npcId, letter };
     }
     const letters = best ? [{ key: letterKey(lineageId, headCommitId, best.npcId), npc: best.npcId, text: best.letter.text,

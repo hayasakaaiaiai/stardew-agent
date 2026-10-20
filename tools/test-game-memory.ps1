@@ -2,10 +2,13 @@
 param(
     [string]$GamePath = 'E:\games\steamapps\common\Stardew Valley',
     [switch]$Nightly,
-    [switch]$MorningPlans
+    [switch]$MorningPlans,
+    [switch]$BubblesOnly,
+    [switch]$MailOnly
 )
 
 $ErrorActionPreference = 'Stop'
+if ($MailOnly -and ($BubblesOnly -or $Nightly -or $MorningPlans)) { throw 'MailOnly is a separate native fixture; do not combine it with other scenarios.' }
 $taskRoot = Split-Path -Parent $PSScriptRoot
 if (Get-Process -Name StardewModdingAPI,'Stardew Valley' -ErrorAction SilentlyContinue) {
     throw '请先正常退出游戏；记忆验收会自动启动并只加载独立副本。'
@@ -59,7 +62,7 @@ Copy-Item -LiteralPath $taskCopy -Destination (Join-Path $taskRun 'initial-copy'
 $taskConfig = [pscustomobject]@{
     RequestId=[Guid]::NewGuid().ToString(); SaveFolder=$taskFolder; UniqueId=$taskId
     BackendUrl=''; RunDirectory=$taskRun; SaveDirectory=$taskCopy; GamePath=$GamePath
-    Nightly=[bool]($Nightly -or $MorningPlans); MorningPlans=[bool]$MorningPlans
+    Nightly=[bool]($Nightly -or $MorningPlans); MorningPlans=[bool]$MorningPlans; BubblesOnly=[bool]$BubblesOnly; MailOnly=[bool]$MailOnly
 }
 $taskConfigPath = Join-Path $taskRun 'config.json'
 $taskConfig | ConvertTo-Json | Set-Content -LiteralPath $taskConfigPath -Encoding UTF8
@@ -68,7 +71,8 @@ Write-Output ('备份和证据目录：' + $taskRun)
 $taskExitCode = 1
 try {
     & (Join-Path $PSScriptRoot 'test-abigail.ps1') -GamePath $GamePath -PrepareOnly
-    & node.exe (Join-Path $PSScriptRoot 'test-game-memory.ts') $taskConfigPath
+    $taskRunner = if ($MailOnly) { 'test-game-mail.ts' } elseif ($BubblesOnly) { 'test-game-bubbles.ts' } else { 'test-game-memory.ts' }
+    & node.exe (Join-Path $PSScriptRoot $taskRunner) $taskConfigPath
     $taskExitCode = $LASTEXITCODE
 } finally {
     $taskAfter = @(Get-ChildItem -LiteralPath $taskSource -File | ForEach-Object {

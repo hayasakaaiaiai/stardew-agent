@@ -13,6 +13,7 @@ internal sealed partial class ModEntry
 {
     private const string AbigailTestSave = "测试_436774213";
     private string? abigailTestRequest;
+    private bool abigailTestManual;
     private string abigailTestStage = "";
     private DateTime abigailTestStarted;
     private NPC? abigailTestNpc;
@@ -26,6 +27,7 @@ internal sealed partial class ModEntry
         if (!Guid.TryParse(request, out _))
             return;
         this.abigailTestRequest = request;
+        this.abigailTestManual = Environment.GetEnvironmentVariable("STARDEW_AGENT_TEST_ABIGAIL_MANUAL") == "1";
         this.abigailTestStarted = DateTime.UtcNow;
         this.AbigailTestProgress("load-menu", "准备点击加载，只选择“测试”存档。");
     }
@@ -87,6 +89,13 @@ internal sealed partial class ModEntry
                     NPC npc = this.abigailTestNpc!;
                     if (Game1.currentLocation != npc.currentLocation)
                         throw new InvalidOperationException("阿比盖尔已离开目标地图，请重新运行测试。");
+                    if (this.abigailTestManual)
+                    {
+                        this.FinishAbigailTest(true, "已传送到阿比盖尔旁边，准备手动测试。");
+                        // A vanilla message pauses the world until the player takes over; leave the NPC dialogue untouched.
+                        Game1.drawObjectDialogue("手动测试已就绪。关闭提示后点击阿比盖尔，先看原版台词，再选择继续聊。可测试拼音输入、原版台词和 Esc 取消。");
+                        return;
+                    }
                     this.StartTalk(npc);
                     this.AbigailTestProgress("dialogue", "已传送到阿比盖尔旁边，开始测试三轮 AI 对话。");
                     break;
@@ -156,6 +165,7 @@ internal sealed partial class ModEntry
             success,
             saveFolder = AbigailTestSave,
             npc = "Abigail",
+            mode = this.abigailTestManual ? "manual" : "automatic",
             replies = this.abigailTestReplies,
             elapsedSeconds = Math.Round((DateTime.UtcNow - this.abigailTestStarted).TotalSeconds, 2),
         }, new JsonSerializerOptions { WriteIndented = true });

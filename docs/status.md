@@ -18,7 +18,7 @@
 | 里程碑 | 状态 | 已完成 | 还没做 | 文档 |
 |---|---|---|---|---|
 | M1 存储与事务 | 完成 | 记忆内核：SQLite 提交树、中文检索、当天事务、存档提交和回滚、后端崩溃恢复 | 自动清理过期的临时日志 | `README.md`、`design.md` §16 |
-| M2 Agent | 对话、夜间整合、次日主动提计划已合入 | 和玩家对话；夜间整合原话校验；首次“继续聊”按昨天计划主动询问，日期由代码换算（2026-10-20 合并进 `main`） | 自主行动（调度器、合并场景调用、白名单动作）；头顶气泡和表情在 `m2b-bubbles` 分支等游戏内验证 | `dialogue-prototype.md`、`nightly-consolidation.md`、`next-day-plans.md`、`npc-bubbles.md` |
+| M2 Agent | 对话、夜间整合、次日计划已合入；气泡与寄信分支 Windows 验收通过 | 对话；夜间原话校验；首次“继续聊”提计划；头顶气泡、寄信与随信附赠已完成脚本验收和修复，尚未合入 | 自主行动（调度器、合并场景调用、白名单动作）；气泡和寄信待决定合入；改善模型引用超限的可靠性 | `dialogue-prototype.md`、`nightly-consolidation.md`、`next-day-plans.md`、`npc-bubbles.md`、`npc-mail.md` |
 | M3 接入游戏 | 完成（Windows） | 游戏里"继续聊"；真实保存/退出、跨天记忆、回滚、后端进程重启与旧档分叉；拼音输入法、原版台词保留、取消三项手测通过 | — | `game-bridge.md`、`game-memory.md` |
 | M4 内容 | 角色卡已完成 | 34 张角色卡（已审阅），"看过事件之后"共 201 条 | 物品名到 ID 的对应、各动作的上限 | `design.md` §11 |
 
@@ -32,6 +32,10 @@
 
 **游戏内验证只在 Windows 上做**，Mac 只做自动测试、类型检查和编译 Mod。M3a 按 `game-bridge.md` §7 剩下的三项手测（拼音输入法打中文、聊完后原版台词还在、等待回复时按 Esc 取消），用户 2026-10-20 在 Windows 上测完，报告没有问题；测试记录没有推送到仓库。
 
+19 时按用户“你自己写脚本测”完成最新 `m2b-bubbles` / `86fe712` 的 Windows 验收，工作分支为 `codex/bubbles-windows-tests`。修复完成动作漏过滤、异步旧消息覆盖、Mod 异常行抛错三处问题；最终 90/90 Node、16/16 C#、类型检查和构建通过，Release 零警告零错误。固定数据原生显示 16.86 秒、12 项行为及 3 项画面捕获通过；真实模型流程 97.46 秒、17 次调用、3 次真实保存、5 个 Mod 气泡接收节点通过，原档 6 文件哈希一致。安装 DLL 已更新，正常后端备份后于 19:10 重载，PID 15088。未推送、未合入 `main`；完整证据与测试限制见 [气泡 Windows 报告](test-results/2026-10-20-bubbles-windows.md)。
+
+随后按“推了新分支，继续测”拉取 `m2b-mail` / `fa3e818`，在 `codex/mail-windows-tests` 合入本地气泡修复继续验收。修复来信过滤、异常行和收藏标题，将异步版本保护扩展到信件；最终 97/97 Node、18/18 C#、类型检查和构建通过，Release 零警告零错误。原生信箱 23.46 秒、24 项行为和 3 项 UI 捕获通过，123 个赠品名在游戏中识别；最终真实模型 112.17 秒、17 次调用、3 次保存、5 个实际 Mod 气泡/信件接收节点通过。早期两次真实运行分别因引用超限失败、因过滤误杀全部来信而不算内容通过，记录均保留；引用超限的模型可靠性问题仍存在。正常后端于 19:38 备份后重载，当前 PID 29608，Mod 已更新。原档 6 文件哈希不变，未推送、未合入 `main`。详见 [寄信 Windows 报告](test-results/2026-10-20-mail-windows.md)。
+
 ## 3. 分支
 
 GitHub 私有仓库：https://github.com/hayasakaaiaiai/stardew-agent
@@ -42,8 +46,12 @@ GitHub 私有仓库：https://github.com/hayasakaaiaiai/stardew-agent
 | `codex/npc-memory-store` | 记忆系统的开发分支，做完一步快进合并回 `main` | `/Users/a11/Documents/ChatGPT/stardew-agent` |
 | `hardware-companion` | `main` + 硬件陪伴（机器人），还没合并 | `/Users/a11/Documents/ChatGPT/stardew-agent-hardware` |
 | `codex/next-day-plans` | M2b 首次开场主动提计划，2026-10-20 已快进合并进 `main` | Windows：`E:\stardew-agent` |
+| `m2b-bubbles` | M2b 头顶气泡和表情，上游实现分支，尚未合入 | `/Users/a11/Documents/ChatGPT/stardew-agent-m2b` |
+| `codex/bubbles-windows-tests` | 气泡 Windows 验收和三处修复，`910c127` 保留，未推送 | Windows 历史验收分支 |
+| `m2b-mail` | NPC 寄信与随信附赠，上游实现 `fa3e818`，尚未合入 | `/Users/a11/Documents/ChatGPT/stardew-agent-mail` |
+| `codex/mail-windows-tests` | 合入本地气泡修复后的寄信验收与修复，未推送 | Windows 当前：`E:\stardew-agent` |
 
-Windows 上的目录是 `E:\stardew-agent`，测试前切到 `main` 拉最新代码。M3b 在 `codex/game-save-memory` 上开发，2026-10-20 快进合并进 `main`；它已经包含的 `codex/abigail-auto-test` 同时删除。
+Windows 上的目录是 `E:\stardew-agent`。当前从 `m2b-mail` 建立寄信验收分支，并合入本地 `910c127` 的气泡修复；已包含最新远端 `main` / `6c151f2`。本地 `codex/next-day-plans` 的手测入口提交 `2260625` 仍保留，并复用到验收分支。M3b 在 `codex/game-save-memory` 上开发，2026-10-20 快进合并进 `main`；它已经包含的 `codex/abigail-auto-test` 同时删除。
 
 本次按用户“拉下来测”“修复”的要求，Windows 在 `nightly-consolidation` 上完成远端 `3f70b27` 验证和事实归属修复。本机常驻后端已重新启动，日志确认对话 `high`、夜间整合 `low`；原游戏记忆库、临时日志及旧后端日志在更新前已备份。
 
@@ -141,13 +149,15 @@ dotnet build mod/StardewAgentBridge   # 编译 Mod，编译完自动装进游戏
 | 过期的临时日志不会自动清理 | `design.md` §16 |
 | 夜间事实记忆已改为原话引用；印象与计划仍由模型生成，可能夹带具体事实或遗漏内容，需继续观察 | `test-results/2026-10-20-nightly-facts-fix.md` |
 | 计划开场使用保守问句处理，可能回退为较笼统的提问；尚未解析“下周”等任意日期表达，普通对话仍可能出现事实错误 | `test-results/2026-10-20-next-day-plans.md` |
+| 气泡完成动作词过滤较保守，可能丢弃正常句子；模型可能继续追问被否认的话题，不能把规则过滤当成完整事实校验 | `test-results/2026-10-20-bubbles-windows.md` |
+| 模型可能每条摘要引用 4 条原话，超过现有 3 条上限；连续两次不合格式会整轮跳过，导致当晚新信或计划缺失。当天原始记忆保留 | `test-results/2026-10-20-mail-windows.md` |
 
 ## 7. 下一步
 
 1. **硬件陪伴（暂停）**：用户 2026-10-20 决定 H 线先不做。H4（机器人接回游戏存档）已在 `hardware-companion` 实现并变基到最新 `main`，恢复时按 `companion-device.md` §13.9 在 Windows 上测。
 2. **M2b 第一步已合入 `main`**：[次日主动提起计划](next-day-plans.md)；继续观察自然语言日期与重复邀约。实际行动、调度器和白名单动作另行设计。
-3. **M2b 第二步：头顶气泡和表情**（2026-10-20，用户在测 M3a 时要求继续做，按推荐方案）：夜间整合顺带写第二天的 0–2 句自言自语，玩家走近时显示并配原版表情，不改存档状态、不进记忆。在 `m2b-bubbles` 分支（Mac 目录 `/Users/a11/Documents/ChatGPT/stardew-agent-m2b`），86 个测试通过，不合入 `main`。Windows 测试清单见 [npc-bubbles.md](npc-bubbles.md) §7；Mod 要重新编译。
-4. **M2b 第三步：NPC 寄信**（2026-10-20，用户确认按推荐做，并要求关系好时可以附赠物品、不能要什么给什么、不给铱星金星）：夜间整合顺带写信，第二天早上进信箱，一天最多一封；6 心以上时可附角色卡里的一样东西，由代码选，普通品质、原价不超过 500 金、7 天一次。在 `m2b-mail` 分支（建在 `m2b-bubbles` 上，Mac 目录 `/Users/a11/Documents/ChatGPT/stardew-agent-mail`），不合入 `main`。Windows 清单见 [npc-mail.md](npc-mail.md) §7。
+3. **M2b 第二步：头顶气泡和表情**：夜间整合顺带写第二天的 0–2 句自言自语，玩家走近时显示并配原版表情。Windows 在 `codex/bubbles-windows-tests` 完成脚本验收、修复和本机安装，90 项后端及 16 项 C# 检查通过。未推送、未合入 `main`；等待用户决定同步，继续观察正常游玩和自然语言内容。复现入口见 [npc-bubbles.md](npc-bubbles.md) §7。
+4. **M2b 第三步：NPC 寄信**：夜间整合写信，关系好时可附代码指定的角色卡赠品，普通品质、原价不超过 500 金、7 天一次。`codex/mail-windows-tests` 已完成 Windows 原生信箱、真实模型和分支隔离验收，97/18 检查通过；未推送、未合入 `main`。后续优先改善模型引用超限时整轮跳过的问题，再观察正常游玩。复现入口见 [npc-mail.md](npc-mail.md) §7。
 
 ## 8. 文档索引
 
@@ -166,6 +176,8 @@ dotnet build mod/StardewAgentBridge   # 编译 Mod，编译完自动装进游戏
 | `docs/npc-bubbles.md` | M2b 第二步：头顶气泡和表情的决定、规则、实测 token、测试和 Windows 清单 |
 | `docs/next-day-plans.md` | M2b 第一步设计与实现：首次开场、原话核对、日期换算、回滚与最终 token 实测 |
 | `docs/test-results/2026-10-20-next-day-plans.md` | 84 项测试、最终 12 次模型开场、日期与动作陈述处理和 Windows 真机验收 |
+| `docs/test-results/2026-10-20-bubbles-windows.md` | 气泡三处修复、90/16 检查、原生画面和真实模型五节点气泡隔离验收 |
+| `docs/test-results/2026-10-20-mail-windows.md` | 寄信过滤与收藏修复、97/18 检查、原生附件领取与保存、真实模型来信及保留失败 |
 | `docs/test-results/2026-10-20-nightly-windows.md` | 夜间整合 Windows 真机技术验证及说话人归属错误证据 |
 | `docs/test-results/2026-10-20-nightly-facts-fix.md` | 原话来源校验、实际 token 差值、15 次真实模型和修复后的真机验收 |
 | `docs/test-results/2026-10-19-abigail.md` | 第二轮回复丢失的根因、修复验证、阿比盖尔三轮真机自动测试结果 |

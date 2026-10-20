@@ -28,7 +28,7 @@ const EMOJI = /[\p{Extended_Pictographic}\u{FE0F}\u{200D}]/gu;
  * Letters are read the morning after, so “今天/昨天” are right and “明天/后天” are a day off. Claims of progress
  * made off-screen are refused; “就好了” (would be nice) and “……了吗” questions are not claims.
  */
-const UNSAFE = /已|昨晚|昨夜|今晚|刚才|大前天|前天|明天|大后天|后天|(?<!就)(?:好|完|齐)了(?![吗没])/;
+const UNSAFE = /已|昨晚|昨夜|今晚|刚才|大前天|前天|明天|大后天|后天|(?<!就)(?:好|完|齐)了(?![吗没])|(?:扛|带|拿|买|折|削|凑|找|备|弄|做|转)(?:来|回|出|到|成){0,2}了(?![吗没])/;
 
 /** Undefined when the letter must not be sent; one bad sentence stops the whole letter. */
 export function safeLetter(text: string): string | undefined {
