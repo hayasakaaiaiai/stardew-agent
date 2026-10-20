@@ -309,8 +309,8 @@ export class GameSave {
         const envelope: Envelope = { lineageId: message.lineageId, loadNonce: message.loadNonce, seq: message.seq };
         // Opening a conversation says nothing the NPC could feel anything about, and a turn that is not logged
         // could not be counted against the day's range (docs/npc-friendship.md).
-        const friendship = message.type === 'talk.open' || !staged ? 0
-          : friendshipPoints(result.meta.mood, friendshipSoFar(this.scope!.ledger.currentDay?.overlay(npcId).today ?? [], npcId));
+        const friendship = message.type === 'talk.open' || !staged || !standing ? 0
+          : friendshipPoints(result.meta.mood, friendshipSoFar(this.scope!.ledger.currentDay?.overlay(npcId).today ?? [], npcId), standing);
         // Only the item the code offered, only with a reply that is logged, so the cooldown can see it.
         const gave = staged && result.meta.give ? memory.offered()?.item : undefined;
         const reply: TalkReply = { ...envelope, type: 'talk.reply', npc: message.npc, reply: result.reply,
