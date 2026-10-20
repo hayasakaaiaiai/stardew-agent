@@ -8,6 +8,8 @@ import type { ChatMessage, Completion, ModelClient } from '../src/services/model
 import { connect, harness, initial, openTalk, sleep, WORLD } from './helpers/bridge.ts';
 
 const SHARE = '测试送了我一块紫水晶，颜色特别漂亮。';
+const NEWS = { origin: 'abigail', share: SHARE, hand: 1 as const };
+const NAMES = (id: string) => ({ abigail: '阿比盖尔', gus: '格斯', pam: '潘姆', sebastian: '塞巴斯蒂安', sam: '山姆' })[id] ?? id;
 const completion = (content: string): Completion =>
   ({ content, reasoning: '', finishReason: 'stop', usage: null, timing: { firstReasoningMs: null, firstContentMs: 1, totalMs: 1 } });
 function model(answer: (messages: ChatMessage[]) => string) {
@@ -22,7 +24,8 @@ test('news is short, has no relative days, lasts one day, and is kept as the tel
   assert.equal(shareFor({ day: 4, share: SHARE }, 5), SHARE);
   assert.equal(shareFor({ day: 3, share: SHARE }, 5), undefined);
   assert.equal(shareFor({ day: 4, share: '' }, 5), undefined);
-  assert.deepEqual(heardMemory({ id: 'abigail', name: '阿比盖尔' }, SHARE), { text: `阿比盖尔跟我说："${SHARE}"`, importance: 3,
+  const item = { origin: 'abigail', share: SHARE, hand: 1 as const };
+  assert.deepEqual(heardMemory({ listener: 'sebastian', from: 'abigail', item }, NAMES), { text: `阿比盖尔跟我说："${SHARE}"`, importance: 3,
     kind: 'heard', subjects: ['player', 'abigail'], visibility: 'normal' });
 });
 
@@ -34,12 +37,12 @@ test('the night decides what to tell others; the scene may tell it and says who 
   assert.match(SCENE_RULES, /不聊农场主（下面给出的“想说的事”除外）/);
   assert.match(SCENE_HINT, /lines、told/);
   const lines = (told: unknown, ...items: [string, string][]) => JSON.stringify({ lines: items.map(([speaker, text]) => ({ speaker, text, emote: 'none' })), told });
-  const scene = parseScene(lines(['a', 'b'], ['a', '嘿，测试送了我紫水晶！'], ['b', '农场主还挺大方。'], ['b', '真不错。']), 'abigail', 'sebastian', '测试', { a: SHARE });
+  const scene = parseScene(lines(['a', 'b'], ['a', '嘿，测试送了我紫水晶！'], ['b', '农场主还挺大方。'], ['b', '真不错。']), 'abigail', 'sebastian', '测试', { a: NEWS });
   assert.deepEqual(scene.lines.map(line => line.text), ['嘿，测试送了我紫水晶！', '真不错。'], 'only the teller may bring up the player');
   assert.deepEqual(scene.told, ['abigail'], 'b had no news to tell');
   assert.deepEqual(parseScene(lines(['a'], ['a', '测试送了我紫水晶！'], ['b', '嗯。']), 'abigail', 'sebastian', '测试', {}).lines.length, 0,
     'without news it is still filtered, leaving too few lines');
-  assert.deepEqual(parseScene(lines(['a'], ['b', '早。'], ['b', '天真好。']), 'abigail', 'sebastian', '测试', { a: SHARE }).told, [],
+  assert.deepEqual(parseScene(lines(['a'], ['b', '早。'], ['b', '天真好。']), 'abigail', 'sebastian', '测试', { a: NEWS }).told, [],
     'a teller with no line on screen told nothing');
 });
 

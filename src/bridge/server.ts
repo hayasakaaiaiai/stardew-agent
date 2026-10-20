@@ -3,7 +3,7 @@ import type { AddressInfo } from 'node:net';
 import { type WebSocket, WebSocketServer } from 'ws';
 import type { Consolidator } from '../agent/consolidation.ts';
 import { OPENING_LINE, runTurn, type Standing, type WorldState } from '../agent/dialogue.ts';
-import { heardMemory } from '../agent/news.ts';
+import { newsFor } from '../agent/news.ts';
 import { parseScene, type SceneLine, type SceneNews, SCENES_PER_DAY, SCENE_GAP_MINUTES, scenePrompt } from '../agent/scene.ts';
 import type { ModelClient } from '../services/model/client.ts';
 import type { Roster } from '../services/roster/index.ts';
@@ -80,6 +80,9 @@ export class BridgeServer {
 
   private log(line: string) { this.options.log?.(line); }
 
+  /** An NPC id such as "abigail" as the card calls her. */
+  private readonly idName = (id: string) => this.options.roster.has(id) ? this.options.roster.get(id).name : id;
+
   /** A game name such as "Abigail" as the card calls her; unknown NPCs keep their game name. */
   private readonly cardName = (npc: string) => {
     const id = npc.toLowerCase();
@@ -106,15 +109,15 @@ export class BridgeServer {
     session.scenes.pairs.add(pair);
     session.scenes.lastMinute = minute;
     try {
-      const found = await save.news([a!, b!]);
-      const news: SceneNews = { ...(found[a!] ? { a: found[a!] } : {}), ...(found[b!] ? { b: found[b!] } : {}) };
+      const people = await save.gossip([a!, b!]);
+      const [newsA, newsB] = [newsFor(people[a!], people[b!]), newsFor(people[b!], people[a!])];
+      const news: SceneNews = { ...(newsA ? { a: newsA } : {}), ...(newsB ? { b: newsB } : {}) };
       const completion = await sceneModel.chat(scenePrompt(roster, a!, b!, worldState(message.world, save.player, this.cardName), news),
         {}, { json: true });
       if (save.closed || save.day !== requestedDay) return;
       const { lines, told } = parseScene(completion.content, a!, b!, save.player.name, news);
-      // The listener keeps the teller's words from last night, not whatever line the model put on screen.
-      save.noteScene(message.seq, told.map(teller => ({ npcId: teller === a ? b! : a!,
-        memory: heardMemory({ id: teller, name: roster.get(teller).name }, found[teller]!) })));
+      // The listener keeps the original words, not whatever line the model put on screen.
+      save.noteScene(message.seq, told.map(teller => ({ listener: teller === a ? b! : a!, from: teller, item: (teller === a ? newsA : newsB)! })));
       reply(lines);
       this.log(`碰面聊天：${roster.get(a!).name}和${roster.get(b!).name}，${lines.length ? `${lines.length} 句` : '没有可显示的'}`
         + (told.length ? `，${told.map(teller => roster.get(teller).name).join('、')}说了新鲜事` : ''));
@@ -241,9 +244,15 @@ export class BridgeServer {
       return;
     }
     if (message.type === 'scene.shown') {
-      const heard = await save.sceneShown(message);
+      const heard = await save.sceneShown(message, this.idName);
       send({ type: 'ack', ...envelope(message) });
-      for (const item of heard) this.log(`${this.cardName(item.npcId)}记下了：${item.memory.text}`);
+      for (const item of heard) this.log(`${this.idName(item.npcId)}记下了：${item.memory.text}`);
+      return;
+    }
+    if (message.type === 'town.hour') {
+      const heard = await save.townHour(message, this.idName);
+      send({ type: 'ack', ...envelope(message) });
+      for (const item of heard) this.log(`镇上传话：${this.idName(item.npcId)}记下了：${item.memory.text}`);
       return;
     }
     if (message.type === 'scene.request') {

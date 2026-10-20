@@ -84,7 +84,9 @@ export type ModMessage =
   /** Two NPCs standing together near the player (docs/npc-chat.md); game names. */
   | ({ type: 'scene.request'; npcs: [string, string]; world: WorldSnapshot } & Envelope)
   /** The lines of that request have been shown, so news told in them is remembered (docs/npc-news.md); reliable, acknowledged. */
-  | ({ type: 'scene.shown'; request: number; date: GameDate } & Envelope);
+  | ({ type: 'scene.shown'; request: number; date: GameDate } & Envelope)
+  /** Social NPCs who spent this hour together away from the player, by game name (docs/offscreen-news.md); reliable, acknowledged. */
+  | ({ type: 'town.hour'; groups: string[][]; date: GameDate } & Envelope);
 
 export type BackendMessage =
   | { type: 'hello'; protocol: number }
@@ -222,6 +224,14 @@ export function parseModMessage(raw: string): ModMessage {
       if (typeof data.birthday !== 'boolean') fail('birthday must be a boolean');
       date(data.date);
       break;
+    case 'town.hour': {
+      envelope();
+      date(data.date);
+      const groups = data.groups;
+      if (!Array.isArray(groups) || groups.length > 34 || groups.some((group) => !Array.isArray(group) || group.length < 2 || group.length > 34
+        || group.some((npc) => typeof npc !== 'string' || !npc || npc.length > 50 || /[\u0000-\u001f]/u.test(npc)))) fail('groups must be lists of names');
+      break;
+    }
     case 'scene.shown':
       envelope();
       if (int(data.request, 'request') < 1) fail('request is out of range');

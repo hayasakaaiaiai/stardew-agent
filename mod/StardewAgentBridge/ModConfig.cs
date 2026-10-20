@@ -25,4 +25,7 @@ internal sealed class ModConfig
 
     /// <summary>Whether a close NPC may hand the player something from its card in an agent conversation (docs/npc-in-person-gifts.md).</summary>
     public bool InPersonGifts { get; set; } = true;
+
+    /// <summary>Whether NPCs who spend an hour together away from the player pass news on (docs/offscreen-news.md).</summary>
+    public bool OffscreenNews { get; set; } = true;
 }

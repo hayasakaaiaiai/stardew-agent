@@ -8,7 +8,7 @@ import type { DialogueMemory, Exchange, Remembered, Standing, TurnResult } from 
 import { friendshipPoints, friendshipSoFar } from '../agent/friendship.ts';
 import { giftItemName, giftMemory } from '../agent/gifts.ts';
 import { GIVEN_TOPIC, givenMemory, withInPersonGift } from '../agent/in-person-gifts.ts';
-import { shareFor } from '../agent/news.ts';
+import { type Gossip, gossipOf, heardMemory, heardToday, shareFor, spread, type Transfer } from '../agent/news.ts';
 import { type DeliveredLetter, type Letter, letterFor, letterKey } from '../agent/letters.ts';
 import { Nightly } from '../agent/nightly.ts';
 import { withMorningPlan } from '../agent/morning.ts';
@@ -23,7 +23,8 @@ type Event = Exclude<ModMessage, { type: 'hello' } | LoadedSave>;
 type TalkRequest = Extract<Event, { type: 'talk.open' | 'talk.say' }>;
 type GiftGiven = Extract<Event, { type: 'gift.given' }>;
 type SceneShown = Extract<Event, { type: 'scene.shown' }>;
-/** Who learned what in one scene, kept until the Mod says it was shown (docs/npc-news.md). */
+type TownHour = Extract<Event, { type: 'town.hour' }>;
+/** Who learned what, for the log. */
 export interface Heard { npcId: string; memory: MemoryDraft }
 interface Receipt { seq: number; hash: string; reply?: TalkReply }
 interface Checkpoint {
@@ -149,7 +150,7 @@ export class GameSave {
   private chain: Promise<void> = Promise.resolve();
   private live = true;
   /** Request seq → what its listeners learned; only in memory, so a backend restart before it was shown forgets it. */
-  private readonly scenes = new Map<number, { day: number; heard: Heard[] }>();
+  private readonly scenes = new Map<number, { day: number; transfers: Transfer[] }>();
 
   constructor(runtime: Runtime, path: string, state: Checkpoint, confirmed: (commitId: string) => void = () => {}) {
     this.runtime = runtime; this.path = path; this.state = state; this.confirmed = confirmed;
@@ -358,35 +359,73 @@ export class GameSave {
     });
   }
 
-  /** What each of these NPCs decided last night to tell others today (docs/npc-news.md). */
-  async news(npcIds: readonly string[]): Promise<Record<string, string>> {
-    const found: Record<string, string> = {};
-    for (const npcId of npcIds) {
+  /** Today's events in this NPC's part of the day. */
+  private dayEntries(npcId: string) {
+    return this.scope?.ledger.currentDay?.overlay(npcId).today ?? [];
+  }
+
+  /** What each of these NPCs can tell today, and whose news it already knows (docs/offscreen-news.md). */
+  async gossip(npcIds: readonly string[]): Promise<Record<string, Gossip>> {
+    const found: Record<string, Gossip> = {};
+    for (const npcId of new Set(npcIds)) {
       const state = await this.runtime.ctx.store.call('state', { lineageId: this.initial.lineageId, headCommitId: this.state.head, npcId });
-      const share = shareFor(state, this.state.day);
-      if (share) found[npcId] = share;
+      found[npcId] = gossipOf(npcId, shareFor(state, this.state.day), heardToday(this.dayEntries(npcId), npcId));
     }
     return found;
   }
 
-  noteScene(request: number, heard: Heard[]): void {
-    if (heard.length) this.scenes.set(request, { day: this.state.day, heard });
+  noteScene(request: number, transfers: Transfer[]): void {
+    if (transfers.length) this.scenes.set(request, { day: this.state.day, transfers });
   }
 
   /**
-   * Writes what the listeners of a shown scene learned into their part of the day, as one event, so it is saved or
-   * rolled back with the day. Returns what was written; a resent or unknown scene writes nothing.
+   * Writes what listeners learned as one event in their parts of the day, so it is saved or rolled back with the day.
+   * A listener keeps each origin's news once, whoever told it first.
    */
-  sceneShown(message: SceneShown): Promise<Heard[]> {
+  private async writeHeard(receipt: Receipt, date: GameDate, transfers: readonly Transfer[], name: (id: string) => string): Promise<Heard[]> {
+    const fresh = transfers.filter((transfer, index) => transfer.listener !== transfer.item.origin
+      && !heardToday(this.dayEntries(transfer.listener), transfer.listener).some((item) => item.origin === transfer.item.origin)
+      && transfers.findIndex((other) => other.listener === transfer.listener && other.item.origin === transfer.item.origin) === index);
+    if (!fresh.length) return [];
+    const listeners = [...new Set(fresh.map((transfer) => transfer.listener))];
+    await this.scope!.record({ seq: receipt.seq, gameTime: gameMinutes(date), changes: listeners.map((listener, index) => {
+      const mine = fresh.filter((transfer) => transfer.listener === listener);
+      return { npcId: listener, memories: mine.map((transfer) => heardMemory(transfer, name)),
+        log: { heard: mine.map(({ from, item }) => ({ origin: item.origin, from, share: item.share, hand: item.hand })),
+          ...(index === 0 ? { bridgeReceipt: JSON.parse(canonical(receipt)) } : {}) } };
+    }) });
+    return fresh.map((transfer) => ({ npcId: transfer.listener, memory: heardMemory(transfer, name) }));
+  }
+
+  /** What the listeners of a shown scene learned (docs/npc-news.md); a resent or unknown scene writes nothing. */
+  sceneShown(message: SceneShown, name: (id: string) => string): Promise<Heard[]> {
     return this.enqueue(async () => {
       if (this.check(message)) return [];
       const receipt: Receipt = { seq: message.seq, hash: digest(canonical(message)) };
       const scene = this.scenes.get(message.request);
       this.scenes.delete(message.request);
-      const heard = scene && scene.day === this.day && this.state.phase === 'open' && absoluteDay(message.date) === this.day ? scene.heard : [];
-      if (heard.length) await this.scope!.record({ seq: message.seq, gameTime: gameMinutes(message.date),
-        changes: heard.map((item, index) => ({ npcId: item.npcId, memories: [item.memory],
-          log: { heard: item.memory.text, ...(index === 0 ? { bridgeReceipt: JSON.parse(canonical(receipt)) } : {}) } })) });
+      const fits = scene && scene.day === this.day && this.state.phase === 'open' && absoluteDay(message.date) === this.day;
+      const heard = fits ? await this.writeHeard(receipt, message.date, scene.transfers, name) : [];
+      this.addReceipt(receipt);
+      await this.persist();
+      return heard;
+    });
+  }
+
+  /**
+   * NPCs who spent the hour together away from the player pass news on in code, without a model call
+   * (docs/offscreen-news.md). One that no longer fits the open day is acknowledged without effect.
+   */
+  townHour(message: TownHour, name: (id: string) => string): Promise<Heard[]> {
+    return this.enqueue(async () => {
+      if (this.check(message)) return [];
+      const receipt: Receipt = { seq: message.seq, hash: digest(canonical(message)) };
+      let heard: Heard[] = [];
+      if (this.state.phase === 'open' && absoluteDay(message.date) === this.day) {
+        const groups = message.groups.map((group) => [...new Set(group.map((npc) => npc.toLowerCase()))]
+          .filter((id) => (SOCIAL_NPCS as readonly string[]).includes(id))).filter((group) => group.length >= 2);
+        if (groups.length) heard = await this.writeHeard(receipt, message.date, spread(groups, await this.gossip(groups.flat())), name);
+      }
       this.addReceipt(receipt);
       await this.persist();
       return heard;

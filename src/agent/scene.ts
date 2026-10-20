@@ -4,6 +4,7 @@
  */
 import { BUBBLE_EMOTES, type BubbleEmote, cleanBubbleText } from './bubbles.ts';
 import { SEASONS, type WorldState } from './dialogue.ts';
+import { type NewsItem, newsLine } from './news.ts';
 import { firstSentence } from './nightly.ts';
 import type { ChatMessage, Thinking } from '../services/model/client.ts';
 import type { Roster } from '../services/roster/index.ts';
@@ -42,8 +43,8 @@ export interface SceneLine {
 }
 
 /** `a` opens. Only the card's identity and speaking style, plus what each card says about the other. */
-/** What each of the two decided last night to tell others (docs/npc-news.md). */
-export type SceneNews = Partial<Record<'a' | 'b', string>>;
+/** What each of the two can tell the other, its own or heard first-hand (docs/npc-news.md, docs/offscreen-news.md). */
+export type SceneNews = Partial<Record<'a' | 'b', NewsItem>>;
 
 export function scenePrompt(roster: Roster, a: string, b: string, world: WorldState, news: SceneNews = {}): ChatMessage[] {
   const [first, second] = [roster.get(a), roster.get(b)];
@@ -54,7 +55,7 @@ export function scenePrompt(roster: Roster, a: string, b: string, world: WorldSt
   });
   const facts = Object.entries(world.facts).map(([key, value]) => `${key}：${value}`);
   const told = (['a', 'b'] as const).flatMap(label => news[label]
-    ? [`- ${label}（${(label === 'a' ? first : second).name}）：${JSON.stringify(news[label])}`] : []);
+    ? [`- ${label}（${(label === 'a' ? first : second).name}）：${newsLine(news[label]!, (id) => roster.get(id).name)}`] : []);
   const user = [
     `## 两个人\n${person('a', first)}\n${person('b', second)}`,
     ...(relations.length ? [`## 关系\n${relations.join('\n')}`] : []),

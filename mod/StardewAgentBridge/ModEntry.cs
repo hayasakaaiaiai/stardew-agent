@@ -78,6 +78,7 @@ internal sealed partial class ModEntry : Mod
         helper.Events.GameLoop.Saving += (_, _) => this.OnSaving();
         helper.Events.GameLoop.Saved += (_, _) => this.OnSaved();
         helper.Events.GameLoop.ReturnedToTitle += (_, _) => this.OnReturnedToTitle();
+        helper.Events.GameLoop.TimeChanged += (_, _) => this.OnTimeChanged();
         helper.Events.GameLoop.UpdateTicked += this.OnUpdateTicked;
         helper.Events.Display.MenuChanged += this.OnMenuChanged;
         helper.Events.Content.AssetRequested += this.OnAssetRequested;
@@ -144,6 +145,7 @@ internal sealed partial class ModEntry : Mod
             this.TickBubbles();
         this.TickScenes(e);
         this.TickGifts();
+        this.TickTown();
 
         this.TickAbigailTest();
         this.TickMemoryTest();

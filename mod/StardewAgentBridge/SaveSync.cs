@@ -60,6 +60,7 @@ internal sealed partial class ModEntry
     {
         this.ClearBubbles();
         this.ClearScenes();
+        this.ClearTown();
         this.ResetGifts();
         this.ClearFriendshipToday();
         this.ClearPresentsToday();
@@ -94,6 +95,7 @@ internal sealed partial class ModEntry
     {
         this.ClearBubbles();
         this.ClearScenes();
+        this.ClearTown();
         this.ResetGifts();
         this.ClearFriendshipToday();
         this.ClearPresentsToday();
@@ -135,6 +137,7 @@ internal sealed partial class ModEntry
     {
         this.ClearBubbles();
         this.ClearScenes();
+        this.ClearTown();
         this.letters = new();
         this.talk = null; this.offerFor = null; this.startFor = null;
         this.activeLoad = false; this.memoryReady = false;
@@ -162,7 +165,7 @@ internal sealed partial class ModEntry
         fields["loadNonce"] = this.loadNonce; fields["seq"] = ++this.seq;
         if (type == "talk.say")
             fields["date"] = GameState.Date();
-        bool reliable = type is "day.started" or "save.saving" or "save.saved" or "title.returned" or "gift.given" or "scene.shown";
+        bool reliable = type is "day.started" or "save.saving" or "save.saved" or "title.returned" or "gift.given" or "scene.shown" or "town.hour";
         if (reliable && !this.lifecycle.Add(this.seq, fields))
         {
             this.FailSync("记忆同步队列已满，本次读档停用 AI；原版游戏可继续，请保留日志并重新读档。");
