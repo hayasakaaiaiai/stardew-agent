@@ -1,11 +1,12 @@
 /** Messages between the SMAPI mod and the backend (docs/game-bridge.md §3, design §10). */
 import type { Bubble } from '../agent/bubbles.ts';
 import type { Emotion, Season } from '../agent/dialogue.ts';
+import { GIFT_TASTES, type GiftTaste } from '../agent/gifts.ts';
 import type { DeliveredLetter } from '../agent/letters.ts';
 import type { SceneLine } from '../agent/scene.ts';
 import type { Relation } from '../services/roster/index.ts';
 
-export const PROTOCOL_VERSION = 2;
+export const PROTOCOL_VERSION = 3;
 
 /** seq=0 is reserved for the connection handshake; game events increase within one load. */
 export interface Envelope {
@@ -74,6 +75,8 @@ export type ModMessage =
   } & Envelope)
   | ({ type: 'talk.say'; npc: string; text: string; date: GameDate } & Envelope)
   | ({ type: 'talk.close'; npc: string } & Envelope)
+  /** A vanilla gift the NPC should remember (docs/npc-gifts.md); reliable like the save lifecycle, acknowledged with ack. */
+  | ({ type: 'gift.given'; npc: string; item: string; taste: GiftTaste; birthday: boolean; date: GameDate } & Envelope)
   /** Two NPCs standing together near the player (docs/npc-chat.md); game names. */
   | ({ type: 'scene.request'; npcs: [string, string]; world: WorldSnapshot } & Envelope);
 
@@ -193,6 +196,14 @@ export function parseModMessage(raw: string): ModMessage {
     case 'talk.close':
       envelope();
       text('npc', 50);
+      break;
+    case 'gift.given':
+      envelope();
+      text('npc', 50);
+      text('item', 100);
+      if (!GIFT_TASTES.includes(data.taste as GiftTaste)) fail('taste is invalid');
+      if (typeof data.birthday !== 'boolean') fail('birthday must be a boolean');
+      date(data.date);
       break;
     case 'scene.request': {
       envelope();

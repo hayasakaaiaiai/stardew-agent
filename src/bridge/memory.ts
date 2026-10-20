@@ -5,6 +5,7 @@ import type { Consolidator } from '../agent/consolidation.ts';
 import { type Bubble, bubblesFor } from '../agent/bubbles.ts';
 import { AgentMemory, turnLog } from '../agent/dialogue-memory.ts';
 import type { DialogueMemory, Exchange, Remembered, Standing, TurnResult } from '../agent/dialogue.ts';
+import { giftItemName, giftMemory } from '../agent/gifts.ts';
 import { type DeliveredLetter, type Letter, letterFor, letterKey } from '../agent/letters.ts';
 import { Nightly } from '../agent/nightly.ts';
 import { withMorningPlan } from '../agent/morning.ts';
@@ -16,6 +17,7 @@ import { absoluteDay, gameMinutes, type Envelope, type GameDate, type LoadedSave
 type Runtime = Awaited<ReturnType<typeof createRuntime>>;
 type Event = Exclude<ModMessage, { type: 'hello' } | LoadedSave>;
 type TalkRequest = Extract<Event, { type: 'talk.open' | 'talk.say' }>;
+type GiftGiven = Extract<Event, { type: 'gift.given' }>;
 interface Receipt { seq: number; hash: string; reply?: TalkReply }
 interface Checkpoint {
   format: 1;
@@ -293,6 +295,29 @@ export class GameSave {
         await this.persist();
         return reply;
       }) };
+    });
+  }
+
+  /**
+   * Writes the gift into that NPC's day, like a note from a conversation, so it is saved or rolled back with the
+   * day (docs/npc-gifts.md). A resent message is answered from its receipt; one that no longer fits the open day
+   * is acknowledged without a note rather than stopping the load. Returns the note, or undefined.
+   */
+  gift(message: GiftGiven): Promise<string | undefined> {
+    return this.enqueue(async () => {
+      if (this.check(message)) return undefined;
+      const receipt: Receipt = { seq: message.seq, hash: digest(canonical(message)) };
+      const npcId = message.npc.toLowerCase();
+      const item = giftItemName(message.item);
+      const fits = this.state.phase === 'open' && absoluteDay(message.date) === this.day
+        && (SOCIAL_NPCS as readonly string[]).includes(npcId) && item !== undefined;
+      const note = fits ? giftMemory({ item, taste: message.taste, birthday: message.birthday }) : undefined;
+      if (note) await this.scope!.agent(npcId).record({ seq: message.seq, gameTime: gameMinutes(message.date),
+        log: { gift: { item: item!, taste: message.taste, birthday: message.birthday }, bridgeReceipt: JSON.parse(canonical(receipt)) },
+        memories: [note] });
+      this.addReceipt(receipt);
+      await this.persist();
+      return note?.text;
     });
   }
 

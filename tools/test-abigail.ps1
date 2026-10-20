@@ -71,7 +71,7 @@ try {
             throw '47711 端口被其他程序占用。'
         }
         # An existing Node process still holds the old modules after a source update. Probe before reusing it.
-        $taskProbe = 'const ws=new WebSocket("ws://127.0.0.1:47711");setTimeout(()=>process.exit(2),3000);ws.onopen=()=>ws.send(JSON.stringify({type:"hello",protocol:2,modVersion:"test-launcher"}));ws.onmessage=e=>{const m=JSON.parse(e.data);if(m.type==="hello")process.exit(m.protocol===2?0:3);if(m.type==="sync.error")process.exit(3);};ws.onerror=()=>process.exit(2);'
+        $taskProbe = 'const ws=new WebSocket("ws://127.0.0.1:47711");setTimeout(()=>process.exit(2),3000);ws.onopen=()=>ws.send(JSON.stringify({type:"hello",protocol:3,modVersion:"test-launcher"}));ws.onmessage=e=>{const m=JSON.parse(e.data);if(m.type==="hello")process.exit(m.protocol===3?0:3);if(m.type==="sync.error")process.exit(3);};ws.onerror=()=>process.exit(2);'
         $taskProbe | & $taskNode --input-type=module
         if ($LASTEXITCODE -ne 0) {
             if (Get-Process -Name StardewModdingAPI,'Stardew Valley' -ErrorAction SilentlyContinue) {

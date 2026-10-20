@@ -60,6 +60,7 @@ internal sealed partial class ModEntry
     {
         this.ClearBubbles();
         this.ClearScenes();
+        this.ResetGifts();
         this.talk = null; this.offerFor = null; this.startFor = null;
         this.initialSave = null; this.lifecycle.Clear(); this.memoryReady = false; this.syncFailed = false;
         this.activeLoad = Context.IsMainPlayer;
@@ -91,6 +92,7 @@ internal sealed partial class ModEntry
     {
         this.ClearBubbles();
         this.ClearScenes();
+        this.ResetGifts();
         if (!this.activeLoad || this.initialSave is null)
             return;
         this.EndTalk(null);
@@ -156,7 +158,7 @@ internal sealed partial class ModEntry
         fields["loadNonce"] = this.loadNonce; fields["seq"] = ++this.seq;
         if (type == "talk.say")
             fields["date"] = GameState.Date();
-        bool reliable = type is "day.started" or "save.saving" or "save.saved" or "title.returned";
+        bool reliable = type is "day.started" or "save.saving" or "save.saved" or "title.returned" or "gift.given";
         if (reliable && !this.lifecycle.Add(this.seq, fields))
         {
             this.FailSync("记忆同步队列已满，本次读档停用 AI；原版游戏可继续，请保留日志并重新读档。");

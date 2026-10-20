@@ -143,6 +143,7 @@ internal sealed partial class ModEntry : Mod
         if (e.IsMultipleOf(30) && this.memoryTest?.BubblesOnly != true)
             this.TickBubbles();
         this.TickScenes(e);
+        this.TickGifts();
 
         this.TickAbigailTest();
         this.TickMemoryTest();

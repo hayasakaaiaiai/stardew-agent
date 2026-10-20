@@ -553,7 +553,7 @@ Mod → 后端：
 | `day.started` | `DayStarted` | today、天气、节日 |
 | `time.changed` | `TimeChanged` | 时间，以及这次有变化的位置 |
 | `talk.open` / `talk.say` / `talk.close` | 玩家对话 | npc，以及 optionId 或 text |
-| `gift.given` | 送礼 | npc、物品、原版喜好等级 |
+| `gift.given` | 送礼 | npc、物品、原版喜好等级。第一版（2026-10-20）：代码按模板给这位 NPC 记一条，不调用模型，见 `npc-gifts.md` |
 | `action.result` | 动作执行后 | actionId、结果 |
 | `save.saving` | `Saving` | commitId、parentId、dayEnded |
 | `save.saved` | `Saved` | commitId |

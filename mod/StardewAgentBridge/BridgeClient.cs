@@ -15,7 +15,7 @@ namespace StardewAgentBridge;
 /// </summary>
 internal sealed class BridgeClient : IDisposable
 {
-    private const int ProtocolVersion = 2;
+    private const int ProtocolVersion = 3;
     private static readonly TimeSpan RetryDelay = TimeSpan.FromSeconds(3);
 
     private readonly Uri uri;

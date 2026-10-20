@@ -213,8 +213,9 @@ function change(npc: NpcInput, prompt: ReturnType<typeof nightlyPrompt>, output:
     const memory = /^m(\d+)$/.exec(alias) ? prompt.shown[Number(alias.slice(1)) - 1] : undefined;
     return memory ? [memory.id] : [];
   });
-  // Today's notes are only replaced when there is something to replace them with.
-  const replaced = output.memories.length ? prompt.today.map((memory) => memory.id) : [];
+  // Today's conversation notes are only replaced when there is something to replace them with. Other notes, such
+  // as a gift (docs/npc-gifts.md), have no utterance to quote and are kept as they are.
+  const replaced = output.memories.length ? prompt.today.filter((memory) => memory.kind === 'conversation').map((memory) => memory.id) : [];
   const impression = output.impression || prompt.impression;
   // Only the gift the code offered tonight, and only inside a letter.
   const gift = output.letter && output.gift ? prompt.gift : '';

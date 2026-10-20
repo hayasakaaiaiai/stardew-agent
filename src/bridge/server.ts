@@ -211,6 +211,13 @@ export class BridgeServer {
       void this.turn(session, talk, message, message.text, send);
       return;
     }
+    if (message.type === 'gift.given') {
+      const note = await save.gift(message);
+      send({ type: 'ack', ...envelope(message) });
+      const npcId = message.npc.toLowerCase();
+      if (note) this.log(`${this.options.roster.has(npcId) ? this.options.roster.get(npcId).name : message.npc}记下了：${note}`);
+      return;
+    }
     if (message.type === 'scene.request') {
       void this.scene(session, message, send);
       return;
