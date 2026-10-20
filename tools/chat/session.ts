@@ -4,7 +4,8 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Consolidator } from '../../src/agent/consolidation.ts';
 import { AgentMemory, type PlayerIdentity } from '../../src/agent/dialogue-memory.ts';
-import type { Season } from '../../src/agent/dialogue.ts';
+import type { DialogueMemory, Season } from '../../src/agent/dialogue.ts';
+import { withMorningPlan } from '../../src/agent/morning.ts';
 import { Nightly } from '../../src/agent/nightly.ts';
 import { createRuntime, type SaveScope } from '../../src/index.ts';
 
@@ -108,8 +109,11 @@ export class ChatSave {
     return this.scope.ledger.currentDay?.overlay(npcId).today.length ?? 0;
   }
 
-  memory(npcId: string, now: () => number, player?: () => PlayerIdentity): AgentMemory {
-    return new AgentMemory(() => this.scope.agent(npcId), { now, nextSeq: () => ++this.seq, ...(player ? { player } : {}) });
+  memory(npcId: string, now: () => number, player?: () => PlayerIdentity): DialogueMemory {
+    const memory = new AgentMemory(() => this.scope.agent(npcId), { now, nextSeq: () => ++this.seq, ...(player ? { player } : {}) });
+    return withMorningPlan(memory, { now,
+      read: () => this.scope.agent(npcId).context({ nowGameTime: now(), limit: 1, maxChars: 1 }),
+    });
   }
 
   /** Sleep and save: commit today, open the next day, then consolidate the saved one. */

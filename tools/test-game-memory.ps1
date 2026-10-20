@@ -1,7 +1,8 @@
 ﻿[CmdletBinding()]
 param(
     [string]$GamePath = 'E:\games\steamapps\common\Stardew Valley',
-    [switch]$Nightly
+    [switch]$Nightly,
+    [switch]$MorningPlans
 )
 
 $ErrorActionPreference = 'Stop'
@@ -58,7 +59,7 @@ Copy-Item -LiteralPath $taskCopy -Destination (Join-Path $taskRun 'initial-copy'
 $taskConfig = [pscustomobject]@{
     RequestId=[Guid]::NewGuid().ToString(); SaveFolder=$taskFolder; UniqueId=$taskId
     BackendUrl=''; RunDirectory=$taskRun; SaveDirectory=$taskCopy; GamePath=$GamePath
-    Nightly=[bool]$Nightly
+    Nightly=[bool]($Nightly -or $MorningPlans); MorningPlans=[bool]$MorningPlans
 }
 $taskConfigPath = Join-Path $taskRun 'config.json'
 $taskConfig | ConvertTo-Json | Set-Content -LiteralPath $taskConfigPath -Encoding UTF8

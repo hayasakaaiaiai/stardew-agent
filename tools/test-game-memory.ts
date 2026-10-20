@@ -5,7 +5,8 @@ import { copyFile, cp, mkdir, readFile, rename, writeFile } from 'node:fs/promis
 import { fork, spawn } from 'node:child_process';
 import { join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { JSON_HINT } from '../src/agent/dialogue.ts';
+import { JSON_HINT, OPENING_LINE, parseOutput } from '../src/agent/dialogue.ts';
+import { morningBlock, morningReply, MORNING_HEADING } from '../src/agent/morning.ts';
 import { NIGHTLY_RULES, parseNightly } from '../src/agent/nightly.ts';
 import type { ChatMessage, Completion } from '../src/services/model/client.ts';
 
@@ -13,9 +14,10 @@ interface Config {
   RequestId: string; SaveFolder: string; UniqueId: string; BackendUrl: string;
   RunDirectory: string; SaveDirectory: string; GamePath: string;
   Nightly?: boolean;
+  MorningPlans?: boolean;
 }
 interface Pointer { Format: number; LineageId: string; CommitId: string; ParentId: string | null; DayEnded: number }
-interface Reply { label: string; line: string; reply: string; day: number; nonce: string; hearts: number; generation: number }
+interface Reply { label: string; line: string; reply: string; day: number; nonce: string; hearts: number; generation: number; requestSeq?: number }
 interface Report {
   requestId: string; stage: string; message: string; completed: boolean; success: boolean;
   day: number; nonce: string; pointer: Pointer | null; generation: number;
@@ -103,9 +105,43 @@ function reply(report: Report, label: string): Reply {
   return item;
 }
 function callFor(item: Reply) {
-  const call = calls.findLast(call => call.messages.at(-1)?.content === item.line + JSON_HINT);
+  const call = calls.findLast(call => call.messages.at(-1)?.content === item.line + JSON_HINT
+    && (!item.label.startsWith('opening-') || parseOutput(call.content).reply === item.reply
+      || (call.messages[0]!.content.includes(MORNING_HEADING) && morningView(call, item) === item.reply)));
   assert.ok(call, `没有找到 ${item.label} 的真实模型调用`);
   return call;
+}
+function morningView(call: RecordedCall, item: Reply): string {
+  const planLine = call.messages[0]!.content.split(MORNING_HEADING)[1]?.split('\n- ')[1]?.split('\n')[0];
+  assert.ok(planLine);
+  const plan: unknown = JSON.parse(planLine);
+  assert.equal(typeof plan, 'string');
+  // The prompt already uses today's dates, so a same-day conversion preserves those labels.
+  return morningReply(parseOutput(call.content).reply, plan as string, item.day, item.day);
+}
+function openingAt(report: Report, label: string, state: NightState | undefined, prompted: boolean) {
+  if (!config.MorningPlans) return;
+  const item = reply(report, `opening-${label}`);
+  const call = callFor(item);
+  assert.equal(call.messages[0]!.content.includes(MORNING_HEADING), prompted, `${label} 的主动开场触发不正确`);
+  if (prompted) {
+    assert.ok(state && state.day === item.day - 1);
+    assert.ok(call.messages[0]!.content.includes(morningBlock(state.plan, state.day, item.day)), '开场未使用当前分支昨晚的计划');
+  }
+  const openings = (evidence.morningOpenings ??= []) as unknown[];
+  openings.push({ ...item, prompted, usage: call.usage, rawReply: parseOutput(call.content).reply });
+}
+function openingLog(pointer: Pointer, report: Report, label: string) {
+  if (!config.MorningPlans) return;
+  const item = reply(report, `opening-${label}`);
+  assert.ok(item.requestSeq);
+  const row = sql<{ entry: string }>('SELECT entry FROM log WHERE commit_id=? AND npc_id=? AND seq=?',
+    pointer.CommitId, 'abigail', String(item.requestSeq))[0];
+  assert.ok(row, '成功开场没有随真实存档写入日志');
+  const entry = JSON.parse(row.entry) as { changes: { log: { player: string; npc: string }; memories: unknown[] }[] };
+  assert.equal(entry.changes[0]!.log.player, OPENING_LINE);
+  assert.equal(entry.changes[0]!.log.npc, item.reply);
+  assert.deepEqual(entry.changes[0]!.memories, [], 'NPC 主动开场被记成了新的玩家事实');
 }
 function sql<T>(query: string, ...parameters: string[]): T[] {
   const db = new DatabaseSync(join(memoryDirectory, 'memory.sqlite'), { readOnly: true });
@@ -240,6 +276,7 @@ try {
           a = saved(report);
           assert.deepEqual(await savePointer(), a);
           nightA = await night(a);
+          openingAt(report, 'learn-cat', undefined, false);
           if (nightA) {
             assert.match(JSON.stringify(nightA.summaries), /星糖/);
             evidence.nightlyA = nightA;
@@ -253,6 +290,8 @@ try {
         }
         case 'rollback-ready': {
           await refreshCalls();
+          openingAt(report, 'ask-cat', nightA?.state, true);
+          openingAt(report, 'ask-rollback', nightA?.state, true);
           const nextDay = reply(report, 'ask-cat');
           assert.match(nextDay.reply, /星糖/);
           assert.match(callFor(nextDay).messages[0]!.content, /星糖/);
@@ -283,6 +322,8 @@ try {
           b = saved(report);
           assert.deepEqual(await savePointer(), b);
           nightB = await night(b);
+          openingAt(report, 'ask-restart', nightA?.state, false);
+          openingLog(b, report, 'ask-rollback');
           nightlyCallsAfterB = calls.filter(call => call.kind === 'nightly').length;
           if (nightB) {
             assert.match(JSON.stringify(nightB.summaries), /紫色/);
@@ -304,6 +345,12 @@ try {
         }
         case 'restore-a': {
           assert.ok(a && b);
+          if (config.MorningPlans) {
+            await refreshCalls();
+            openingAt(report, 'next-plan', nightB?.state, true);
+            assert.match(nightB!.state.plan, /风筝/, '夜间计划没有保留专门用于验证的风筝约定');
+            assert.match(reply(report, 'opening-next-plan').reply, /风筝/, '实际开场没有提起已确认的风筝约定');
+          }
           // The Mod has returned to title and acknowledged its lifecycle queue. Only this run's copy is replaced.
           assert.equal(report.stage, 'restore-a');
           for (const file of [config.SaveFolder, 'SaveGameInfo'])
@@ -314,6 +361,7 @@ try {
         }
         case 'fork-loaded': {
           await refreshCalls();
+          openingAt(report, 'ask-fork', nightA?.state, true);
           const fork = reply(report, 'ask-fork');
           assert.match(fork.reply, /星糖/);
           assert.match(callFor(fork).messages[0]!.content, /星糖/);
@@ -330,6 +378,7 @@ try {
           c = saved(report);
           assert.deepEqual(await savePointer(), c);
           nightC = await night(c);
+          openingLog(c, report, 'ask-fork');
           if (nightC) {
             assert.match(JSON.stringify(nightC.summaries), /金色/);
             assert.match(JSON.stringify(nightC.summaries), /纸船/);
@@ -381,6 +430,7 @@ try {
   await refreshCalls().catch(() => {});
   const result = { success, requestId: config.RequestId, saveFolder: config.SaveFolder, model: server.model,
     nightlyEnabled: !!config.Nightly, nightlyCalls: calls.filter(call => call.kind === 'nightly').length,
+    morningPlansEnabled: !!config.MorningPlans,
     modelCalls: calls.length, checkedStages: [...handled], evidence, game: last, ...(errorMessage ? { error: errorMessage } : {}) };
   await json(join(directory, 'result.json'), result);
   console.log(JSON.stringify({ success, requestId: config.RequestId, modelCalls: calls.length, directory, error: errorMessage }, null, 2));

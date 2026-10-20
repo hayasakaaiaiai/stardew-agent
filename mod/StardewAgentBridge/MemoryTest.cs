@@ -19,6 +19,7 @@ internal sealed class MemoryTestConfig
     public string UniqueId { get; set; } = "";
     public string BackendUrl { get; set; } = "";
     public string RunDirectory { get; set; } = "";
+    public bool MorningPlans { get; set; }
 }
 
 internal sealed partial class ModEntry
@@ -157,7 +158,14 @@ internal sealed partial class ModEntry
                 case "opening":
                     if (!this.MemoryTestHasReply())
                         return;
-                    this.BeginMemoryTestLine(this.memoryTestAfterWarp);
+                    this.memoryTestReplies.Add(new { label = "opening-" + this.memoryTestAfterWarp,
+                        line = "（玩家走过来，想和你多聊几句）", reply = this.talk!.Reply,
+                        day = this.currentDay, nonce = this.loadNonce, requestSeq = this.talk.RequestSeq,
+                        hearts = GameState.Hearts(this.talk.Npc), generation = this.bridge.Generation });
+                    if (this.memoryTestAfterWarp == "next-plan")
+                        this.CloseMemoryTestTalk("return-fork");
+                    else
+                        this.BeginMemoryTestLine(this.memoryTestAfterWarp);
                     break;
 
                 case "input":
@@ -298,7 +306,11 @@ internal sealed partial class ModEntry
                     if (completed == "saved-a") this.WarpForMemoryTest("ask-cat");
                     else if (completed == "rollback-ready") this.BeginMemoryTestLine("learn-kite");
                     else if (completed == "restart-backend") this.WarpForMemoryTest("ask-restart");
-                    else if (completed == "saved-b") this.MemoryTestProgress("return-fork", "准备读回旧保存点。");
+                    else if (completed == "saved-b")
+                    {
+                        if (test.MorningPlans) this.WarpForMemoryTest("next-plan");
+                        else this.MemoryTestProgress("return-fork", "准备读回旧保存点。");
+                    }
                     else if (completed == "restore-a") this.MemoryTestProgress("fork-menu", "加载旧保存点。");
                     else if (completed == "fork-loaded") this.BeginMemoryTestLine("learn-boat");
                     else this.MemoryTestProgress("return-finish", "最终分叉保存已核验。");

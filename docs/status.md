@@ -18,7 +18,7 @@
 | 里程碑 | 状态 | 已完成 | 还没做 | 文档 |
 |---|---|---|---|---|
 | M1 存储与事务 | 完成 | 记忆内核：SQLite 提交树、中文检索、当天事务、存档提交和回滚、后端崩溃恢复 | 自动清理过期的临时日志 | `README.md`、`design.md` §16 |
-| M2 Agent | 对话和夜间整合已实现 | 和玩家对话；夜间整合改为原话引用并校验说话人，Windows 真机链路及事实回归通过，2026-10-20 合并进 `main` | 自主行动（调度器、合并场景调用、白名单动作） | `dialogue-prototype.md`、`nightly-consolidation.md` |
+| M2 Agent | 对话和夜间整合已合入；次日主动提计划在功能分支完成 | 和玩家对话；夜间整合原话校验；首次“继续聊”按昨天计划主动询问，日期由代码换算 | 自主行动（调度器、合并场景调用、白名单动作）；次日计划待用户决定合入 | `dialogue-prototype.md`、`nightly-consolidation.md`、`next-day-plans.md` |
 | M3 接入游戏 | M3a/M3b 已实现，Windows 真机组合通过 | 游戏里"继续聊"；真实保存/退出、跨天记忆、回滚、后端进程重启与旧档分叉 | M3a 剩下三项手测：输入法、原版台词保留、取消 | `game-bridge.md`、`game-memory.md` |
 | M4 内容 | 角色卡已完成 | 34 张角色卡（已审阅），"看过事件之后"共 201 条 | 物品名到 ID 的对应、各动作的上限 | `design.md` §11 |
 
@@ -27,6 +27,8 @@
 12:38 的初版夜间整合技术链路通过，但内容复核发现 NPC 的墓地计划被写成农场主说过的事，且进入次日 prompt。失败证据保留在 [夜间整合 Windows 报告](test-results/2026-10-20-nightly-windows.md)。
 
 按用户“调整防止记错”的要求，现已用代码核对原话来源，禁止模型自由改写长期记忆。76/76、类型检查、构建和 13/13 C# 检查通过；5 类真实模型样本各 3 次通过。13:01 的真机组合验收 103.42 秒、13 次对话 + 3 次夜间整合通过，原档 6 文件哈希相同；原话确实落库并进入次日 prompt。固定输入每晚增加 195 输入 token，正常调用次数不变。常驻后端已备份并更新，最终 PID 25704。详见 [事实归属修复报告](test-results/2026-10-20-nightly-facts-fix.md)。
+
+用户确认 M2b 第一步后，`codex/next-day-plans` 已实现次日首次“继续聊”主动提计划、原话核对、日期换算、开场问句处理以及重启/回滚/分叉语义。该分支已同步 `main` / `7b3d6df`，完整 84/84、类型检查、构建、13/13 C# 检查通过。最终真实模型 6 类各 2 次，另有 12 次普通开场对照；首次计划开场额外 162–169 输入 token，之后不增加固定成本或固定调用。最终真机 105.22 秒、17 次调用、3 次真实睡觉保存通过，原档 6 文件哈希未变；14:17:21 已备份并重载正常后端，PID 17244。展示效果、回退和保留的失败证据见 [次日计划验收报告](test-results/2026-10-20-next-day-plans.md)。
 
 **游戏内验证只在 Windows 上做**，Mac 只做自动测试、类型检查和编译 Mod。M3a 按 `game-bridge.md` §7 的清单还剩三项：
 - "自己说"的输入框能不能用拼音输入法打中文。
@@ -42,12 +44,13 @@ GitHub 私有仓库：https://github.com/hayasakaaiaiai/stardew-agent
 | `main` | 已合入的基线：记忆内核 + 对话 + M3a + M3b | `/Users/a11/Documents/ChatGPT/stardew-agent-dialogue`（目录名是以前留下的） |
 | `codex/npc-memory-store` | 记忆系统的开发分支，做完一步快进合并回 `main` | `/Users/a11/Documents/ChatGPT/stardew-agent` |
 | `hardware-companion` | `main` + 硬件陪伴（机器人），还没合并 | `/Users/a11/Documents/ChatGPT/stardew-agent-hardware` |
+| `codex/next-day-plans` | 最新 `main` + M2b 首次开场主动提计划，完成后按用户要求上传，暂不合入 | Windows：`E:\stardew-agent` |
 
 Windows 上的目录是 `E:\stardew-agent`，测试前切到 `main` 拉最新代码。M3b 在 `codex/game-save-memory` 上开发，2026-10-20 快进合并进 `main`；它已经包含的 `codex/abigail-auto-test` 同时删除。
 
 本次按用户“拉下来测”“修复”的要求，Windows 在 `nightly-consolidation` 上完成远端 `3f70b27` 验证和事实归属修复。本机常驻后端已重新启动，日志确认对话 `high`、夜间整合 `low`；原游戏记忆库、临时日志及旧后端日志在更新前已备份。
 
-用户同意继续后，已将修复和验收记录 `e49535b`、`5896878` 推送到远端 `nightly-consolidation`，`main` 尚未合入。Windows 当前在 `codex/next-day-plans` 准备 M2b 第一步；[设计草案](next-day-plans.md) 与真实模型成本预试验完成，等待确认触发方式后实施。
+夜间整合的修复和验收记录 `e49535b`、`5896878` 已先推送到 `nightly-consolidation`，随后由上游合入 `main` / `7b3d6df`。Windows 的 `codex/next-day-plans` 已变基到该提交；用户已确认复用“继续聊”并要求完成后上传 GitHub，明确这次不合入 `main`。
 
 - Mac 上的三个目录是同一个仓库的三个 git worktree。同一个分支只能在一个目录里打开。
 - 2026-10-19 把记忆系统和对话合并进了 `main`，原来的 `dialogue-prototype` 分支已删除。
@@ -140,12 +143,13 @@ dotnet build mod/StardewAgentBridge   # 编译 Mod，编译完自动装进游戏
 | 真实模型附加字段偶尔解析失败，会走现有回退路径；本次 10 次调用出现 1 次 | `test-results/2026-10-20-retest.md` |
 | 过期的临时日志不会自动清理 | `design.md` §16 |
 | 夜间事实记忆已改为原话引用；印象与计划仍由模型生成，可能夹带具体事实或遗漏内容，需继续观察 | `test-results/2026-10-20-nightly-facts-fix.md` |
+| 计划开场使用保守问句处理，可能回退为较笼统的提问；尚未解析“下周”等任意日期表达，普通对话仍可能出现事实错误 | `test-results/2026-10-20-next-day-plans.md` |
 
 ## 7. 下一步
 
 1. **H4 机器人接回游戏存档**：夜间整合已在 2026-10-20 按用户“全部按推荐来”的授权快进合并进 `main`；接着把 `hardware-companion` 变基上来，按 `companion-device.md` §13 实现 H4。Windows 上测试前切回 `main` 拉最新代码。
 2. **补齐 Windows M3a 手测**：中文输入法、原版台词保留、取消，随时可做，不挡开发。脚本已覆盖原版输入回调，但不能代替拼音输入法的实际操作。
-3. **M2b 第一步设计待确认**：[次日主动提起计划](next-day-plans.md)，推荐复用当天首次“继续聊”开场，实测增加 138–142 输入 token；暂未改产品代码。之后再考虑实际行动、机器人接入游戏记忆（H4）。
+3. **M2b 第一步已完成，等待用户决定合入**：[次日主动提起计划](next-day-plans.md) 在功能分支验证并按要求上传；继续观察自然语言日期与重复邀约。实际行动、调度器和白名单动作另行设计，不在这次变更里。
 
 ## 8. 文档索引
 
@@ -160,7 +164,8 @@ dotnet build mod/StardewAgentBridge   # 编译 Mod，编译完自动装进游戏
 | `docs/game-bridge.md` | M3a：Mod 和后端的协议、原版界面怎么复用、游戏内测试清单 |
 | `docs/game-memory.md` | M3b：存档同步、跨天记忆、确认补发与崩溃恢复 |
 | `docs/nightly-consolidation.md` | 夜间整合：产出、输入、触发时机、出错处理、实测 token 和真实模型结果 |
-| `docs/next-day-plans.md` | M2b 第一步设计草案：首次开场主动提起、原话核对、回滚语义与输入 token 实测 |
+| `docs/next-day-plans.md` | M2b 第一步设计与实现：首次开场、原话核对、日期换算、回滚与最终 token 实测 |
+| `docs/test-results/2026-10-20-next-day-plans.md` | 84 项测试、最终 12 次模型开场、日期与动作陈述处理和 Windows 真机验收 |
 | `docs/test-results/2026-10-20-nightly-windows.md` | 夜间整合 Windows 真机技术验证及说话人归属错误证据 |
 | `docs/test-results/2026-10-20-nightly-facts-fix.md` | 原话来源校验、实际 token 差值、15 次真实模型和修复后的真机验收 |
 | `docs/test-results/2026-10-19-abigail.md` | 第二轮回复丢失的根因、修复验证、阿比盖尔三轮真机自动测试结果 |

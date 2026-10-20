@@ -5,6 +5,7 @@ import type { Consolidator } from '../agent/consolidation.ts';
 import { AgentMemory, turnLog } from '../agent/dialogue-memory.ts';
 import type { DialogueMemory, Exchange, Remembered, Standing, TurnResult } from '../agent/dialogue.ts';
 import { Nightly } from '../agent/nightly.ts';
+import { withMorningPlan } from '../agent/morning.ts';
 import { createRuntime, type SaveScope } from '../index.ts';
 import { SOCIAL_NPCS } from '../types.ts';
 import { canonical, digest, requireValue } from '../validation.ts';
@@ -258,10 +259,15 @@ export class GameSave {
       const reader = new AgentMemory(() => agent, { now: () => gameMinutes(date), nextSeq: () => message.seq });
       let staged: { exchange: Exchange; remembered: Remembered[] } | undefined;
       let standing: Standing | undefined;
-      const memory: DialogueMemory = {
+      const memory = withMorningPlan({
         context: async (query, current) => { signal.throwIfAborted(); standing = current; return reader.context(query, current); },
         record: async (exchange, remembered) => { signal.throwIfAborted(); staged = { exchange, remembered }; },
-      };
+      }, { now: () => gameMinutes(date), read: async () => {
+        signal.throwIfAborted();
+        const context = await agent.context({ nowGameTime: gameMinutes(date), limit: 1, maxChars: 1 });
+        signal.throwIfAborted();
+        return context;
+      } });
       return { memory, signal, finish: (result) => this.enqueue(async () => {
         signal.throwIfAborted(); this.check(message);
         requireValue(this.live && this.state.phase === 'open', 'DAY_CLOSED', '这轮对话所属日期已经关闭');

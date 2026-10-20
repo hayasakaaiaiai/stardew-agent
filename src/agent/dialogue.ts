@@ -36,6 +36,8 @@ export interface MemoryContext {
   today?: Exchange[];
   /** How the NPC should treat these memories, e.g. vaguely when it barely knows the player. */
   tone?: string;
+  /** A constrained opening is presented only after this view has processed the complete reply. */
+  replyView?: (reply: string, meta: DialogueMeta) => { reply: string; meta: DialogueMeta };
 }
 
 export interface Remembered { text: string; importance: number }
@@ -309,6 +311,7 @@ export async function runTurn(
         onContent: (delta) => {
           const text = stream.push(delta);
           if (!text) return;
+          if (recalled.replyView) return;
           firstReplyMs ??= Math.round(performance.now() - started);
           handlers.onReply?.(text);
         },
@@ -322,11 +325,17 @@ export async function runTurn(
     attempts.push(completion);
     if (completion.content.trim() || tries >= MAX_ATTEMPTS) break;
   }
-  const { reply, meta, ok } = parseOutput(attempts.at(-1)!.content, stream.text);
+  const parsed = parseOutput(attempts.at(-1)!.content, stream.text);
+  const { reply, meta } = recalled.replyView?.(parsed.reply, parsed.meta) ?? parsed;
   handlers.signal?.throwIfAborted();
   if (reply) await memory.record({ player: input.playerLine, npc: reply }, meta.remember);
+  if (reply && recalled.replyView) {
+    handlers.signal?.throwIfAborted();
+    firstReplyMs = Math.round(performance.now() - started);
+    handlers.onReply?.(reply);
+  }
   return {
-    reply, meta, metaOk: ok, messages, attempts,
+    reply, meta, metaOk: parsed.ok, messages, attempts,
     timing: { firstReplyMs, totalMs: Math.round(performance.now() - started) },
     usage: sumUsage(attempts),
   };
