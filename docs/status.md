@@ -54,6 +54,8 @@ M2b 第六步“聊天影响原版好感”在 `m2b-friendship` 上实现，建�
 
 按用户“陌生时容易扣、难加，熟悉时不容易扣、容易加”，`m2b-friendship-by-hearts` 把好感换算改成按熟悉程度分档：加分每档 0–1 心 5、2–4 心 10、5–7 心 15、8 心以上或亲密关系 20；扣分反过来是 20、15、10、5；每天 −40 到 +30 的上限不变，token 成本 0。已变基到合并后的 `main`，Windows 组合脚本的好感预期改为按同一张表计算（测试档阿比盖尔 8 心：`+30,0,0,-10×7,0`）。见 [npc-friendship.md](npc-friendship.md) §2.1。
 
+M2b 第八步“NPC 之间传话”在 `m2b-npc-news` 上实现：当晚和玩家聊过的 NPC 在夜间整合时自己决定一件愿意告诉别人的事（谁要求保密的、自己的秘密和心事、普通寒暄都不写），第二天碰面聊天时可以说出来；Mod 显示完后发 `scene.shown`，听到的人记“阿比盖尔跟我说：“……””，跟当天保存或回滚。真实模型：夜间 48 次全部符合预期，16 次秘密都没说出去；碰面聊天 9 次转述都没超出给定内容。每晚每位 NPC +77 输入（可缓存）、约 +45 输出；碰面规则 +62（可缓存），有新鲜事时 +约 32。已和 Windows 的碰面冷却修复合在一起，变基后 130/130、类型检查、构建和 Release 编译通过，见 [npc-news.md](npc-news.md)。
+
 ## 3. 分支
 
 GitHub 私有仓库：https://github.com/hayasakaaiaiai/stardew-agent
@@ -204,6 +206,7 @@ dotnet build mod/StardewAgentBridge   # 编译 Mod，编译完自动装进游戏
 | `docs/game-bridge.md` | M3a：Mod 和后端的协议、原版界面怎么复用、游戏内测试清单 |
 | `docs/game-memory.md` | M3b：存档同步、跨天记忆、确认补发与崩溃恢复 |
 | `docs/nightly-consolidation.md` | 夜间整合：产出、输入、触发时机、出错处理、实测 token 和真实模型结果 |
+| `docs/npc-news.md` | M2b 第八步：NPC 之间传话的决定、规则写法对比、真实模型实测、测试和 Windows 清单 |
 | `docs/npc-friendship.md` | M2b 第六步：聊天影响原版好感的决定、规则写法对比、真实模型实测、测试和 Windows 清单 |
 | `docs/npc-in-person-gifts.md` | M2b 第七步：当面送礼、与寄信共用冷却、背包满、实测和组合脚本 |
 | `docs/world-public-facts.md` | 配偶、婚约、室友和孩子的公开事实，Mod 字段及真实模型验收 |

@@ -88,7 +88,7 @@ test('nightly output clips state, defaults importance, and rejects unsupported m
     + `{"sources":["t2"],"importance":2}],"impression":"${'好'.repeat(140)}","retire":["m1",2]}`)!;
   assert.deepEqual(parsed, {
     memories: [{ sources: ['t1'], importance: 3 }, { sources: ['t2'], importance: 2 }], retire: ['m1'], impression: '好'.repeat(120), plan: '',
-    bubbles: [], letter: '', gift: false,
+    bubbles: [], letter: '', gift: false, share: '',
   });
 });
 

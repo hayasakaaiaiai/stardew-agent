@@ -68,7 +68,7 @@ test('the night replaces conversation notes with quotes but keeps the gift note'
   const h = await harness(t);
   const nightly: ChatMessage[][] = [];
   const output: NightlyOutput = { memories: [{ sources: ['t2'], importance: 4 }], retire: [], impression: '大方的人', plan: '',
-    bubbles: [], letter: '', gift: false };
+    bubbles: [], letter: '', gift: false, share: '' };
   const model = { async chat(messages: ChatMessage[]): Promise<Completion> {
     nightly.push(messages);
     return { content: JSON.stringify(output), reasoning: '', usage: null, finishReason: 'stop',

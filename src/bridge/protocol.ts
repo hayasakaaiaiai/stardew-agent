@@ -82,7 +82,9 @@ export type ModMessage =
   /** A vanilla gift the NPC should remember (docs/npc-gifts.md); reliable like the save lifecycle, acknowledged with ack. */
   | ({ type: 'gift.given'; npc: string; item: string; taste: GiftTaste; birthday: boolean; date: GameDate } & Envelope)
   /** Two NPCs standing together near the player (docs/npc-chat.md); game names. */
-  | ({ type: 'scene.request'; npcs: [string, string]; world: WorldSnapshot } & Envelope);
+  | ({ type: 'scene.request'; npcs: [string, string]; world: WorldSnapshot } & Envelope)
+  /** The lines of that request have been shown, so news told in them is remembered (docs/npc-news.md); reliable, acknowledged. */
+  | ({ type: 'scene.shown'; request: number; date: GameDate } & Envelope);
 
 export type BackendMessage =
   | { type: 'hello'; protocol: number }
@@ -218,6 +220,11 @@ export function parseModMessage(raw: string): ModMessage {
       text('item', 100);
       if (!GIFT_TASTES.includes(data.taste as GiftTaste)) fail('taste is invalid');
       if (typeof data.birthday !== 'boolean') fail('birthday must be a boolean');
+      date(data.date);
+      break;
+    case 'scene.shown':
+      envelope();
+      if (int(data.request, 'request') < 1) fail('request is out of range');
       date(data.date);
       break;
     case 'scene.request': {

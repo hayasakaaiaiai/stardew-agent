@@ -27,6 +27,8 @@ internal sealed partial class ModEntry
     private int scenesToday;
     private int lastSceneAt = -1;
     private int sceneRequestSeq;
+    /// <summary>The request whose lines are on screen; reported once the last one shows (docs/npc-news.md).</summary>
+    private int sceneShowing;
     private uint sceneRequestedTick;
     private uint nextSceneLineTick;
     private uint sceneCurrentTick;
@@ -38,6 +40,7 @@ internal sealed partial class ModEntry
         this.scenesToday = 0;
         this.lastSceneAt = -1;
         this.sceneRequestSeq = 0;
+        this.sceneShowing = 0;
     }
 
     private bool HandleScenes(string type, JsonElement message)
@@ -46,6 +49,7 @@ internal sealed partial class ModEntry
             return false;
         if (this.sceneRequestSeq == 0 || !this.IsCurrentReply(message, this.sceneRequestSeq))
             return true;
+        int request = this.sceneRequestSeq;
         this.sceneRequestSeq = 0;
         if (!message.TryGetProperty("lines", out JsonElement lines) || lines.ValueKind != JsonValueKind.Array)
             return true;
@@ -61,6 +65,8 @@ internal sealed partial class ModEntry
             if (npc.Length > 0 && text.Length > 0)
                 this.sceneLines.Enqueue((npc, text, emote));
         }
+        if (this.sceneLines.Count > 0)
+            this.sceneShowing = request;
         this.nextSceneLineTick = 0;
         return true;
     }
@@ -82,6 +88,13 @@ internal sealed partial class ModEntry
                     this.socialTestSceneLines.Add(new { npc = id, text, emote, visible = this.BubbleText(npc), day = this.currentDay });
             }
             this.nextSceneLineTick = e.Ticks + SceneLineTicks;
+        }
+        // News told in these lines is remembered once they have all shown. Not during an agent conversation: the
+        // backend writes a turn under its earlier seq when the reply arrives, and the day's events must stay in order.
+        if (this.sceneLines.Count == 0 && this.sceneShowing != 0 && this.talk is null)
+        {
+            this.Send("scene.shown", new() { ["request"] = this.sceneShowing, ["date"] = GameState.Date() });
+            this.sceneShowing = 0;
         }
         if (this.sceneRequestSeq != 0 && e.Ticks - this.sceneRequestedTick > SceneReplyTicks)
             this.sceneRequestSeq = 0;
