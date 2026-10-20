@@ -18,7 +18,7 @@ try {
     if (-not (Test-Path -LiteralPath (Join-Path $taskSaveFolder 'SaveGameInfo'))) {
         throw '找不到指定的“测试”存档：测试_436774213。'
     }
-    if (-not (Test-Path -LiteralPath (Join-Path $taskRoot '.env'))) {
+    if (-not $PrepareOnly -and -not (Test-Path -LiteralPath (Join-Path $taskRoot '.env'))) {
         throw '请先配置项目根目录下的 .env。'
     }
     $taskGameExe = Join-Path $GamePath 'StardewModdingAPI.exe'

@@ -360,5 +360,37 @@ Test("malformed letter rows are ignored before native game work", () =>
     Invoke(mod, "HandleLetters", "day.letters", packet.RootElement);
 });
 
+Test("scene packets reject stale loads and request numbers and skip malformed rows", () =>
+{
+    object mod = BubbleMod();
+    foreach (string field in new[] { "scenePairs", "sceneLines" })
+        Set(mod, field, Activator.CreateInstance(modType.GetField(field, Fields)!.FieldType)!);
+    Set(mod, "sceneRequestSeq", 42);
+    foreach (var identity in new[] { ("old", 42), ("current", 41), ("current", 42) })
+    {
+        using JsonDocument packet = JsonDocument.Parse(JsonSerializer.Serialize(new { lineageId = "farm", loadNonce = identity.Item1,
+            seq = identity.Item2, lines = new object?[] { null, 7, "bad", new { npc = 7 },
+                new { npc = "abigail", text = "今天天气不错。", emote = "happy" }, new { npc = "sebastian", text = "嗯。" } } }));
+        Invoke(mod, "HandleScenes", "scene.lines", packet.RootElement);
+        int count = (int)Get(mod, "sceneLines")!.GetType().GetProperty("Count")!.GetValue(Get(mod, "sceneLines"))!;
+        Check(count == (identity == ("current", 42) ? 2 : 0), "A stale scene entered the queue or valid rows were lost.");
+    }
+    Invoke(mod, "ClearScenes");
+    Check((int)Get(mod, "sceneRequestSeq")! == 0 && (int)Get(mod, "scenesToday")! == 0,
+        "A new load/day retained pending scenes or their daily budget.");
+});
+Test("disabled friendship does not change the per-NPC daily total", () =>
+{
+    object mod = TestMod();
+    Set(mod, "activeLoad", true);
+    Set(mod, "friendshipToday", new Dictionary<string, int> { ["Abigail"] = 20 });
+    configType.GetProperty("ChatChangesFriendship")!.SetValue(Get(mod, "config"), false);
+    object npc = RuntimeHelpers.GetUninitializedObject(gameAssembly.GetType("StardewValley.NPC")!);
+    Invoke(mod, "ApplyFriendship", npc, 20);
+    Check(((Dictionary<string, int>)Get(mod, "friendshipToday")!)["Abigail"] == 20, "Disabled chat changed its daily budget.");
+    Invoke(mod, "ClearFriendshipToday");
+    Check(((Dictionary<string, int>)Get(mod, "friendshipToday")!).Count == 0, "Reset retained friendship points.");
+});
+
 Console.WriteLine($"Mod flow checks: {checks - failures}/{checks} passed.");
 return failures == 0 ? 0 : 1;

@@ -12,6 +12,7 @@ import type { Roster } from '../services/roster/index.ts';
 export const SCENE_THINKING: Thinking = 'disabled';
 /** The Mod enforces these too; the backend checks them again for its own budget. */
 export const SCENES_PER_DAY = 4;
+export const SCENE_GAP_MINUTES = 60;
 const MAX_LINES = 4;
 const MAX_CHARS = 24;
 

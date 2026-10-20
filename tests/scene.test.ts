@@ -63,8 +63,9 @@ test('the backend answers a scene request once per pair a day, up to the daily b
     { speaker: 'a', text: '嘿，又来买东西？', emote: 'happy' }, { speaker: 'b', text: '嗯，买点咖啡。', emote: 'none' },
     { speaker: 'a', text: '测试那孩子呢？', emote: 'question' }] }));
   const wire = await connect(await h.start(undefined, undefined, scenes.model));
+  let time = 600;
   const ask = async (npcs: [string, string]) => {
-    const request = wire.send({ type: 'scene.request', npcs, world: WORLD });
+    const request = wire.send({ type: 'scene.request', npcs, world: { ...WORLD, date: { ...WORLD.date, time } } });
     const from = wire.inbox.length;
     const reply = await wire.until('scene.lines', from) as unknown as { seq: number; lines: { npc: string; text: string }[] };
     assert.equal(reply.seq, request.seq);
@@ -78,7 +79,10 @@ test('the backend answers a scene request once per pair a day, up to the daily b
   assert.deepEqual(await ask(['Abigail', 'Sebastian']), [], 'a pair talks once a day');
   assert.deepEqual(await ask(['Gunther', 'Abigail']), [], 'not on the roster');
   assert.deepEqual(await ask(['Abigail', 'Abigail']), []);
-  for (const pair of [['Gus', 'Pam'], ['Caroline', 'Jodi'], ['Lewis', 'Marnie']] as [string, string][]) assert.equal((await ask(pair)).length, 2);
+  for (const pair of [['Gus', 'Pam'], ['Caroline', 'Jodi'], ['Lewis', 'Marnie']] as [string, string][]) {
+    time += 100;
+    assert.equal((await ask(pair)).length, 2);
+  }
   assert.equal(scenes.sent.length, SCENES_PER_DAY);
   assert.deepEqual(await ask(['Shane', 'Emily']), [], 'the daily budget is spent');
   assert.equal(scenes.sent.length, SCENES_PER_DAY, 'no model call once refused');

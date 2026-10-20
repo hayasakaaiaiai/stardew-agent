@@ -5,10 +5,15 @@ param(
     [switch]$MorningPlans,
     [switch]$BubblesOnly,
     [switch]$MailOnly,
-    [switch]$NightlyRecovery
+    [switch]$NightlyRecovery,
+    [switch]$Social,
+    [switch]$Offline,
+    [string]$RunDirectory = ''
 )
 
 $ErrorActionPreference = 'Stop'
+if ($Social -and ($Nightly -or $MorningPlans -or $BubblesOnly -or $MailOnly -or $NightlyRecovery)) { throw '组合验收不可与其他独立场景混用。' }
+if ($Offline -and -not $Social) { throw '-Offline 仅用于三功能组合验收。' }
 if (($MailOnly -and ($BubblesOnly -or $Nightly -or $MorningPlans -or $NightlyRecovery)) -or ($BubblesOnly -and $NightlyRecovery)) { throw 'Native fixed-packet fixtures cannot be combined with the recovery scenario.' }
 $taskRoot = Split-Path -Parent $PSScriptRoot
 if (Get-Process -Name StardewModdingAPI,'Stardew Valley' -ErrorAction SilentlyContinue) {
@@ -17,7 +22,8 @@ if (Get-Process -Name StardewModdingAPI,'Stardew Valley' -ErrorAction SilentlyCo
 $taskSource = Join-Path $env:APPDATA 'StardewValley\Saves\测试_436774213'
 $taskSourceData = Join-Path $taskSource '测试_436774213'
 if (-not (Test-Path -LiteralPath $taskSourceData)) { throw '找不到源测试存档。' }
-$taskRun = Join-Path $taskRoot ('.runtime\game-memory-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
+$taskRun = if ($RunDirectory) { [System.IO.Path]::GetFullPath($RunDirectory) } else { Join-Path $taskRoot ('.runtime\game-memory-' + (Get-Date -Format 'yyyyMMdd-HHmmss')) }
+if (-not $taskRun.StartsWith(([System.IO.Path]::GetFullPath((Join-Path $taskRoot '.runtime')) + [System.IO.Path]::DirectorySeparatorChar), [System.StringComparison]::OrdinalIgnoreCase)) { throw '证据目录必须位于本项目 .runtime 内。' }
 New-Item -ItemType Directory -Path $taskRun -ErrorAction Stop | Out-Null
 Copy-Item -LiteralPath $taskSource -Destination (Join-Path $taskRun 'original-backup') -Recurse
 $taskBefore = @(Get-ChildItem -LiteralPath $taskSource -File | ForEach-Object {
@@ -65,6 +71,7 @@ $taskConfig = [pscustomobject]@{
     BackendUrl=''; RunDirectory=$taskRun; SaveDirectory=$taskCopy; GamePath=$GamePath
     Nightly=[bool]($Nightly -or $MorningPlans -or $NightlyRecovery); MorningPlans=[bool]($MorningPlans -or $NightlyRecovery)
     BubblesOnly=[bool]$BubblesOnly; MailOnly=[bool]$MailOnly; NightlyRecovery=[bool]$NightlyRecovery
+    Social=[bool]$Social; Offline=[bool]$Offline
 }
 $taskConfigPath = Join-Path $taskRun 'config.json'
 $taskConfig | ConvertTo-Json | Set-Content -LiteralPath $taskConfigPath -Encoding UTF8
@@ -73,7 +80,7 @@ Write-Output ('备份和证据目录：' + $taskRun)
 $taskExitCode = 1
 try {
     & (Join-Path $PSScriptRoot 'test-abigail.ps1') -GamePath $GamePath -PrepareOnly
-    $taskRunner = if ($MailOnly) { 'test-game-mail.ts' } elseif ($BubblesOnly) { 'test-game-bubbles.ts' } else { 'test-game-memory.ts' }
+    $taskRunner = if ($Social) { 'test-game-social.ts' } elseif ($MailOnly) { 'test-game-mail.ts' } elseif ($BubblesOnly) { 'test-game-bubbles.ts' } else { 'test-game-memory.ts' }
     & node.exe (Join-Path $PSScriptRoot $taskRunner) $taskConfigPath
     $taskExitCode = $LASTEXITCODE
 } finally {

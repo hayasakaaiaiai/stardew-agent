@@ -3,13 +3,13 @@ import type { AddressInfo } from 'node:net';
 import { type WebSocket, WebSocketServer } from 'ws';
 import type { Consolidator } from '../agent/consolidation.ts';
 import { OPENING_LINE, runTurn, type Standing, type WorldState } from '../agent/dialogue.ts';
-import { parseScene, type SceneLine, SCENES_PER_DAY, scenePrompt } from '../agent/scene.ts';
+import { parseScene, type SceneLine, SCENES_PER_DAY, SCENE_GAP_MINUTES, scenePrompt } from '../agent/scene.ts';
 import type { ModelClient } from '../services/model/client.ts';
 import type { Roster } from '../services/roster/index.ts';
 import { SOCIAL_NPCS } from '../types.ts';
 import { requireValue } from '../validation.ts';
 import { GameMemory, type GameSave } from './memory.ts';
-import { type BackendMessage, type Envelope, type ModMessage, parseModMessage, PROTOCOL_VERSION } from './protocol.ts';
+import { absoluteDay, type BackendMessage, type Envelope, type ModMessage, parseModMessage, PROTOCOL_VERSION } from './protocol.ts';
 import { clock, worldState } from './world.ts';
 
 export interface BridgeOptions {
@@ -38,7 +38,7 @@ class Session {
   send: (message: BackendMessage) => void = () => {};
   todayRevision = 0;
   /** Pairs that already talked on this game day, for the per-day budget. */
-  scenes = { day: 0, pairs: new Set<string>() };
+  scenes = { day: 0, pairs: new Set<string>(), lastMinute: -1 };
 }
 
 export class BridgeServer {
@@ -85,17 +85,22 @@ export class BridgeServer {
     const reply = (lines: SceneLine[]) => { if (session.save === save) send({ type: 'scene.lines', ...envelope(message), lines }); };
     const [a, b] = message.npcs.map((npc) => npc.toLowerCase()).sort((x, y) => SOCIAL_NPCS.indexOf(x as never) - SOCIAL_NPCS.indexOf(y as never));
     const { roster, sceneModel } = this.options;
-    if (session.scenes.day !== save.day) session.scenes = { day: save.day, pairs: new Set() };
+    if (session.scenes.day !== save.day) session.scenes = { day: save.day, pairs: new Set(), lastMinute: -1 };
+    const requestedDay = absoluteDay(message.world.date);
+    const time = message.world.date.time;
+    const minute = Math.floor(time / 100) * 60 + time % 100;
     const pair = `${a}+${b}`;
-    if (!sceneModel || save.closed || a === b || !roster.has(a!) || !roster.has(b!)
+    if (!sceneModel || save.closed || requestedDay !== save.day || a === b || !roster.has(a!) || !roster.has(b!)
+      || (session.scenes.lastMinute >= 0 && minute - session.scenes.lastMinute < SCENE_GAP_MINUTES)
       || session.scenes.pairs.has(pair) || session.scenes.pairs.size >= SCENES_PER_DAY) {
       reply([]);
       return;
     }
     session.scenes.pairs.add(pair);
+    session.scenes.lastMinute = minute;
     try {
       const completion = await sceneModel.chat(scenePrompt(roster, a!, b!, worldState(message.world, save.player)), {}, { json: true });
-      if (save.closed) return;
+      if (save.closed || save.day !== requestedDay) return;
       const lines = parseScene(completion.content, a!, b!, save.player.name);
       reply(lines);
       this.log(`碰面聊天：${roster.get(a!).name}和${roster.get(b!).name}，${lines.length ? `${lines.length} 句` : '没有可显示的'}`);

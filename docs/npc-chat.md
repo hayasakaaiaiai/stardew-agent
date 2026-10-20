@@ -1,6 +1,6 @@
 # M2b 第四步：NPC 之间碰面聊天（旁听）
 
-> 状态：已实现，等 Windows 游戏内验收（2026-10-20）。分支 `m2b-npc-chat`，建在 `main` / `db94a12` 上（复用气泡的显示），目录 `/Users/a11/Documents/ChatGPT/stardew-agent-chat`。验收前不合入 `main`。对应 `design.md` §7 的场景调用、§8 的 `bubble`（“让玩家能旁听 NPC 之间说的话”）。
+> 状态：已实现，Windows 组合脚本验收通过（2026-10-20）；修复及证据在 `codex/social-windows-tests`，未合入 `main`。上游分支 `m2b-npc-chat` 建在 `main` / `db94a12` 上（复用气泡的显示），目录 `/Users/a11/Documents/ChatGPT/stardew-agent-chat`。对应 `design.md` §7 的场景调用、§8 的 `bubble`（“让玩家能旁听 NPC 之间说的话”）。
 
 ## 1. 效果
 
@@ -112,3 +112,9 @@ Mod 端在 Mac 上只能编译，C# 流程检查在 Mac 上加载不了游戏程
 4. 对话、菜单、剧情进行中不触发；走远（8 格外）不触发。
 5. 内容不提农场主，不聊恋爱和心事。
 6. 想关掉：`config.json` 里把 `NpcChat` 改成 `false`。
+
+## 8. Windows 组合脚本验收
+
+用户指定由助手写一个脚本测三项，统一入口 `tools/test-game-social.ps1`。115/115 Node、20/20 C#、类型检查、构建和 Release 编译通过，游戏 80.43 秒、39 项检查和 5 次真实调用通过。覆盖原生触发、距离、开关、菜单/剧情、一天四段与一小时间隔，重新打开原生画面核对。真实模型的格斯/潘姆 4 句为 542 输入/110 输出 token、6.858 秒。
+
+发现后端原来漏检一小时间隔：修复前 6:50 请求实际失败，现补上 60 分钟、当前日期与异步跨天保护；不改 prompt，正常 token 增量 0。完整证据、复现和范围见 [组合报告](test-results/2026-10-20-social-windows.md)。

@@ -29,6 +29,7 @@ internal sealed partial class ModEntry
     private int sceneRequestSeq;
     private uint sceneRequestedTick;
     private uint nextSceneLineTick;
+    private uint sceneCurrentTick;
 
     private void ClearScenes()
     {
@@ -66,6 +67,7 @@ internal sealed partial class ModEntry
 
     private void TickScenes(UpdateTickedEventArgs e)
     {
+        this.sceneCurrentTick = e.Ticks;
         if (this.sceneLines.Count > 0 && e.Ticks >= this.nextSceneLineTick)
         {
             // A speaker who has left the map is skipped; the rest of the talk goes on.
@@ -76,14 +78,21 @@ internal sealed partial class ModEntry
                 npc.showTextAboveHead(text);
                 if (BubbleEmotes.TryGetValue(emote, out int emoteId))
                     npc.doEmote(emoteId);
+                if (this.memoryTest?.Social == true)
+                    this.socialTestSceneLines.Add(new { npc = id, text, emote, visible = this.BubbleText(npc), day = this.currentDay });
             }
             this.nextSceneLineTick = e.Ticks + SceneLineTicks;
         }
         if (this.sceneRequestSeq != 0 && e.Ticks - this.sceneRequestedTick > SceneReplyTicks)
             this.sceneRequestSeq = 0;
         // The scripted tests place NPCs on purpose; a scene there would only add model calls and noise.
-        if (!e.IsMultipleOf(60) || !this.config.NpcChat || this.memoryTest is not null || this.abigailTestRequest is not null
-            || this.sceneRequestSeq != 0 || this.sceneLines.Count > 0
+        if (e.IsMultipleOf(60) && this.memoryTest is null && this.abigailTestRequest is null)
+            this.TryStartScene();
+    }
+
+    private void TryStartScene()
+    {
+        if (!this.config.NpcChat || this.sceneRequestSeq != 0 || this.sceneLines.Count > 0
             || this.scenesToday >= ScenesPerDay || !this.CanChat || !Context.IsPlayerFree || Game1.eventUp || this.talk is not null
             || Game1.currentLocation is not GameLocation location)
             return;
@@ -104,7 +113,7 @@ internal sealed partial class ModEntry
                     continue;
                 this.scenesToday++;
                 this.lastSceneAt = Game1.timeOfDay;
-                this.sceneRequestedTick = e.Ticks;
+                this.sceneRequestedTick = this.sceneCurrentTick;
                 this.sceneRequestSeq = this.Send("scene.request", new()
                 {
                     ["npcs"] = new[] { near[i].Name, near[j].Name },

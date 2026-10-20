@@ -1,6 +1,6 @@
 # M2b 第六步：聊天影响原版好感
 
-> 状态：已实现，等 Windows 游戏内验收（2026-10-20）。分支 `m2b-friendship`，建在 `m2b-gifts` 上，目录 `/Users/a11/Documents/ChatGPT/stardew-agent-gifts`。验收前不合入 `main`。对应 `design.md` §0 已确认的“NPC 可以提高好感，也可以降低好感”和 §8 的 `friendship.adjust`。
+> 状态：已实现，Windows 组合脚本验收通过（2026-10-20）；证据在 `codex/social-windows-tests`，未合入 `main`。上游分支 `m2b-friendship` 建在 `m2b-gifts` 上，目录 `/Users/a11/Documents/ChatGPT/stardew-agent-gifts`。对应 `design.md` §0 已确认的“NPC 可以提高好感，也可以降低好感”和 §8 的 `friendship.adjust`。
 
 ## 1. 效果
 
@@ -101,3 +101,9 @@ Mod 端在 Mac 上只能编译；效果在 Windows 上看（§7）。
 5. 打开对话的那一轮不改好感。
 6. 不保存回到标题、重新读档：好感回到聊天之前。
 7. `config.json` 里把 `ChatChangesFriendship` 改成 `false`：聊天不再改好感。
+
+## 8. Windows 组合脚本验收
+
+统一入口 `tools/test-game-social.ps1`，固定模型的原版输入、实际好感变化、两端 `+30/-40` 上限、关闭开关、重复回复不重复执行、新日重置、实际睡觉保存及不保存回滚均通过。真实模型开场 `mood=1` 仍执行 0，询问礼物 +10、夸画 +20、冒犯 -20，原版实际点数依次为 `2040→2050→2070→2050`。
+
+115/115 Node、20/20 C#，完整游戏 80.43 秒、39 项检查通过。未改好感规则或 prompt 固定内容；本次 4 次真实对话为 1936–2051 输入、110–141 输出 token。模型仍有补写细节和记忆字段格式不准的样本，完整内容、自动忽略结果及范围见 [组合报告](test-results/2026-10-20-social-windows.md)。

@@ -1,6 +1,6 @@
 # M2b 第五步：NPC 记得玩家送的礼物
 
-> 状态：已实现，等 Windows 游戏内验收（2026-10-20）。分支 `m2b-gifts`，建在 `m2b-npc-chat` 上，目录 `/Users/a11/Documents/ChatGPT/stardew-agent-gifts`。验收前不合入 `main`。对应 `design.md` §10 的 `gift.given`。
+> 状态：已实现，Windows 组合脚本验收通过（2026-10-20）；证据在 `codex/social-windows-tests`，未合入 `main`。上游分支 `m2b-gifts` 建在 `m2b-npc-chat` 上，目录 `/Users/a11/Documents/ChatGPT/stardew-agent-gifts`。对应 `design.md` §10 的 `gift.given`。
 
 ## 1. 效果
 
@@ -81,3 +81,7 @@ Mod 端在 Mac 上只能编译；C# 流程检查在 Mac 上加载不了游戏程
 5. 再送一样她讨厌的东西，不保存直接回标题、重新读档：她不记得这件。
 6. 交任务物品（比如告示板上的送货任务）不会被当成礼物记下。
 7. 后端日志里不该出现“处理 gift.given 出错”。
+
+## 7. Windows 组合脚本验收
+
+统一入口 `tools/test-game-social.ps1`，实际通过原版 `tryToReceiveActiveObject` 送紫水晶与粘土，核对 Mod 自动检测的物品名和原版喜好。同一消息重发不重复记；紫水晶经实际睡觉保存后同时存在于 SQLite 和次日 prompt，粘土未保存退出后两边均无记录；夜间整合用固定模型核对保留。真实模型回答正确说出“紫水晶”。115/115 Node、20/20 C#，完整游戏 80.43 秒、39 项检查通过，源存档 6 个哈希未变。生日、任务和节日的覆盖边界见 [组合报告](test-results/2026-10-20-social-windows.md)。未修改礼物模板、记忆内核或固定 prompt。

@@ -74,7 +74,7 @@ internal sealed partial class ModEntry
 
     private void CaptureBubbleTest()
     {
-        if ((this.memoryTest?.BubblesOnly != true && this.memoryTest?.MailOnly != true) || this.bubbleTestCapture is not { } name || DateTime.UtcNow < this.bubbleTestCaptureAt) return;
+        if ((this.memoryTest?.BubblesOnly != true && this.memoryTest?.MailOnly != true && this.memoryTest?.Social != true) || this.bubbleTestCapture is not { } name || DateTime.UtcNow < this.bubbleTestCaptureAt) return;
         this.bubbleTestCapture = null;
         try
         {

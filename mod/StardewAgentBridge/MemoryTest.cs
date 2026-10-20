@@ -22,6 +22,8 @@ internal sealed class MemoryTestConfig
     public bool MorningPlans { get; set; }
     public bool BubblesOnly { get; set; }
     public bool MailOnly { get; set; }
+    public bool Social { get; set; }
+    public bool Offline { get; set; }
 }
 
 internal sealed partial class ModEntry
@@ -130,7 +132,12 @@ internal sealed partial class ModEntry
                         return;
                     this.CheckMemoryTestSave();
                     // This is a disposable save; high hearts avoid the documented low-heart recall filter.
-                    Game1.player.friendshipData["Abigail"] = new Friendship(2000);
+                    if (!test.Social) Game1.player.friendshipData["Abigail"] = new Friendship(2000);
+                    if (test.Social)
+                    {
+                        this.BeginSocialTest();
+                        break;
+                    }
                     if (test.MailOnly)
                     {
                         this.BeginLetterTest();
@@ -164,6 +171,11 @@ internal sealed partial class ModEntry
                     NPC npc = Game1.getCharacterFromName("Abigail");
                     if (npc.currentLocation != Game1.currentLocation)
                         throw new InvalidOperationException("阿比盖尔已离开目标地点。");
+                    if (test.Social)
+                    {
+                        this.MemoryTestProgress("social", "已到组合验收场地。");
+                        break;
+                    }
                     if (test.BubblesOnly)
                     {
                         this.BeginBubbleTest(npc);
@@ -306,6 +318,13 @@ internal sealed partial class ModEntry
                 case "mail-only":
                     this.TickLetterTest();
                     break;
+                case "social":
+                    this.TickSocialTest();
+                    break;
+                case "social-title":
+                    if (Game1.activeClickableMenu is TitleMenu && !Context.IsWorldReady && this.lifecycle.Count == 0)
+                        this.MemoryTestProgress("reload-menu", "重新加载组合验收副本。");
+                    break;
                 case "mail-title":
                     if (Game1.activeClickableMenu is TitleMenu && !Context.IsWorldReady && this.lifecycle.Count == 0)
                         this.MemoryTestProgress("reload-menu", "重新加载副本，核对信件和附件存档状态。");
@@ -325,7 +344,7 @@ internal sealed partial class ModEntry
                     break;
                 case "wait-title-finish":
                     if (Game1.activeClickableMenu is TitleMenu && !Context.IsWorldReady && this.lifecycle.Count == 0)
-                        this.FinishMemoryTest(true, test.MailOnly ? "原生信箱、附件领取、回滚和保存检查完成。" : test.BubblesOnly ? "原生气泡显示、距离、冷却与读档检查完成。" : "跨天、未保存回滚、后端重启和旧档分叉的真机流程完成。");
+                        this.FinishMemoryTest(true, test.Social ? "NPC 碰面聊天、送礼记忆、聊天好感及保存回滚的组合验收完成。" : test.MailOnly ? "原生信箱、附件领取、回滚和保存检查完成。" : test.BubblesOnly ? "原生气泡显示、距离、冷却与读档检查完成。" : "跨天、未保存回滚、后端重启和旧档分叉的真机流程完成。");
                     break;
 
                 case "saved-a":
@@ -475,6 +494,8 @@ internal sealed partial class ModEntry
             pointer = this.savedCommit, generation = this.bridge.Generation, replies = this.memoryTestReplies,
             bubbleChecks = this.bubbleTestChecks, bubblePackets = this.bubbleTestPackets,
             letterChecks = this.letterTestChecks, letterPackets = this.letterTestPackets,
+            socialChecks = this.socialTestChecks, socialReplies = this.socialTestReplies,
+            socialSceneLines = this.socialTestSceneLines,
             worldReady = Context.IsWorldReady, saveProcessing = SaveGame.IsProcessing, newDay = Game1.newDay,
             events = this.memoryTestEvents, elapsedSeconds = Math.Round((DateTime.UtcNow - this.memoryTestStarted).TotalSeconds, 2) },
             new JsonSerializerOptions { WriteIndented = true });
