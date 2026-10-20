@@ -16,6 +16,8 @@ export interface BridgeOptions {
   memoryDirectory: string;
   /** Consolidates each confirmed save in the background (docs/nightly-consolidation.md). */
   consolidator?: Consolidator;
+  /** Override the 30-second recovery delay for isolated tests. */
+  nightlyRetryDelayMs?: number;
   /** 0 picks a free port (tests). */
   port: number;
   host?: string;
@@ -50,7 +52,7 @@ export class BridgeServer {
   }
 
   static async start(options: BridgeOptions): Promise<BridgeServer> {
-    const memory = await GameMemory.open(options.memoryDirectory, options.log, options.consolidator);
+    const memory = await GameMemory.open(options.memoryDirectory, options.log, options.consolidator, options.nightlyRetryDelayMs);
     const server = new WebSocketServer({ port: options.port, host: options.host ?? '127.0.0.1', maxPayload: 256 * 1024 });
     try {
       await new Promise<void>((resolve, reject) => { server.once('listening', resolve); server.once('error', reject); });

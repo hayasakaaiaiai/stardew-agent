@@ -79,9 +79,9 @@ export async function harness(t: TestContext) {
   const fake = fakeModel();
   const servers: BridgeServer[] = [];
   const logs: string[] = [];
-  const start = async (consolidator?: Consolidator) => {
+  const start = async (consolidator?: Consolidator, nightlyRetryDelayMs?: number) => {
     const server = await BridgeServer.start({ roster, model: fake.model, memoryDirectory: directory, port: 0, log: line => logs.push(line),
-      ...(consolidator ? { consolidator } : {}) });
+      ...(consolidator ? { consolidator } : {}), ...(nightlyRetryDelayMs !== undefined ? { nightlyRetryDelayMs } : {}) });
     servers.push(server); return server;
   };
   const stop = async (server: BridgeServer) => { servers.splice(servers.indexOf(server), 1); await server.close(); };

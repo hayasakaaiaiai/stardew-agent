@@ -5,7 +5,7 @@ import { join, resolve } from 'node:path';
 import { test } from 'node:test';
 import { type Bubble, bubblesFor, parseBubbles } from '../src/agent/bubbles.ts';
 import { GIFT_COOLDOWN_DAYS, giftFor, letterFor, safeLetter } from '../src/agent/letters.ts';
-import { nightlyConsolidator, nightlyPrompt, NIGHTLY_RULES, parseNightly, type NightlyOutput } from '../src/agent/nightly.ts';
+import { NightlyOutputError, nightlyConsolidator, nightlyPrompt, NIGHTLY_RULES, parseNightly, type NightlyOutput } from '../src/agent/nightly.ts';
 import { runTurn, type WorldState } from '../src/agent/dialogue.ts';
 import type { ChatMessage, Completion, ModelClient, StreamHandlers } from '../src/services/model/client.ts';
 import { Roster } from '../src/services/roster/index.ts';
@@ -153,7 +153,7 @@ test('unknown dialogue sources and ungrounded rewrites cannot change memory or s
       answer({ memories: [{ sources: ['t999'], importance: 5 }], impression: '已成为恋人' }),
       JSON.stringify({ memories: [{ text: '玩家去过墓地', importance: 5 }], impression: '已成为恋人' }),
     ]);
-    assert.deepEqual(await nightlyConsolidator({ roster, model: model.model })(input, new AbortController().signal), []);
+    await assert.rejects(nightlyConsolidator({ roster, model: model.model })(input, new AbortController().signal), NightlyOutputError);
     assert.equal(model.sent.length, 2);
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
@@ -201,7 +201,7 @@ test('a night replaces its notes, retires what the model names, and the next day
   }
 });
 
-test('an answer that cannot be parsed twice keeps that day as it was, and is not paid for again', async () => {
+test('two invalid answers keep the day pending and a later load can recover it', async () => {
   const { directory, roster, logs, open } = await setup();
   const nightly = nightlyModel(['不是 JSON', '{"memories":"坏的"}']);
   let save = await open(nightly.model, true);
@@ -211,12 +211,17 @@ test('an answer that cannot be parsed twice keeps that day as it was, and is not
     await save.sleep();
     assert.equal(nightly.sent.length, 2);
     assert.equal(logs.filter((line) => line.includes('无法解析')).length, 2);
-    await save.close();
-    save = await open(nightly.model);
-    assert.equal(nightly.sent.length, 2, 'the commit counts as consolidated');
+    assert.ok(!logs.some(line => line.startsWith('夜间整合完成')));
     await talk(roster, dialogue.model, save)('你好');
     assert.match(dialogue.system(), /- （昨天）玩家最喜欢下雨天/);
     assert.doesNotMatch(dialogue.system(), /整体印象/);
+    await save.close();
+    const recovered = nightlyModel([answer({ memories: [{ sources: ['t1'], importance: 4 }], impression: '喜欢下雨天的人' })]);
+    save = await open(recovered.model);
+    assert.equal(recovered.sent.length, 1, 'an invalid night must not be stamped completed');
+    await talk(roster, dialogue.model, save)('你好');
+    assert.match(dialogue.system(), /整体印象：喜欢下雨天的人/);
+    assert.match(dialogue.system(), /农场主说："记住玩家最喜欢下雨天"/);
   } finally {
     await save.close();
     await rm(directory, { recursive: true, force: true });

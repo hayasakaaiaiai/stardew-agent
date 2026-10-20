@@ -41,7 +41,7 @@ export class GameMemory {
   private readonly directory: string;
   private readonly log: (line: string) => void;
   private readonly nightly: Nightly | undefined;
-  /** Told when a consolidation finished, so the day's bubbles can be sent again (docs/npc-bubbles.md). */
+  /** Only successful writes notify the Mod, including a delayed recovery round. */
   onConsolidated: ((lineageId: string, commitId: string) => void) | undefined;
   private readonly active = new Map<string, GameSave>();
   private readonly loading = new Map<string, Promise<void>>();
@@ -51,10 +51,13 @@ export class GameMemory {
   }
 
   /** Without a consolidator, saves are never consolidated (docs/nightly-consolidation.md). */
-  static async open(directory: string, log: (line: string) => void = () => {}, consolidator?: Consolidator): Promise<GameMemory> {
+  static async open(directory: string, log: (line: string) => void = () => {}, consolidator?: Consolidator, retryDelayMs?: number): Promise<GameMemory> {
     const runtime = await createRuntime({ databasePath: join(directory, 'memory.sqlite'), journalDirectory: join(directory, 'scratch') });
-    const nightly = consolidator ? new Nightly({ store: runtime.ctx.store, consolidator, npcIds: SOCIAL_NPCS, log }) : undefined;
-    return new GameMemory(runtime, directory, log, nightly);
+    const nightly = consolidator ? new Nightly({ store: runtime.ctx.store, consolidator, npcIds: SOCIAL_NPCS, log,
+      ...(retryDelayMs !== undefined ? { retryDelayMs } : {}) }) : undefined;
+    const memory = new GameMemory(runtime, directory, log, nightly);
+    if (nightly) nightly.onConsolidated = (lineageId, commitId) => memory.onConsolidated?.(lineageId, commitId);
+    return memory;
   }
 
   load(initial: LoadedSave): Promise<GameSave> {
@@ -95,13 +98,12 @@ export class GameMemory {
       state = { format: 1, initial, day: absoluteDay(initial.date), head: head.id, pointer: initial.commit,
         phase: 'open', pending: null, nextDay: null, lastSeq: 0, receipts: [] };
     }
-    const consolidated = (commitId: string) => this.onConsolidated?.(initial.lineageId, commitId);
     const save = new GameSave(this.runtime, path, state,
-      commitId => void this.nightly?.run(initial.lineageId, commitId).then(() => consolidated(commitId)));
+      commitId => void this.nightly?.run(initial.lineageId, commitId));
     await save.restore();
     this.active.set(initial.lineageId, save);
     // A crash or a closed backend can leave the last nights unconsolidated.
-    void this.nightly?.catchUp(initial.lineageId, save.head).then(() => consolidated(save.head));
+    void this.nightly?.catchUp(initial.lineageId, save.head);
     return save;
   }
 

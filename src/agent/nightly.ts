@@ -63,28 +63,31 @@ export interface NightlyOutput {
   gift: boolean;
 }
 
-/** Undefined for unsupported memories; only free-form state fields are clipped. */
-export function parseNightly(content: string): NightlyOutput | undefined {
+type NightlyInspection = { output: NightlyOutput } | { error: string };
+
+/** Keep validation and retry feedback on the same path; never repair or clip source selections. */
+function inspectNightly(content: string): NightlyInspection {
   const start = content.indexOf('{');
   const end = content.lastIndexOf('}');
-  if (start < 0 || end < start) return undefined;
+  if (start < 0 || end < start) return { error: '不是有效 JSON 对象' };
   let data: unknown;
-  try { data = JSON.parse(content.slice(start, end + 1)); } catch { return undefined; }
-  if (!data || typeof data !== 'object' || Array.isArray(data)) return undefined;
+  try { data = JSON.parse(content.slice(start, end + 1)); } catch { return { error: '不是有效 JSON 对象' }; }
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return { error: '不是有效 JSON 对象' };
   const { memories, retire, impression, plan, bubbles, letter, gift } = data as Record<string, unknown>;
-  if (!Array.isArray(memories) || typeof impression !== 'string') return undefined;
-  const selected = memories.flatMap((item): NightlyOutput['memories'] => {
-    if (!item || typeof item !== 'object' || Array.isArray(item)) return [];
+  if (!Array.isArray(memories) || typeof impression !== 'string') return { error: 'memories 必须是数组，impression 必须是字符串' };
+  if (memories.length > 2) return { error: `memories 有 ${memories.length} 条，最多 2 条` };
+  const selected: NightlyOutput['memories'] = [];
+  for (const [index, item] of memories.entries()) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return { error: `第 ${index + 1} 条记忆不是对象` };
     const { sources, importance } = item as Record<string, unknown>;
     // A third valid source may carry an invitation's answer; retain it rather than clip the context.
-    if (!Array.isArray(sources) || sources.length < 1 || sources.length > 3
-      || sources.some(id => typeof id !== 'string' || !/^t[1-9]\d*$/.test(id))) return [];
+    if (!Array.isArray(sources) || sources.length < 1) return { error: `第 ${index + 1} 条记忆缺少 sources 原话编号` };
+    if (sources.length > 3) return { error: `第 ${index + 1} 条记忆的 sources 引用了 ${sources.length} 条原话，最多 3 条` };
+    if (sources.some(id => typeof id !== 'string' || !/^t[1-9]\d*$/.test(id))) return { error: `第 ${index + 1} 条记忆的 sources 必须使用 t1 这样的对话编号` };
     const valid = Number.isInteger(importance) && (importance as number) >= 1 && (importance as number) <= 5;
-    return [{ sources: [...new Set(sources as string[])], importance: valid ? importance as number : 3 }];
-  });
-  // Never silently drop an unsupported memory and then retire all the original notes.
-  if (selected.length !== memories.length || selected.length > 2) return undefined;
-  return {
+    selected.push({ sources: [...new Set(sources as string[])], importance: valid ? importance as number : 3 });
+  }
+  return { output: {
     memories: selected,
     retire: Array.isArray(retire) ? retire.filter((id): id is string => typeof id === 'string') : [],
     impression: clip(impression, 120),
@@ -92,7 +95,28 @@ export function parseNightly(content: string): NightlyOutput | undefined {
     bubbles: parseBubbles(bubbles),
     letter: typeof letter === 'string' ? safeLetter(letter) ?? '' : '',
     gift: gift === true,
-  };
+  } };
+}
+
+/** Undefined for unsupported memories; only free-form state fields are clipped. */
+export function parseNightly(content: string): NightlyOutput | undefined {
+  const checked = inspectNightly(content);
+  return 'output' in checked ? checked.output : undefined;
+}
+
+/** The first request is unchanged; only an invalid output incurs this bounded feedback. */
+export function nightlyRetryMessages(messages: ChatMessage[], reason: string): ChatMessage[] {
+  const feedback = `上次输出不合格：${reason}。请按原规则重新输出完整 JSON；每条记忆最多引用 3 条原话，保留否定与回应，不要截断原话或编造编号。`;
+  return messages.map((message, index) => ({ ...message,
+    content: message.content + (index === messages.length - 1 ? '\n\n## 格式重试\n' + feedback : '') }));
+}
+
+/** Propagating this error leaves the commit's existing atomic consolidation unfinished. */
+export class NightlyOutputError extends Error {
+  constructor(npcId: string, reason: string) {
+    super(`${npcId} 连续 ${MAX_ATTEMPTS} 次输出不合格：${reason}`);
+    this.name = 'NightlyOutputError';
+  }
 }
 
 function clip(text: string, max: number): string {
@@ -159,23 +183,27 @@ function dateLabel(day: number): string {
   return `第 ${Math.floor(index / 112) + 1} 年${SEASONS[SEASON_ORDER[Math.floor(index / 28) % 4]!]} ${(index % 28) + 1} 日`;
 }
 
-/** Network errors propagate, so the whole commit is retried later; a bad answer only leaves this NPC unchanged. */
+/** An exhausted format retry propagates just like a network failure; no incomplete batch is committed. */
 export function nightlyConsolidator(deps: { roster: Roster; model: ModelClient; log?: (line: string) => void }): Consolidator {
   return async (input, signal) => {
     const npc = input.npcs[0]!;
     const prompt = nightlyPrompt(deps.roster, input.commit, npc);
     if (!prompt.hasTurns) return [];
+    let problem = '';
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-      const completion = await deps.model.chat(prompt.messages, {}, { json: true, signal });
-      const output = parseNightly(completion.content);
+      const messages = problem ? nightlyRetryMessages(prompt.messages, problem) : prompt.messages;
+      const completion = await deps.model.chat(messages, {}, { json: true, signal });
+      const checked = inspectNightly(completion.content);
+      const output = 'output' in checked ? checked.output : undefined;
       const usage = completion.usage ? `，输入 ${completion.usage.inputTokens}，输出 ${completion.usage.outputTokens}` : '';
       if (output && output.memories.every(memory => memory.sources.every(id => prompt.sources.some(source => source.id === id)))) {
         deps.log?.(`${npc.npcId} 整合完成${usage}`);
         return [change(npc, prompt, output, input.commit.dayEnded)];
       }
-      deps.log?.(`${npc.npcId} 的整合输出无法解析或引用无效（第 ${attempt} 次）`);
+      problem = 'error' in checked ? checked.error : '引用了本次对话中不存在的编号，只能引用今天给定的 t 编号';
+      deps.log?.(`${npc.npcId} 的整合输出无法解析或引用无效（第 ${attempt} 次）：${problem}`);
     }
-    return [];
+    throw new NightlyOutputError(npc.npcId, problem);
   };
 }
 
@@ -211,6 +239,8 @@ function change(npc: NpcInput, prompt: ReturnType<typeof nightlyPrompt>, output:
 
 /** How many confirmed commits back from the loaded one are checked for a missed consolidation. */
 const CATCH_UP = 3;
+/** One delayed recovery round per commit and backend; normal nights incur no extra call. */
+export const NIGHTLY_RETRY_DELAY_MS = 30_000;
 
 /**
  * Runs consolidations one at a time in the background. Results only depend on a saved commit, so a reload or
@@ -223,13 +253,18 @@ export class Nightly {
   private readonly log: (line: string) => void;
   private readonly stop = new AbortController();
   private readonly queued = new Map<string, Promise<void>>();
+  private readonly retryTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private readonly recoveryUsed = new Set<string>();
+  private readonly retryDelayMs: number;
   private chain: Promise<void> = Promise.resolve();
+  onConsolidated: ((lineageId: string, commitId: string) => void) | undefined;
 
-  constructor(options: { store: StoreService; consolidator: Consolidator; npcIds: readonly string[]; log?: (line: string) => void }) {
+  constructor(options: { store: StoreService; consolidator: Consolidator; npcIds: readonly string[]; log?: (line: string) => void; retryDelayMs?: number }) {
     this.store = options.store;
     this.consolidator = options.consolidator;
     this.npcIds = options.npcIds;
     this.log = options.log ?? (() => {});
+    this.retryDelayMs = options.retryDelayMs ?? NIGHTLY_RETRY_DELAY_MS;
   }
 
   /** Never rejects: a failure is logged and the commit is picked up again by `catchUp`. */
@@ -237,6 +272,8 @@ export class Nightly {
     const key = `${lineageId}\n${commitId}`;
     const existing = this.queued.get(key);
     if (existing) return existing;
+    const timer = this.retryTimers.get(key);
+    if (timer) { clearTimeout(timer); this.retryTimers.delete(key); }
     const result = this.chain.then(() => this.consolidate(lineageId, commitId));
     this.queued.set(key, result);
     this.chain = result;
@@ -262,6 +299,8 @@ export class Nightly {
 
   async close(): Promise<void> {
     this.stop.abort('Backend stopping');
+    for (const timer of this.retryTimers.values()) clearTimeout(timer);
+    this.retryTimers.clear();
     await this.chain;
   }
 
@@ -278,8 +317,30 @@ export class Nightly {
       await consolidateCommit(this.store, { lineageId, commitId, npcIds: [...this.npcIds] }, counted, this.stop.signal);
       // A commit that was already consolidated, or had nobody to consolidate, makes no model call and no noise.
       if (npcs) this.log(`夜间整合完成：第 ${day} 天，${npcs} 位 NPC，用时 ${((performance.now() - started) / 1000).toFixed(1)} 秒`);
+      if (npcs) {
+        try { this.onConsolidated?.(lineageId, commitId); }
+        catch (error) { this.log(`整合后的通知失败：${error instanceof Error ? error.message : String(error)}`); }
+      }
     } catch (error) {
-      if (!this.stop.signal.aborted) this.log(`夜间整合失败，下次读档再试：${error instanceof Error ? error.message : String(error)}`);
+      if (this.stop.signal.aborted) return;
+      if (!(error instanceof NightlyOutputError)) {
+        this.log(`夜间整合失败，下次读档再试：${error instanceof Error ? error.message : String(error)}`);
+        return;
+      }
+      const key = `${lineageId}\n${commitId}`;
+      this.log(`夜间整合待恢复：第 ${day} 天，${error.message}；未标为完成，原始记忆保留。`);
+      if (this.recoveryUsed.has(key)) {
+        this.log('本提交自动补跑额度已用尽，停止自动调用；下次读档或重启可再试。');
+        return;
+      }
+      this.recoveryUsed.add(key);
+      this.log(`将在 ${this.retryDelayMs / 1000} 秒后自动补跑一次。`);
+      const timer = setTimeout(() => {
+        this.retryTimers.delete(key);
+        if (!this.stop.signal.aborted) void this.run(lineageId, commitId);
+      }, this.retryDelayMs);
+      timer.unref();
+      this.retryTimers.set(key, timer);
     }
   }
 }

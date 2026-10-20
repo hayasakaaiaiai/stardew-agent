@@ -1,6 +1,6 @@
 # M2b 第三步：NPC 寄信
 
-> 状态：Windows 脚本验收通过并保留失败记录（2026-10-20）。上游 `m2b-mail` / `fa3e818` 建在 `m2b-bubbles` 上；Windows 在 `codex/mail-windows-tests` 保留气泡修复并完成寄信验收。97/97 Node、18/18 C#、原生信箱及真实模型流程通过；模型引用超限导致整合跳过的问题仍保留，见 [Windows 报告](test-results/2026-10-20-mail-windows.md)。未合入 `main`。对应 `design.md` §8 的 `mail.send`。
+> 状态：Windows 脚本验收通过并保留失败记录（2026-10-20）。上游 `m2b-mail` / `fa3e818` 建在 `m2b-bubbles` 上；Windows 在 `codex/mail-windows-tests` 完成寄信验收及格式失败恢复。最新 103/103 Node、18/18 C#；引用超限现保留待恢复、有限补跑，成功后刷新信件，见 [恢复报告](test-results/2026-10-20-nightly-recovery.md)。原寄信验收见 [Windows 报告](test-results/2026-10-20-mail-windows.md)。未合入 `main`。对应 `design.md` §8 的 `mail.send`。
 
 ## 1. 效果
 
@@ -106,7 +106,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/test-game-memory.p
 
 修复：保留上一轮异步版本/日期/提交检查并扩展到信件；异常信件行和错误字段类型不再抛错，未知 NPC 丢弃；补上原版 `[#]` 标题元数据，避免收藏列表显示 `???`。规则收紧曾误杀三封真实模型便条，已保留该次数据并改为拦截具体动作。未改 prompt 或增加调用次数。
 
-最终真实模型流程 `.runtime/game-memory-20261020-193601/`：112.17 秒、17 次调用、3 次真实睡觉保存；A 收到猫的来信和蝙蝠翅膀附件，B/C 在冷却中寄信但不附东西。5 个实际 Mod 接收节点与数据库一致，恢复旧 A 和 C 的正文缓存中没有 B 的信。此前一次模型每条引用 4 行，超过现有 3 行上限，两次重试后整合跳过；该问题仍需改进。三次真实模型流程共 47 次调用，成功和失败均见 [报告](test-results/2026-10-20-mail-windows.md)。
+寄信验收的最终真实模型流程 `.runtime/game-memory-20261020-193601/`：112.17 秒、17 次调用、3 次真实睡觉保存；A 收到猫的来信和蝙蝠翅膀附件，B/C 在冷却中寄信但不附东西。5 个实际 Mod 接收节点与数据库一致，恢复旧 A 和 C 的正文缓存中没有 B 的信。此前引用超限后被误记为完成的问题现已修复：新的故障注入在 30 秒后自动补跑成功，125.26 秒完整流程通过。寄信阶段三次真实流程共 47 次调用，成功和失败均见 [原报告](test-results/2026-10-20-mail-windows.md)，后续恢复修复见 [新报告](test-results/2026-10-20-nightly-recovery.md)。
 
 仍可手动补充正常游玩观察：
 

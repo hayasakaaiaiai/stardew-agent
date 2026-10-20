@@ -10,12 +10,27 @@ import { SOCIAL_NPCS } from '../src/types.ts';
 
 if (!process.send) throw new Error('Start this backend through test-game-memory.ps1');
 const ROOT = resolve(import.meta.dirname, '..');
-const config = JSON.parse((await readFile(process.argv[2]!, 'utf8')).replace(/^\uFEFF/, '')) as { RunDirectory: string; Nightly?: boolean };
+const config = JSON.parse((await readFile(process.argv[2]!, 'utf8')).replace(/^\uFEFF/, '')) as { RunDirectory: string; Nightly?: boolean; NightlyRecovery?: boolean };
 process.loadEnvFile(join(ROOT, '.env'));
+const injectionPath = join(config.RunDirectory, 'model-injections.jsonl');
+let injections = 0;
+if (config.NightlyRecovery) {
+  try { injections = (await readFile(injectionPath, 'utf8')).trim().split('\n').filter(Boolean).length; }
+  catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
+}
 class RecordingModel extends ModelClient {
   kind: 'dialogue' | 'nightly' = 'dialogue';
   override async chat(messages: ChatMessage[], handlers: StreamHandlers = {}, options: { json?: boolean; signal?: AbortSignal } = {}) {
     const startedAt = new Date().toISOString();
+    const sourceCount = messages[1]?.content.match(/^- t\d+ (?:NPC|玩家)：/gm)?.length ?? 0;
+    if (config.NightlyRecovery && this.kind === 'nightly' && injections < 2 && sourceCount >= 4) {
+      // Controlled invalid responses are logged separately and never counted as paid API calls.
+      const content = JSON.stringify({ memories: [{ sources: ['t1', 't2', 't3', 't4'], importance: 5 }], retire: [],
+        impression: '故障注入不应写入', plan: '故障注入不应写入', letter: '故障注入不应寄出', gift: false, bubbles: [] });
+      appendFileSync(injectionPath, JSON.stringify({ injected: true, index: ++injections, startedAt, sourceCount, messages, content }) + '\n');
+      return { content, reasoning: '', finishReason: 'stop', usage: null,
+        timing: { firstReasoningMs: null, firstContentMs: 0, totalMs: 0 } } as const;
+    }
     const completion = await super.chat(messages, handlers, options);
     appendFileSync(join(config.RunDirectory, 'model-calls.jsonl'), JSON.stringify({
       kind: this.kind, thinking: this.config.thinking, startedAt, finishedAt: new Date().toISOString(),

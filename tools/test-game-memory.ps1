@@ -4,11 +4,12 @@ param(
     [switch]$Nightly,
     [switch]$MorningPlans,
     [switch]$BubblesOnly,
-    [switch]$MailOnly
+    [switch]$MailOnly,
+    [switch]$NightlyRecovery
 )
 
 $ErrorActionPreference = 'Stop'
-if ($MailOnly -and ($BubblesOnly -or $Nightly -or $MorningPlans)) { throw 'MailOnly is a separate native fixture; do not combine it with other scenarios.' }
+if (($MailOnly -and ($BubblesOnly -or $Nightly -or $MorningPlans -or $NightlyRecovery)) -or ($BubblesOnly -and $NightlyRecovery)) { throw 'Native fixed-packet fixtures cannot be combined with the recovery scenario.' }
 $taskRoot = Split-Path -Parent $PSScriptRoot
 if (Get-Process -Name StardewModdingAPI,'Stardew Valley' -ErrorAction SilentlyContinue) {
     throw '请先正常退出游戏；记忆验收会自动启动并只加载独立副本。'
@@ -62,7 +63,8 @@ Copy-Item -LiteralPath $taskCopy -Destination (Join-Path $taskRun 'initial-copy'
 $taskConfig = [pscustomobject]@{
     RequestId=[Guid]::NewGuid().ToString(); SaveFolder=$taskFolder; UniqueId=$taskId
     BackendUrl=''; RunDirectory=$taskRun; SaveDirectory=$taskCopy; GamePath=$GamePath
-    Nightly=[bool]($Nightly -or $MorningPlans); MorningPlans=[bool]$MorningPlans; BubblesOnly=[bool]$BubblesOnly; MailOnly=[bool]$MailOnly
+    Nightly=[bool]($Nightly -or $MorningPlans -or $NightlyRecovery); MorningPlans=[bool]($MorningPlans -or $NightlyRecovery)
+    BubblesOnly=[bool]$BubblesOnly; MailOnly=[bool]$MailOnly; NightlyRecovery=[bool]$NightlyRecovery
 }
 $taskConfigPath = Join-Path $taskRun 'config.json'
 $taskConfig | ConvertTo-Json | Set-Content -LiteralPath $taskConfigPath -Encoding UTF8

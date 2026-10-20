@@ -17,6 +17,7 @@ interface Config {
   RunDirectory: string; SaveDirectory: string; GamePath: string;
   Nightly?: boolean;
   MorningPlans?: boolean;
+  NightlyRecovery?: boolean;
 }
 interface Pointer { Format: number; LineageId: string; CommitId: string; ParentId: string | null; DayEnded: number }
 interface Reply { label: string; line: string; reply: string; day: number; nonce: string; hearts: number; generation: number; requestSeq?: number }
@@ -219,7 +220,10 @@ async function night(pointer: Pointer): Promise<NightEvidence | undefined> {
   const ackObservedBeforeCompletion = fingerprint() === null;
   log(`等待第 ${pointer.DayEnded} 天的真实模型夜间整合完成...`);
   const deadline = Date.now() + 90_000;
-  while (fingerprint() === null && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 200));
+  while (fingerprint() === null && Date.now() < deadline) {
+    await observePendingRecovery(pointer);
+    await new Promise(resolve => setTimeout(resolve, 200));
+  }
   assert.ok(fingerprint(), '夜间整合没有在限时内完成，不能把原始记忆当作整合通过');
   const states = sql<{ state: string }>('SELECT state FROM npc_state WHERE commit_id=? AND npc_id=? AND phase=?',
     pointer.CommitId, 'abigail', 'consolidated');
@@ -257,7 +261,37 @@ async function night(pointer: Pointer): Promise<NightEvidence | undefined> {
       .map(source => `${source.speaker === '玩家' ? '农场主说' : '我说'}：${JSON.stringify(source.text)}`).join('\n');
   });
   assert.deepEqual(summaries.map(memory => memory.text).sort(), expected.sort(), '数据库中的摘要必须保留原说话人和完整原话');
+  const recovery = evidence.recovery as { commitId: string; lastInjectedAt: string; recoveredAt?: string; waitMs?: number } | undefined;
+  if (recovery?.commitId === pointer.CommitId) {
+    recovery.recoveredAt = new Date().toISOString();
+    recovery.waitMs = Date.now() - Date.parse(recovery.lastInjectedAt);
+    assert.ok(recovery.waitMs >= 29_000, '正式 30 秒后台延迟没有生效');
+  }
   return { pointer, state, summaries, retired, call, ackObservedBeforeCompletion };
+}
+async function observePendingRecovery(pointer: Pointer) {
+  if (!config.NightlyRecovery || evidence.recovery) return;
+  let rows: { startedAt: string; sourceCount: number; content: string }[];
+  try {
+    rows = (await readFile(join(directory, 'model-injections.jsonl'), 'utf8')).trim().split('\n').filter(Boolean).map(line => JSON.parse(line));
+  } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT' || error instanceof SyntaxError) return; throw error; }
+  if (rows.length < 2) return;
+  assert.equal(rows.length, 2);
+  assert.ok(rows.every(row => row.sourceCount >= 4 && JSON.parse(row.content).memories[0].sources.length === 4));
+  const stateCount = sql<{ n: number }>("SELECT COUNT(*) AS n FROM npc_state WHERE commit_id=? AND phase='consolidated'", pointer.CommitId)[0]!.n;
+  const retiredCount = sql<{ n: number }>('SELECT COUNT(*) AS n FROM memory_retire WHERE commit_id=?', pointer.CommitId)[0]!.n;
+  assert.equal(stateCount, 0, '格式失败不能写 NPC 整合状态');
+  assert.equal(retiredCount, 0, '格式失败不能退役当天原始记忆');
+  assert.equal(sql<{ value: string | null }>('SELECT consolidation_fingerprint AS value FROM commit_node WHERE id=?', pointer.CommitId)[0]!.value,
+    null, '格式失败不能把提交标为已整合');
+  let current: Report;
+  try { current = JSON.parse(await readFile(join(directory, 'game-result.json'), 'utf8')) as Report; }
+  catch (error) { if (error instanceof SyntaxError) return; throw error; }
+  assert.ok(!JSON.stringify(current.letterPackets).includes('故障注入'), '不合格输出进入了 Mod 来信');
+  evidence.recovery = { commitId: pointer.CommitId, injected: 2, observedAt: new Date().toISOString(),
+    lastInjectedAt: rows[1]!.startedAt, pendingFingerprint: null, consolidatedStates: stateCount, retiredMemories: retiredCount };
+  await json(join(directory, 'evidence.json'), evidence);
+  log('已确认故障后仍待恢复：未写整合状态、未退役原记忆、未寄出错误信件。');
 }
 function impressionAt(item: Reply, state: NightState | undefined) {
   if (!state) return;
@@ -448,7 +482,14 @@ try {
     await new Promise(resolve => setTimeout(resolve, 300));
   }
   assert.ok(success, '等待真实游戏验收结果超时');
+  if (config.NightlyRecovery) {
+    const recovery = evidence.recovery as { recoveredAt?: string } | undefined;
+    assert.ok(recovery?.recoveredAt, '未实际经历故障后的后台自动恢复');
+    const data = await readFile(join(directory, 'game-result.json'), 'utf8');
+    assert.ok(!data.includes('故障注入'), '错误的整合内容出现在最终游戏记录中');
+  }
 } catch (error) {
+  success = false;
   errorMessage = error instanceof Error ? error.message : String(error);
   await control(last?.stage ?? 'starting', errorMessage);
   log('验收停止：' + errorMessage);
