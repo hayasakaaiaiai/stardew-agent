@@ -21,6 +21,8 @@ test('news is short, has no relative days, lasts one day, and is kept as the tel
   assert.equal(safeShare(` ${SHARE}^ `), SHARE);
   assert.equal(safeShare('测试说明天要去沙漠。'), undefined, 'told a day later, “明天” would be wrong');
   assert.equal(safeShare('长'.repeat(31)), undefined);
+  assert.equal(safeShare('小林特地来谢我上次帮的忙。'), undefined, 'thanks are courtesy, not news');
+  assert.equal(safeShare('小林送了谢恩一瓶啤酒。'), '小林送了谢恩一瓶啤酒。', '谢恩 is a name');
   assert.equal(shareFor({ day: 4, share: SHARE }, 5), SHARE);
   assert.equal(shareFor({ day: 3, share: SHARE }, 5), undefined);
   assert.equal(shareFor({ day: 4, share: '' }, 5), undefined);

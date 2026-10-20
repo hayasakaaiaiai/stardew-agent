@@ -9,8 +9,11 @@ const MAX_CHARS = 30;
 /** Characters the game reads as commands in on-screen text (docs/game-bridge.md §4.2). */
 const COMMANDS = /[\^#$@%{}*[\]|]/g;
 const EMOJI = /[\p{Extended_Pictographic}\u{FE0F}\u{200D}]/gu;
-/** It is told the day after it was written, so relative days would be a day off. */
-const UNSAFE = /今天|明天|昨天|前天|后天|今晚|昨晚|昨夜|刚才/;
+/**
+ * It is told the day after it was written, so relative days would be a day off. Thanks are courtesy, not news, yet
+ * the model picks them about half the time (docs/legacy-cleanup.md §5); 谢恩 is a name, not thanks.
+ */
+const UNSAFE = /今天|明天|昨天|前天|后天|今晚|昨晚|昨夜|刚才|谢(?!恩)/;
 /** The NPC who decided to tell it is the first hand; whoever heard it from them is the second and last. */
 export const MAX_HANDS = 2;
 
