@@ -1,7 +1,8 @@
 ﻿[CmdletBinding()]
 param(
     [string]$GamePath = 'E:\games\steamapps\common\Stardew Valley',
-    [switch]$PrepareOnly
+    [switch]$PrepareOnly,
+    [switch]$Manual
 )
 
 $ErrorActionPreference = 'Stop'
@@ -93,13 +94,17 @@ try {
 
     $taskRequest = [Guid]::NewGuid().ToString()
     $taskPreviousRequest = [Environment]::GetEnvironmentVariable('STARDEW_AGENT_TEST_ABIGAIL', 'Process')
+    $taskPreviousManual = [Environment]::GetEnvironmentVariable('STARDEW_AGENT_TEST_ABIGAIL_MANUAL', 'Process')
     try {
         [Environment]::SetEnvironmentVariable('STARDEW_AGENT_TEST_ABIGAIL', $taskRequest, 'Process')
+        [Environment]::SetEnvironmentVariable('STARDEW_AGENT_TEST_ABIGAIL_MANUAL', $(if ($Manual) { '1' } else { $null }), 'Process')
         $taskGame = Start-Process -FilePath $taskGameExe -WorkingDirectory $GamePath -WindowStyle Normal -PassThru
     } finally {
         [Environment]::SetEnvironmentVariable('STARDEW_AGENT_TEST_ABIGAIL', $taskPreviousRequest, 'Process')
+        [Environment]::SetEnvironmentVariable('STARDEW_AGENT_TEST_ABIGAIL_MANUAL', $taskPreviousManual, 'Process')
     }
-    Write-Output '游戏已启动，将自动点击加载、选择测试存档、传送并测试三轮对话。'
+    if ($Manual) { Write-Output '游戏已启动，将加载测试档并传送到阿比盖尔旁边，停在提示框供手测。' }
+    else { Write-Output '游戏已启动，将自动点击加载、选择测试存档、传送并测试三轮对话。' }
     $taskReportPath = Join-Path $taskModDirectory 'abigail-test-result.json'
     $taskDeadline = [DateTime]::UtcNow.AddSeconds(180)
     $taskLastMessage = ''
@@ -121,7 +126,10 @@ try {
                 $taskReport | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $taskRuntime 'abigail-test-result.json') -Encoding UTF8
                 if (-not $taskReport.success) { throw ('自动测试未通过：' + $taskReport.message) }
                 $taskCompleted = $true
-                Write-Output '自动测试通过。第三轮对话框已保留，可继续手动选择选项或自己说。'
+                if ($Manual) {
+                    if ($taskReport.mode -ne 'manual' -or $taskReport.replies -ne 0) { throw '手测入口意外进入了自动对话，请检查。' }
+                    Write-Output '手测已就绪。关闭提示后点击阿比盖尔，原版台词尚未由自动流程消费。'
+                } else { Write-Output '自动测试通过。第三轮对话框已保留，可继续手动选择选项或自己说。' }
                 break
             }
         }
