@@ -8,7 +8,7 @@ import type { DialogueMemory, Season } from '../../src/agent/dialogue.ts';
 import { withMorningPlan } from '../../src/agent/morning.ts';
 import { Nightly } from '../../src/agent/nightly.ts';
 import { DatabaseLock } from '../../src/companion/locks.ts';
-import { CompanionRegistry } from '../../src/companion/registry.ts';
+import { CompanionRegistry, isCompanionCommit } from '../../src/companion/registry.ts';
 import { type SaveSnapshot, SnapshotStore } from '../../src/companion/snapshot.ts';
 import { createRuntime, type SaveScope } from '../../src/index.ts';
 
@@ -104,7 +104,8 @@ export class ChatSave {
         registry: new CompanionRegistry(join(options.directory, 'companion/registry')),
         snapshots: new SnapshotStore(join(options.directory, 'saves')),
         nightly: options.consolidator ? new Nightly({
-          store: runtime.ctx.store, consolidator: options.consolidator, npcIds: options.npcIds, ...(options.log ? { log: options.log } : {}),
+          store: runtime.ctx.store, consolidator: options.consolidator, npcIds: options.npcIds, skip: isCompanionCommit,
+          ...(options.log ? { log: options.log } : {}),
         }) : undefined,
       };
       const save = new ChatSave(storage, file, options.npcIds, await ChatSave.load(storage, state));

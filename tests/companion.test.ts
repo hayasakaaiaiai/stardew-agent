@@ -8,6 +8,8 @@ import WebSocket, { WebSocketServer } from 'ws';
 import {
   buildMessages, parseOutput, runTurn, VOICE_JSON_HINT, type WorldState,
 } from '../src/agent/dialogue.ts';
+import type { Consolidator } from '../src/agent/consolidation.ts';
+import { Nightly } from '../src/agent/nightly.ts';
 import { PortraitPacks } from '../src/companion/assets.ts';
 import { DatabaseBusyError } from '../src/companion/locks.ts';
 import { OpusEncoder } from '../src/companion/opus.ts';
@@ -333,6 +335,39 @@ test("a robot with another NPC's face downloads this one and restarts before the
     assert.ok(again.messages.some((m) => m.type === 'llm' && m.emotion === 'happy'));
   } finally {
     await service.close();
+    await cleanup();
+  }
+});
+
+test("nightly consolidation skips the robot's commits but still catches up the save before them", async () => {
+  const { directory, roster, cleanup } = await setup();
+  const [snapshot] = await townSave(directory, roster);
+  // Three robot sessions in a row: catching up looks three commits back, and robot commits must not use them up.
+  const service = await startCompanion(directory, roster, voiceModel([]).model, fakeSpeech().speech);
+  try {
+    for (let i = 0; i < 3; i++) {
+      const robot = await connectDevice(service.port);
+      await service.begin(snapshot!, 'haley');
+      await until(() => robot.stops() === 1, 'the greeting');
+      await service.stop();
+      await robot.closed;
+    }
+  } finally {
+    await service.close();
+  }
+  const { commitId: robotCommit } = await robotLogs(directory, snapshot!);
+  assert.ok(isCompanionCommit(robotCommit));
+  const runtime = await createRuntime({ databasePath: join(directory, 'memory.sqlite'), journalDirectory: join(directory, 'scratch'), npcIds: SOCIAL_NPCS });
+  try {
+    const consolidated: string[] = [];
+    const consolidator: Consolidator = async (input) => { consolidated.push(input.commit.id); return []; };
+    const nightly = new Nightly({ store: runtime.ctx.store, consolidator, npcIds: SOCIAL_NPCS, skip: isCompanionCommit });
+    await nightly.catchUp(snapshot!.lineageId, robotCommit);
+    await nightly.run(snapshot!.lineageId, robotCommit);
+    await nightly.close();
+    assert.deepEqual(consolidated, [snapshot!.commitId], '“现实里” memories stay as they were said');
+  } finally {
+    await runtime.close();
     await cleanup();
   }
 });

@@ -197,19 +197,24 @@ export class Nightly {
   private readonly consolidator: Consolidator;
   private readonly npcIds: readonly string[];
   private readonly log: (line: string) => void;
+  private readonly skip: (commitId: string) => boolean;
   private readonly stop = new AbortController();
   private readonly queued = new Map<string, Promise<void>>();
   private chain: Promise<void> = Promise.resolve();
 
-  constructor(options: { store: StoreService; consolidator: Consolidator; npcIds: readonly string[]; log?: (line: string) => void }) {
+  /** `skip` names commits that are never consolidated, e.g. the robot's (docs/companion-device.md §13.4). */
+  constructor(options: { store: StoreService; consolidator: Consolidator; npcIds: readonly string[]; log?: (line: string) => void;
+    skip?: (commitId: string) => boolean }) {
     this.store = options.store;
     this.consolidator = options.consolidator;
     this.npcIds = options.npcIds;
     this.log = options.log ?? (() => {});
+    this.skip = options.skip ?? (() => false);
   }
 
   /** Never rejects: a failure is logged and the commit is picked up again by `catchUp`. */
   run(lineageId: string, commitId: string): Promise<void> {
+    if (this.skip(commitId)) return Promise.resolve();
     const key = `${lineageId}\n${commitId}`;
     const existing = this.queued.get(key);
     if (existing) return existing;
@@ -226,7 +231,7 @@ export class Nightly {
     try {
       let commit = await this.store.call('getCommit', { lineageId, commitId: headId });
       while (commit && commit.parentId !== null && ids.length < CATCH_UP) {
-        if (commit.status === 'confirmed') ids.unshift(commit.id);
+        if (commit.status === 'confirmed' && !this.skip(commit.id)) ids.unshift(commit.id);
         commit = await this.store.call('getCommit', { lineageId, commitId: commit.parentId });
       }
     } catch (error) {
