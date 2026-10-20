@@ -166,5 +166,8 @@ internal sealed partial class ModEntry
     {
         this.AbigailTestProgress(success ? "passed" : "failed", message, completed: true, success: success);
         this.abigailTestRequest = null;
+        // Keep a failed unattended test paused instead of letting the farm run through more days.
+        if (!success && Context.IsWorldReady && Game1.activeClickableMenu is null)
+            Game1.drawObjectDialogue("自动测试已停止，请查看测试结果。关闭这段提示后可以继续游戏。");
     }
 }

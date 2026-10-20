@@ -42,6 +42,6 @@
 
 好感度策略沿用 `dialogue-prototype.md` §14：0–1 心只召回三天内、重要度至少 4 的记忆，8 心以上放宽到六条。因此“模型没有选择记下”或“被低心数策略过滤”不等于存档丢失；跨天真机验证优先使用高心数 NPC，并核对实际记忆记录。
 
-Windows 当前已安装协议 2 的 Mod 和后端。实测成功到达测试档加载、传送和记忆握手，但本机连接 DeepSeek 时 TLS 握手失败，首次模型请求 `fetch failed`，三轮对话与真实睡觉/退出流程尚未完成，不能据此宣称真机跨天通过。详细命令、证据和手测步骤见 [验证记录](test-results/2026-10-20-memory.md)。
+Windows 已安装协议 2 的 Mod 和后端。首次测试遇到模型 TLS 失败；11 时网络恢复后，阿比盖尔三轮真机对话 13.27 秒通过。真实模型配合模拟 Mod 消息的跨天、回滚和后端重启恢复均通过；真实存档的第 30 天提交指针与 SQLite 一致，读档为第 31 天。尚未验收指定内容在真实游戏里对话、睡觉及不保存退出的完整组合。详情见 [首次验证](test-results/2026-10-20-memory.md) 和 [重测记录](test-results/2026-10-20-retest.md)。
 
 API 时序参考：[SMAPI 事件](https://stardewvalleywiki.com/Modding:Modder_Guide/APIs/Events)、[SMAPI save data](https://stardewvalleywiki.com/Modding:Modder_Guide/APIs/Data)，并核对本机 SMAPI 4.5.2 的实际事件调用顺序。
