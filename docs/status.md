@@ -17,8 +17,8 @@
 
 | 里程碑 | 状态 | 已完成 | 还没做 | 文档 |
 |---|---|---|---|---|
-| M1 存储与事务 | 完成；过期 nonce 清理验收通过，待合入 | 记忆内核；当天事务；存档与回滚；崩溃恢复；过期临时日志/检查点清理，失败新读档保护旧日志 | 清理验收分支待决定合入 | `README.md`、`design.md` §16 |
-| M2 Agent | 前三步已合入；第四至七步及公开家庭信息的 Windows 组合验收通过 | 对话、夜间整合、次日计划、气泡、寄信、恢复；碰面、送礼记忆、好感、当面赠礼和家庭信息在 `codex/new-parts-windows-tests` 验收通过 | 验收分支待决定同步/合入；自主行动（调度器、合并场景调用、白名单动作）；观察正常游玩和自由生成内容 | `dialogue-prototype.md`、`nightly-consolidation.md`、`next-day-plans.md`、`npc-bubbles.md`、`npc-mail.md`、`npc-chat.md`、`npc-gifts.md`、`npc-friendship.md`、`npc-in-person-gifts.md`、`world-public-facts.md` |
+| M1 存储与事务 | 完成 | 记忆内核；当天事务；存档与回滚；崩溃恢复；过期临时日志/检查点清理，失败新读档保护旧日志（2026-10-20 合入 `main`） | — | `README.md`、`design.md` §16 |
+| M2 Agent | 第一至七步及公开家庭信息已合入 | 对话、夜间整合、次日计划、气泡、寄信、恢复；碰面聊天、送礼记忆、聊天好感、当面赠礼和家庭信息（Windows 组合验收后 2026-10-20 合入 `main`） | 好感按熟悉程度分档（`m2b-friendship-by-hearts`）、NPC 之间传话（`m2b-npc-news`）待 Windows 验收；自主行动（调度器、合并场景调用）；观察正常游玩和自由生成内容 | `dialogue-prototype.md`、`nightly-consolidation.md`、`next-day-plans.md`、`npc-bubbles.md`、`npc-mail.md`、`npc-chat.md`、`npc-gifts.md`、`npc-friendship.md`、`npc-in-person-gifts.md`、`world-public-facts.md` |
 | M3 接入游戏 | 完成（Windows） | 游戏里"继续聊"；真实保存/退出、跨天记忆、回滚、后端进程重启与旧档分叉；拼音输入法、原版台词保留、取消三项手测通过 | — | `game-bridge.md`、`game-memory.md` |
 | M4 内容 | 角色卡已完成 | 34 张角色卡（已审阅），"看过事件之后"共 201 条 | 物品名到 ID 的对应、各动作的上限 | `design.md` §11 |
 
@@ -58,7 +58,7 @@ GitHub 私有仓库：https://github.com/hayasakaaiaiai/stardew-agent
 
 | 分支 | 内容 | Mac 上的目录 |
 |---|---|---|
-| `main` | 已合入的基线：记忆内核 + 对话 + M3a + M3b + 夜间整合 + M2b 前三步（次日计划、气泡、寄信）与夜间失败恢复 | `/Users/a11/Documents/ChatGPT/stardew-agent-dialogue`（目录名是以前留下的） |
+| `main` | 已合入的基线：记忆内核 + 对话 + M3a + M3b + 夜间整合 + M2b 第一至七步（次日计划、气泡、寄信、碰面聊天、送礼记忆、聊天好感、当面赠礼）+ 公开家庭信息 + 临时日志清理 | `/Users/a11/Documents/ChatGPT/stardew-agent-dialogue`（目录名是以前留下的） |
 | `codex/npc-memory-store` | 记忆系统的开发分支，做完一步快进合并回 `main` | `/Users/a11/Documents/ChatGPT/stardew-agent` |
 | `hardware-companion` | `main` + 硬件陪伴（机器人），还没合并 | `/Users/a11/Documents/ChatGPT/stardew-agent-hardware` |
 | `codex/next-day-plans` | M2b 首次开场主动提计划，2026-10-20 已快进合并进 `main` | Windows：`E:\stardew-agent` |
@@ -73,7 +73,9 @@ GitHub 私有仓库：https://github.com/hayasakaaiaiai/stardew-agent
 | `m1-scratch-cleanup` | 新读档清理其他 nonce 的临时日志和检查点，上游 `2c12b9f` | 已同步到当前验收分支 |
 | `m2b-in-person-gifts` | 当面送礼及特殊物品过滤，上游 `7a7d52d` | 已同步到当前验收分支 |
 | `world-public-facts` | 公开家庭状态与中文日志，上游 `c25e331` | 已同步到当前验收分支 |
-| `codex/new-parts-windows-tests` | 统一验收与失败读档保护修复；`a966ea6` 已按用户要求推送，未合入 `main` | Windows 当前：`E:\stardew-agent` |
+| `codex/new-parts-windows-tests` | 统一验收与失败读档保护修复；2026-10-20 按用户“合并到 main”快进合入 `main` | Windows：`E:\stardew-agent` |
+| `m2b-friendship-by-hearts` | 好感按熟悉程度分档（陌生难加易扣，熟悉易加难扣），已变基到新 `main`，待 Windows 验收 | `/Users/a11/Documents/ChatGPT/stardew-agent-gifts` |
+| `m2b-npc-news` | M2b 第八步：NPC 之间传话，建在 `m2b-friendship-by-hearts` 上，待 Windows 验收 | `/Users/a11/Documents/ChatGPT/stardew-agent-gifts` |
 
 Windows 上的目录是 `E:\stardew-agent`。当前 `codex/new-parts-windows-tests` 从上一轮 `36999ea` 建立，合入 `world-public-facts` / `c25e331`；包含远端 `main` / `db94a12`、M2b 第四至七步、公开家庭信息和临时日志清理。已解决测试记录、场景中文名与 Mod 赠礼分发的合并冲突，旧测试没有覆盖掉新功能。此前所有本地验收分支及 `codex/next-day-plans` / `2260625` 均保留。
 
@@ -182,9 +184,10 @@ dotnet build mod/StardewAgentBridge   # 编译 Mod，编译完自动装进游戏
 2. **M2b 前三步已合入 `main`**：[次日主动提起计划](next-day-plans.md)、[头顶气泡和表情](npc-bubbles.md)、[寄信与随信附赠](npc-mail.md)，以及[夜间格式失败恢复](test-results/2026-10-20-nightly-recovery.md)。继续观察正常游玩中的自然语言日期、重复邀约、气泡过滤和自由生成内容。
 3. **M2b 第四步：NPC 碰面聊天**：Windows 组合验收通过，后端 60 分钟冷却/日期修复在 `codex/social-windows-tests`；继续观察镇上自然碰面，见 [npc-chat.md](npc-chat.md) §8。
 4. **M2b 第五步：送礼记忆**：原版赠送、保存、回滚和真实回忆的组合验收通过；生日、任务与节日场景的覆盖边界见 [npc-gifts.md](npc-gifts.md) §7。Mod 与后端均已更新到协议 3。
-5. **M2b 第六步：聊天影响好感**：增减、上限、重复消息、保存与回滚通过，见 [npc-friendship.md](npc-friendship.md) §8。三项在 `codex/social-windows-tests` 一起完成，等待用户决定推送及合入；不自动合并 `main`。
+5. **M2b 第六步：聊天影响好感**：增减、上限、重复消息、保存与回滚通过，见 [npc-friendship.md](npc-friendship.md) §8；已合入 `main`。按熟悉程度分档在 `m2b-friendship-by-hearts`。
 6. **自主行动**：调度器、合并场景调用和其余白名单动作另行设计。
-7. **本轮新增项已验收并推送，等待用户决定合入**：过期 nonce 清理与失败读档保护、当面赠礼、特殊物品过滤、公开家庭信息，都在 `codex/new-parts-windows-tests`；复现仍是一个 `tools/test-game-social.ps1`。自然婚礼/电影等剧情、全部 NPC 自然游玩和模型事实可靠性仍按 [本轮报告](test-results/2026-10-20-new-parts-windows.md) 的覆盖边界观察。
+7. **已合入 `main`（2026-10-20）**：用户提交组合验收结果并要求合并后，`codex/new-parts-windows-tests` / `908e73b` 快进合入；Mac 上复核 125/125、类型检查、构建和 Release 编译。包含第四至七步、公开家庭信息、临时日志清理，以及 Windows 修的后端碰面冷却与失败读档保护。自然婚礼/电影等剧情、全部 NPC 自然游玩和模型事实可靠性仍按 [本轮报告](test-results/2026-10-20-new-parts-windows.md) 的覆盖边界观察。
+8. **待 Windows 验收**：`m2b-npc-news`（包含 `m2b-friendship-by-hearts`），按 [npc-friendship.md](npc-friendship.md) §2.1 和 [npc-news.md](npc-news.md) §7 测；可以继续用 `tools/test-game-social.ps1` 的框架补检查。
 
 ## 8. 文档索引
 
