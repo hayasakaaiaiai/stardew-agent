@@ -5,6 +5,7 @@
  */
 import { join, resolve } from 'node:path';
 import { NIGHTLY_THINKING, nightlyConsolidator } from '../src/agent/nightly.ts';
+import { SCENE_THINKING } from '../src/agent/scene.ts';
 import { BridgeServer } from '../src/bridge/server.ts';
 import { ModelClient, modelConfigFromEnv } from '../src/services/model/client.ts';
 import { Roster } from '../src/services/roster/index.ts';
@@ -25,10 +26,11 @@ const server = await BridgeServer.start({
   roster, model,
   memoryDirectory: join(ROOT, '.runtime', 'game'),
   consolidator: nightlyConsolidator({ roster, model: nightlyModel, log }),
+  sceneModel: new ModelClient({ ...model.config, thinking: SCENE_THINKING }),
   port: Number(process.env.NPC_BRIDGE_PORT ?? 47711),
   log,
 });
-log(`后端已启动：ws://127.0.0.1:${server.port}，角色卡 ${loaded.loaded.length} 张，模型 ${model.config.model}（对话 thinking=${model.config.thinking}，夜间整合 thinking=${NIGHTLY_THINKING}）`);
+log(`后端已启动：ws://127.0.0.1:${server.port}，角色卡 ${loaded.loaded.length} 张，模型 ${model.config.model}（对话 thinking=${model.config.thinking}，夜间整合 thinking=${NIGHTLY_THINKING}，碰面聊天 thinking=${SCENE_THINKING}）`);
 console.log('启动游戏读档即可；按 Ctrl+C 停止。');
 
 const stop = async () => {

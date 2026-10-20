@@ -16,4 +16,7 @@ internal sealed class ModConfig
 
     /// <summary>Whether NPCs' letters go into the mailbox (docs/npc-mail.md).</summary>
     public bool SendLetters { get; set; } = true;
+
+    /// <summary>Whether two NPCs standing together near the player chat over their heads (docs/npc-chat.md).</summary>
+    public bool NpcChat { get; set; } = true;
 }

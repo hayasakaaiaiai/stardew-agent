@@ -40,6 +40,8 @@
 
 2026-10-20 晚审核 `main` 之后的 7 个提交（`7fcf8ab`…`c4d661b`：气泡、M3a 手测记录、硬件暂停、寄信、气泡与寄信的 Windows 修复、夜间失败恢复），没有发现需要拦下的问题；Mac 上 103/103、类型检查、构建和 Release 编译（0 警告、0 错误）通过，C# 流程检查在 Mac 上加载不了游戏程序集，以 Windows 的 18/18 为准。按用户“审核新提交之后合并到 main”的要求快进合并进 `main`。审核时记下、留给后续观察的两点：某位 NPC 格式失败会让同一提交里其他 NPC 的合格结果在补跑时重算（已写在恢复报告 §2）；气泡里“了”的过滤很保守，正常句子也可能被丢掉。
 
+M2b 第四步“NPC 碰面聊天”在 `m2b-npc-chat` 上实现，已建在新的 `main` / `db94a12` 上：两个 NPC 相距 2 格内、玩家在 8 格内且能自由行动时，Mod 请求一段 2–4 句的闲聊，轮流冒在两人头上；只显示，不写记忆、不改存档。每对一天一次、一天最多 4 段、两段间隔 1 游戏小时，关掉推理。真实模型每段输入 440–541、输出约 90–115 token，1–4.6 秒。106/106、类型检查和 Release 编译通过，等 Windows 游戏内验收，见 [npc-chat.md](npc-chat.md) §7。
+
 ## 3. 分支
 
 GitHub 私有仓库：https://github.com/hayasakaaiaiai/stardew-agent
@@ -161,7 +163,7 @@ dotnet build mod/StardewAgentBridge   # 编译 Mod，编译完自动装进游戏
 
 1. **硬件陪伴（暂停）**：用户 2026-10-20 决定 H 线先不做。H4（机器人接回游戏存档）已在 `hardware-companion` 实现并变基到最新 `main`，恢复时按 `companion-device.md` §13.9 在 Windows 上测。
 2. **M2b 前三步已合入 `main`**：[次日主动提起计划](next-day-plans.md)、[头顶气泡和表情](npc-bubbles.md)、[寄信与随信附赠](npc-mail.md)，以及[夜间格式失败恢复](test-results/2026-10-20-nightly-recovery.md)。继续观察正常游玩中的自然语言日期、重复邀约、气泡过滤和自由生成内容。
-3. **M2b 第四步：NPC 碰面聊天**：在 `m2b-npc-chat` 上开发，见 [npc-chat.md](npc-chat.md)。
+3. **M2b 第四步：NPC 碰面聊天**：`m2b-npc-chat` 已实现，等 Windows 按 [npc-chat.md](npc-chat.md) §7 验收；通过后合入 `main`。
 4. **自主行动**：调度器、合并场景调用、白名单动作另行设计。
 
 ## 8. 文档索引
@@ -177,6 +179,7 @@ dotnet build mod/StardewAgentBridge   # 编译 Mod，编译完自动装进游戏
 | `docs/game-bridge.md` | M3a：Mod 和后端的协议、原版界面怎么复用、游戏内测试清单 |
 | `docs/game-memory.md` | M3b：存档同步、跨天记忆、确认补发与崩溃恢复 |
 | `docs/nightly-consolidation.md` | 夜间整合：产出、输入、触发时机、出错处理、实测 token 和真实模型结果 |
+| `docs/npc-chat.md` | M2b 第四步：NPC 碰面聊天的决定、给模型的规则、实测 token、测试和 Windows 清单 |
 | `docs/npc-mail.md` | M2b 第三步：NPC 寄信和随信附赠的决定、规则、实测 token、物品名核对、测试和 Windows 清单 |
 | `docs/npc-bubbles.md` | M2b 第二步：头顶气泡和表情的决定、规则、实测 token、测试和 Windows 清单 |
 | `docs/next-day-plans.md` | M2b 第一步设计与实现：首次开场、原话核对、日期换算、回滚与最终 token 实测 |

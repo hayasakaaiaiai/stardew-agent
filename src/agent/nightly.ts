@@ -173,7 +173,7 @@ export function nightlyPrompt(roster: Roster, commit: ConsolidationInput['commit
   return { messages, sources, today, shown, impression, gift: gift?.item ?? '', hasTurns: turns.length > 0 };
 }
 
-function firstSentence(text: string): string {
+export function firstSentence(text: string): string {
   const end = text.indexOf('。');
   return end < 0 ? clip(text, 80) : text.slice(0, end + 1);
 }

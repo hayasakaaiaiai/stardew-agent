@@ -3,8 +3,10 @@ import type { AddressInfo } from 'node:net';
 import { type WebSocket, WebSocketServer } from 'ws';
 import type { Consolidator } from '../agent/consolidation.ts';
 import { OPENING_LINE, runTurn, type Standing, type WorldState } from '../agent/dialogue.ts';
+import { parseScene, type SceneLine, SCENES_PER_DAY, scenePrompt } from '../agent/scene.ts';
 import type { ModelClient } from '../services/model/client.ts';
 import type { Roster } from '../services/roster/index.ts';
+import { SOCIAL_NPCS } from '../types.ts';
 import { requireValue } from '../validation.ts';
 import { GameMemory, type GameSave } from './memory.ts';
 import { type BackendMessage, type Envelope, type ModMessage, parseModMessage, PROTOCOL_VERSION } from './protocol.ts';
@@ -18,6 +20,8 @@ export interface BridgeOptions {
   consolidator?: Consolidator;
   /** Override the 30-second recovery delay for isolated tests. */
   nightlyRetryDelayMs?: number;
+  /** Small talk between NPCs the player can overhear (docs/npc-chat.md); without it requests get no lines. */
+  sceneModel?: ModelClient;
   /** 0 picks a free port (tests). */
   port: number;
   host?: string;
@@ -33,6 +37,8 @@ class Session {
   chain: Promise<void> = Promise.resolve();
   send: (message: BackendMessage) => void = () => {};
   todayRevision = 0;
+  /** Pairs that already talked on this game day, for the per-day budget. */
+  scenes = { day: 0, pairs: new Set<string>() };
 }
 
 export class BridgeServer {
@@ -72,6 +78,32 @@ export class BridgeServer {
   }
 
   private log(line: string) { this.options.log?.(line); }
+
+  /** Runs outside the lifecycle queue like a talk turn; the Mod gets empty lines whenever nothing should show. */
+  private async scene(session: Session, message: Extract<ModMessage, { type: 'scene.request' }>, send: (message: BackendMessage) => void) {
+    const save = session.save!;
+    const reply = (lines: SceneLine[]) => { if (session.save === save) send({ type: 'scene.lines', ...envelope(message), lines }); };
+    const [a, b] = message.npcs.map((npc) => npc.toLowerCase()).sort((x, y) => SOCIAL_NPCS.indexOf(x as never) - SOCIAL_NPCS.indexOf(y as never));
+    const { roster, sceneModel } = this.options;
+    if (session.scenes.day !== save.day) session.scenes = { day: save.day, pairs: new Set() };
+    const pair = `${a}+${b}`;
+    if (!sceneModel || save.closed || a === b || !roster.has(a!) || !roster.has(b!)
+      || session.scenes.pairs.has(pair) || session.scenes.pairs.size >= SCENES_PER_DAY) {
+      reply([]);
+      return;
+    }
+    session.scenes.pairs.add(pair);
+    try {
+      const completion = await sceneModel.chat(scenePrompt(roster, a!, b!, worldState(message.world, save.player)), {}, { json: true });
+      if (save.closed) return;
+      const lines = parseScene(completion.content, a!, b!, save.player.name);
+      reply(lines);
+      this.log(`碰面聊天：${roster.get(a!).name}和${roster.get(b!).name}，${lines.length ? `${lines.length} 句` : '没有可显示的'}`);
+    } catch (error) {
+      this.log(`碰面聊天失败：${error instanceof Error ? error.message : String(error)}`);
+      reply([]);
+    }
+  }
 
   /**
    * Replaces the Mod's bubbles for the day and offers this morning's letter; sent again when a late consolidation
@@ -177,6 +209,10 @@ export class BridgeServer {
       }
       talk.world = { ...talk.world, ...message.date, time: clock(message.date.time) };
       void this.turn(session, talk, message, message.text, send);
+      return;
+    }
+    if (message.type === 'scene.request') {
+      void this.scene(session, message, send);
       return;
     }
     await save.control(message, () => {

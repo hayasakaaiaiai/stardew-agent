@@ -2,6 +2,7 @@
 import type { Bubble } from '../agent/bubbles.ts';
 import type { Emotion, Season } from '../agent/dialogue.ts';
 import type { DeliveredLetter } from '../agent/letters.ts';
+import type { SceneLine } from '../agent/scene.ts';
 import type { Relation } from '../services/roster/index.ts';
 
 export const PROTOCOL_VERSION = 2;
@@ -72,7 +73,9 @@ export type ModMessage =
     world: WorldSnapshot;
   } & Envelope)
   | ({ type: 'talk.say'; npc: string; text: string; date: GameDate } & Envelope)
-  | ({ type: 'talk.close'; npc: string } & Envelope);
+  | ({ type: 'talk.close'; npc: string } & Envelope)
+  /** Two NPCs standing together near the player (docs/npc-chat.md); game names. */
+  | ({ type: 'scene.request'; npcs: [string, string]; world: WorldSnapshot } & Envelope);
 
 export type BackendMessage =
   | { type: 'hello'; protocol: number }
@@ -85,7 +88,9 @@ export type BackendMessage =
   | ({ type: 'day.letters'; letters: DeliveredLetter[] } & Envelope)
   | ({ type: 'talk.delta'; npc: string; text: string } & Envelope)
   | TalkReply
-  | ({ type: 'talk.error'; npc: string; message: string } & Envelope);
+  | ({ type: 'talk.error'; npc: string; message: string } & Envelope)
+  /** Answers a scene.request with its seq; empty when nothing should be shown. */
+  | ({ type: 'scene.lines'; lines: SceneLine[] } & Envelope);
 
 export type TalkReply = { type: 'talk.reply'; npc: string; reply: string; emotion: Emotion; options: string[]; end: boolean } & Envelope;
 
@@ -136,6 +141,12 @@ export function parseModMessage(raw: string): ModMessage {
     if (int(p!.dayEnded, 'commit.dayEnded') < 1) fail('commit.dayEnded is invalid');
   };
   const weather = (value: unknown) => { if (!WEATHERS.has(value as Weather)) fail('weather is invalid'); };
+  const world = (value: unknown) => {
+    const w = value as Record<string, unknown> | null;
+    if (!w || typeof w.location !== 'string' || !w.flags || typeof w.flags !== 'object') fail('world is invalid');
+    date(w!.date);
+    weather(w!.weather);
+  };
 
   switch (data.type) {
     case 'hello':
@@ -170,10 +181,7 @@ export function parseModMessage(raw: string): ModMessage {
       if ((data.hearts as number) < 0 || (data.hearts as number) > 14) fail('hearts is out of range');
       if (!RELATIONS.has(data.relation as Relation)) fail('relation is invalid');
       if (!Array.isArray(data.seenEvents) || data.seenEvents.some((e) => typeof e !== 'string')) fail('seenEvents must be strings');
-      const world = data.world as Record<string, unknown> | null;
-      if (!world || typeof world.location !== 'string' || !world.flags || typeof world.flags !== 'object') fail('world is invalid');
-      date(world!.date);
-      weather(world!.weather);
+      world(data.world);
       break;
     }
     case 'talk.say':
@@ -186,6 +194,14 @@ export function parseModMessage(raw: string): ModMessage {
       envelope();
       text('npc', 50);
       break;
+    case 'scene.request': {
+      envelope();
+      const npcs = data.npcs;
+      if (!Array.isArray(npcs) || npcs.length !== 2
+        || npcs.some((npc) => typeof npc !== 'string' || !npc || npc.length > 50 || /[\u0000-\u001f]/u.test(npc))) fail('npcs must be two names');
+      world(data.world);
+      break;
+    }
     default:
       fail('unknown type');
   }

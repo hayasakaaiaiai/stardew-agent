@@ -142,6 +142,7 @@ internal sealed partial class ModEntry : Mod
             this.TickTalk(t);
         if (e.IsMultipleOf(30) && this.memoryTest?.BubblesOnly != true)
             this.TickBubbles();
+        this.TickScenes(e);
 
         this.TickAbigailTest();
         this.TickMemoryTest();
@@ -345,7 +346,8 @@ internal sealed partial class ModEntry : Mod
     private void Handle(JsonElement message)
     {
         string type = message.TryGetProperty("type", out JsonElement typeValue) ? typeValue.GetString() ?? "" : "";
-        if (this.HandleSync(type, message) || this.HandleBubbles(type, message) || this.HandleLetters(type, message))
+        if (this.HandleSync(type, message) || this.HandleBubbles(type, message) || this.HandleLetters(type, message)
+            || this.HandleScenes(type, message))
             return;
         string npc = message.TryGetProperty("npc", out JsonElement npcValue) ? npcValue.GetString() ?? "" : "";
         if (this.talk is not { Waiting: true } t || t.Npc.Name != npc || !this.IsCurrentReply(message, t.RequestSeq))

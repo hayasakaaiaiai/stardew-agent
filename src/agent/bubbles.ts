@@ -17,9 +17,14 @@ const EMOJI = /[\p{Extended_Pictographic}\u{FE0F}\u{200D}]/gu;
 /** Claims of progress made off-screen, and relative days that would be wrong a day later. */
 const UNSAFE = /已|昨晚|昨夜|刚才|大前天|前天|昨天|今天|明天|大后天|后天|(?<!就好)了/;
 
+/** Removes what the game would read as commands, and emoji the fonts cannot draw. */
+export function cleanBubbleText(text: string): string {
+  return text.replace(COMMANDS, '').replace(EMOJI, '').replace(/\s+/g, ' ').trim();
+}
+
 /** Undefined when the line must not be shown; the text is cleaned, never rewritten. */
 export function safeBubble(text: string): string | undefined {
-  const clean = text.replace(COMMANDS, '').replace(EMOJI, '').replace(/\s+/g, ' ').trim();
+  const clean = cleanBubbleText(text);
   if (!clean || Array.from(clean).length > MAX_CHARS || UNSAFE.test(clean)) return undefined;
   return clean;
 }
