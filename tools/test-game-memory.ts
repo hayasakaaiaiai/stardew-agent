@@ -6,11 +6,13 @@ import { fork, spawn } from 'node:child_process';
 import { join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { JSON_HINT } from '../src/agent/dialogue.ts';
+import { NIGHTLY_RULES } from '../src/agent/nightly.ts';
 import type { ChatMessage, Completion } from '../src/services/model/client.ts';
 
 interface Config {
   RequestId: string; SaveFolder: string; UniqueId: string; BackendUrl: string;
   RunDirectory: string; SaveDirectory: string; GamePath: string;
+  Nightly?: boolean;
 }
 interface Pointer { Format: number; LineageId: string; CommitId: string; ParentId: string | null; DayEnded: number }
 interface Reply { label: string; line: string; reply: string; day: number; nonce: string; hearts: number; generation: number }
@@ -22,6 +24,13 @@ interface Report {
 }
 interface RecordedCall {
   messages: ChatMessage[]; content: string; timing: Completion['timing']; usage: Completion['usage'];
+  kind?: 'dialogue' | 'nightly'; thinking?: string; startedAt?: string; finishedAt?: string;
+}
+interface NightState { impression: string; plan: string; day: number }
+interface StoredMemory { id: string; text: string; importance: number; kind: string; visibility: string }
+interface NightEvidence {
+  pointer: Pointer; state: NightState; summaries: StoredMemory[]; retired: string[];
+  call: RecordedCall; ackObservedBeforeCompletion: boolean;
 }
 
 const ROOT = resolve(import.meta.dirname, '..');
@@ -51,12 +60,13 @@ async function start(port = 0) {
     cwd: ROOT, execArgv: [], windowsHide: true, stdio: ['ignore', output, output, 'ipc'],
   });
   closeSync(output);
-  const ready = await new Promise<{ port: number; model: string; pid: number }>((resolve, reject) => {
+  const ready = await new Promise<{ port: number; model: string; pid: number; nightly: boolean }>((resolve, reject) => {
     const timeout = setTimeout(() => { child.kill(); reject(new Error('独立后端进程启动超时')); }, 15000);
     child.once('error', error => { clearTimeout(timeout); reject(error); });
     child.once('exit', code => { clearTimeout(timeout); reject(new Error(`后端在就绪前退出：${code}`)); });
-    child.once('message', message => { clearTimeout(timeout); resolve(message as { port: number; model: string; pid: number }); });
+    child.once('message', message => { clearTimeout(timeout); resolve(message as { port: number; model: string; pid: number; nightly: boolean }); });
   });
+  assert.equal(ready.nightly, !!config.Nightly, '独立后端没有启用所需的夜间整合模式');
   let stopped = false;
   return { ...ready, async close() {
     if (stopped) return;
@@ -129,7 +139,45 @@ async function savePointer(): Promise<Pointer> {
   return JSON.parse(value) as Pointer;
 }
 function memories(pointer: Pointer) {
-  return sql<{ text: string; importance: number }>('SELECT text, importance FROM memory WHERE commit_id=? AND npc_id=?', pointer.CommitId, 'abigail');
+  return sql<StoredMemory>('SELECT id, text, importance, kind, visibility FROM memory WHERE commit_id=? AND npc_id=?', pointer.CommitId, 'abigail');
+}
+async function night(pointer: Pointer): Promise<NightEvidence | undefined> {
+  if (!config.Nightly) return undefined;
+  const fingerprint = () => sql<{ consolidation_fingerprint: string | null }>(
+    'SELECT consolidation_fingerprint FROM commit_node WHERE id=?', pointer.CommitId)[0]!.consolidation_fingerprint;
+  const ackObservedBeforeCompletion = fingerprint() === null;
+  log(`等待第 ${pointer.DayEnded} 天的真实模型夜间整合完成...`);
+  const deadline = Date.now() + 90_000;
+  while (fingerprint() === null && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 200));
+  assert.ok(fingerprint(), '夜间整合没有在限时内完成，不能把原始记忆当作整合通过');
+  const states = sql<{ state: string }>('SELECT state FROM npc_state WHERE commit_id=? AND npc_id=? AND phase=?',
+    pointer.CommitId, 'abigail', 'consolidated');
+  assert.equal(states.length, 1, '整合未写入 NPC 状态');
+  const state = JSON.parse(states[0]!.state) as NightState;
+  assert.ok(state.impression?.trim(), '缺少整体印象');
+  assert.ok(state.plan?.trim(), '缺少次日计划');
+  assert.equal(state.day, pointer.DayEnded);
+  const all = memories(pointer);
+  const summaries = all.filter(memory => memory.kind === 'summary');
+  assert.ok(summaries.length >= 1 && summaries.length <= 2, '整合摘要数量不正确');
+  assert.ok(summaries.every(memory => memory.visibility === 'private'));
+  const retired = sql<{ memory_id: string }>('SELECT memory_id FROM memory_retire WHERE commit_id=?', pointer.CommitId)
+    .map(row => row.memory_id);
+  assert.ok(all.filter(memory => memory.kind === 'conversation').every(memory => retired.includes(memory.id)), '当天零碎记忆未退役');
+  await refreshCalls();
+  const call = calls.findLast(call => call.kind === 'nightly');
+  assert.ok(call);
+  assert.equal(call.thinking, 'low');
+  assert.equal(call.messages[0]!.content, NIGHTLY_RULES);
+  assert.match(call.messages[1]!.content, /农场主：记忆验收（[男女]）/);
+  assert.match(call.messages[1]!.content, /8 心/);
+  return { pointer, state, summaries, retired, call, ackObservedBeforeCompletion };
+}
+function impressionAt(item: Reply, state: NightState | undefined) {
+  if (!state) return;
+  const system = callFor(item).messages[0]!.content;
+  assert.ok(system.includes(`你对农场主的整体印象：${state.impression}`), '下一轮没有使用该保存点的整体印象');
+  assert.doesNotMatch(system, /## (?:你)?明天的计划|## (?:次日|行动)计划/);
 }
 async function backupSave(name: string) {
   const target = join(directory, name);
@@ -140,6 +188,10 @@ async function backupSave(name: string) {
 let a: Pointer | undefined;
 let b: Pointer | undefined;
 let c: Pointer | undefined;
+let nightA: NightEvidence | undefined;
+let nightB: NightEvidence | undefined;
+let nightC: NightEvidence | undefined;
+let nightlyCallsAfterB = 0;
 let restartNonce = '';
 let restartGeneration = 0;
 let last: Report | undefined;
@@ -172,6 +224,11 @@ try {
           await refreshCalls();
           a = saved(report);
           assert.deepEqual(await savePointer(), a);
+          nightA = await night(a);
+          if (nightA) {
+            assert.match(JSON.stringify(nightA.summaries), /星糖/);
+            evidence.nightlyA = nightA;
+          }
           assert.match(JSON.stringify(memories(a)), /星糖/, '模型没有在实际保存中记下指定信息');
           const initial = reply(report, 'learn-cat');
           assert.equal(a.DayEnded, initial.day);
@@ -184,12 +241,14 @@ try {
           const nextDay = reply(report, 'ask-cat');
           assert.match(nextDay.reply, /星糖/);
           assert.match(callFor(nextDay).messages[0]!.content, /星糖/);
+          impressionAt(nextDay, nightA?.state);
           const rolled = reply(report, 'ask-rollback');
           assert.match(rolled.reply, /星糖/);
           assert.doesNotMatch(rolled.reply, /青岚/);
           assert.match(callFor(rolled).messages[0]!.content, /星糖/);
           assert.doesNotMatch(JSON.stringify(callFor(rolled).messages), /青岚/);
           assert.notEqual(rolled.nonce, nextDay.nonce);
+          impressionAt(rolled, nightA?.state);
           assert.deepEqual(await savePointer(), a);
           evidence.crossDay = nextDay; evidence.unsavedRollback = rolled;
           break;
@@ -208,6 +267,13 @@ try {
           await refreshCalls();
           b = saved(report);
           assert.deepEqual(await savePointer(), b);
+          nightB = await night(b);
+          nightlyCallsAfterB = calls.filter(call => call.kind === 'nightly').length;
+          if (nightB) {
+            assert.match(JSON.stringify(nightB.summaries), /紫色/);
+            assert.match(JSON.stringify(nightB.summaries), /风筝/);
+            evidence.nightlyB = nightB;
+          }
           assert.equal(b.ParentId, a!.CommitId);
           assert.match(JSON.stringify(memories(b)), /紫色/);
           assert.match(JSON.stringify(memories(b)), /风筝/);
@@ -216,6 +282,7 @@ try {
           assert.ok(recovered.generation > restartGeneration);
           assert.match(recovered.reply, /紫色/);
           assert.match(JSON.stringify(callFor(recovered).messages), /紫色风筝/);
+          impressionAt(recovered, nightA?.state);
           await backupSave('save-b');
           evidence.backendRestart = recovered; evidence.savedB = { pointer: b, memories: memories(b) };
           break;
@@ -237,6 +304,9 @@ try {
           assert.match(callFor(fork).messages[0]!.content, /星糖/);
           assert.doesNotMatch(callFor(fork).messages[0]!.content, /风筝/);
           assert.notEqual(fork.nonce, restartNonce);
+          impressionAt(fork, nightA?.state);
+          if (nightB) assert.equal(calls.filter(call => call.kind === 'nightly').length,
+            nightlyCallsAfterB, '读回已整合旧档时重复调用了整合模型');
           evidence.oldSaveRecall = fork;
           break;
         }
@@ -244,6 +314,13 @@ try {
           await refreshCalls();
           c = saved(report);
           assert.deepEqual(await savePointer(), c);
+          nightC = await night(c);
+          if (nightC) {
+            assert.match(JSON.stringify(nightC.summaries), /金色/);
+            assert.match(JSON.stringify(nightC.summaries), /纸船/);
+            assert.doesNotMatch(JSON.stringify(nightC.summaries), /风筝/);
+            evidence.nightlyC = nightC;
+          }
           assert.equal(c.ParentId, a!.CommitId);
           assert.equal(c.DayEnded, b!.DayEnded);
           assert.notEqual(c.CommitId, b!.CommitId);
@@ -288,6 +365,7 @@ try {
   await cp(join(config.GamePath, 'Mods/StardewAgentBridge/manifest.json'), join(directory, 'mod-manifest.json'));
   await refreshCalls().catch(() => {});
   const result = { success, requestId: config.RequestId, saveFolder: config.SaveFolder, model: server.model,
+    nightlyEnabled: !!config.Nightly, nightlyCalls: calls.filter(call => call.kind === 'nightly').length,
     modelCalls: calls.length, checkedStages: [...handled], evidence, game: last, ...(errorMessage ? { error: errorMessage } : {}) };
   await json(join(directory, 'result.json'), result);
   console.log(JSON.stringify({ success, requestId: config.RequestId, modelCalls: calls.length, directory, error: errorMessage }, null, 2));

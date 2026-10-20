@@ -376,7 +376,7 @@ internal sealed partial class ModEntry
             "ask-rollback" => ("我的小猫叫什么？我有没有告诉过你要给农场换名字？", "asked-rollback"),
             "learn-kite" => ("记住我们的计划：明天一起做一只紫色风筝，这是我很期待的重要约定。", "learned-kite"),
             "ask-restart" => ("我们刚刚约好要做的风筝是什么颜色？", "asked-restart"),
-            "ask-fork" => ("我的小猫叫什么？我有没有跟你说过关于风筝的计划？", "asked-fork"),
+            "ask-fork" => ("我的小猫叫什么？我之前和你约好要一起做什么东西吗？", "asked-fork"),
             "learn-boat" => ("记住一件重要计划：我后天要在海边放金色纸船，到时一起去。", "learned-boat"),
             _ => throw new InvalidOperationException("未知的验收对话。"),
         };
