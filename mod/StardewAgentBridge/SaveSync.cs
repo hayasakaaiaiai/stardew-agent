@@ -58,6 +58,7 @@ internal sealed partial class ModEntry
 
     private void OnSaveLoaded()
     {
+        this.ClearBubbles();
         this.talk = null; this.offerFor = null; this.startFor = null;
         this.initialSave = null; this.lifecycle.Clear(); this.memoryReady = false; this.syncFailed = false;
         this.activeLoad = Context.IsMainPlayer;
@@ -86,6 +87,7 @@ internal sealed partial class ModEntry
 
     private void OnDayStarted()
     {
+        this.ClearBubbles();
         if (!this.activeLoad || this.initialSave is null)
             return;
         this.EndTalk(null);
@@ -122,6 +124,7 @@ internal sealed partial class ModEntry
 
     private void OnReturnedToTitle()
     {
+        this.ClearBubbles();
         this.talk = null; this.offerFor = null; this.startFor = null;
         this.activeLoad = false; this.memoryReady = false;
         if (this.initialSave is not null)

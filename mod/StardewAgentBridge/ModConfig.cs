@@ -10,4 +10,7 @@ internal sealed class ModConfig
 
     /// <summary>How long to wait for the first word of a reply before giving up.</summary>
     public int ReplyTimeoutSeconds { get; set; } = 20;
+
+    /// <summary>Whether NPCs mutter last night's lines over their heads when the player is near (docs/npc-bubbles.md).</summary>
+    public bool ShowBubbles { get; set; } = true;
 }

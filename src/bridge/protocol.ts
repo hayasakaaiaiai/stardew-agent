@@ -1,4 +1,5 @@
 /** Messages between the SMAPI mod and the backend (docs/game-bridge.md §3, design §10). */
+import type { Bubble } from '../agent/bubbles.ts';
 import type { Emotion, Season } from '../agent/dialogue.ts';
 import type { Relation } from '../services/roster/index.ts';
 
@@ -77,6 +78,8 @@ export type BackendMessage =
   | ({ type: 'save.ready'; day: number } & Envelope)
   | ({ type: 'ack' } & Envelope)
   | ({ type: 'sync.error'; message: string } & Partial<Envelope>)
+  /** Today's lines to mutter when the player is near, by NPC id (docs/npc-bubbles.md); seq is 0. */
+  | ({ type: 'day.bubbles'; npcs: Record<string, Bubble[]> } & Envelope)
   | ({ type: 'talk.delta'; npc: string; text: string } & Envelope)
   | TalkReply
   | ({ type: 'talk.error'; npc: string; message: string } & Envelope);

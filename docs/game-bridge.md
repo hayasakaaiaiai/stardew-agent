@@ -51,6 +51,7 @@ Mod → 后端：
 | `save.ready` | 存档身份、已恢复到的绝对游戏日 |
 | `ack` | 已落盘处理的生命周期事件身份与序号 |
 | `sync.error` | 同步失败原因；本次读档停用 AI，原版游戏继续 |
+| `day.bubbles` | 今天各 NPC 走近时嘀咕的话和表情，按 NPC id；读档就绪、新的一天开始、当晚整合完成时发，Mod 收到新的一份就替换（见 `npc-bubbles.md`） |
 | `talk.delta` | npc、台词的一段（流式） |
 | `talk.reply` | npc、完整台词、表情、3 个选项、是否想结束 |
 | `talk.error` | npc、原因（Mod 显示一句提示后关闭界面） |

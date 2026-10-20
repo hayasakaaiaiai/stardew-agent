@@ -2,6 +2,7 @@
 import { mkdir, open, readFile, rename } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import type { Consolidator } from '../agent/consolidation.ts';
+import { type Bubble, bubblesFor } from '../agent/bubbles.ts';
 import { AgentMemory, turnLog } from '../agent/dialogue-memory.ts';
 import type { DialogueMemory, Exchange, Remembered, Standing, TurnResult } from '../agent/dialogue.ts';
 import { Nightly } from '../agent/nightly.ts';
@@ -39,6 +40,8 @@ export class GameMemory {
   private readonly directory: string;
   private readonly log: (line: string) => void;
   private readonly nightly: Nightly | undefined;
+  /** Told when a consolidation finished, so the day's bubbles can be sent again (docs/npc-bubbles.md). */
+  onConsolidated: ((lineageId: string, commitId: string) => void) | undefined;
   private readonly active = new Map<string, GameSave>();
   private readonly loading = new Map<string, Promise<void>>();
 
@@ -91,12 +94,13 @@ export class GameMemory {
       state = { format: 1, initial, day: absoluteDay(initial.date), head: head.id, pointer: initial.commit,
         phase: 'open', pending: null, nextDay: null, lastSeq: 0, receipts: [] };
     }
+    const consolidated = (commitId: string) => this.onConsolidated?.(initial.lineageId, commitId);
     const save = new GameSave(this.runtime, path, state,
-      commitId => void this.nightly?.run(initial.lineageId, commitId));
+      commitId => void this.nightly?.run(initial.lineageId, commitId).then(() => consolidated(commitId)));
     await save.restore();
     this.active.set(initial.lineageId, save);
     // A crash or a closed backend can leave the last nights unconsolidated.
-    void this.nightly?.catchUp(initial.lineageId, save.head);
+    void this.nightly?.catchUp(initial.lineageId, save.head).then(() => consolidated(save.head));
     return save;
   }
 
@@ -123,6 +127,7 @@ export class GameSave {
   }
   get initial(): LoadedSave { return this.state.initial; }
   get head(): string { return this.state.head; }
+  get closed(): boolean { return !this.live || this.state.phase === 'closed'; }
   get loadNonce(): string { return this.initial.loadNonce; }
   get day(): number { return this.state.day; }
   get player() { return this.initial.player; }
@@ -295,4 +300,16 @@ export class GameSave {
     this.scope = undefined;
   }
   discard(): Promise<void> { return this.enqueue(() => this.discardNow()); }
+
+  /** Today's bubbles of every NPC whose last consolidation wrote some (docs/npc-bubbles.md). */
+  async bubbles(): Promise<Record<string, Bubble[]>> {
+    const { lineageId } = this.initial;
+    const headCommitId = this.state.head;
+    const result: Record<string, Bubble[]> = {};
+    for (const npcId of SOCIAL_NPCS) {
+      const lines = bubblesFor(await this.runtime.ctx.store.call('state', { lineageId, headCommitId, npcId }), this.state.day);
+      if (lines.length) result[npcId] = lines;
+    }
+    return result;
+  }
 }

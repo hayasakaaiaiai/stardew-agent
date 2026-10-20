@@ -3,6 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { test } from 'node:test';
+import { type Bubble, bubblesFor, parseBubbles } from '../src/agent/bubbles.ts';
 import { nightlyConsolidator, nightlyPrompt, NIGHTLY_RULES, parseNightly, type NightlyOutput } from '../src/agent/nightly.ts';
 import { runTurn, type WorldState } from '../src/agent/dialogue.ts';
 import type { ChatMessage, Completion, ModelClient, StreamHandlers } from '../src/services/model/client.ts';
@@ -86,7 +87,23 @@ test('nightly output clips state, defaults importance, and rejects unsupported m
     + `{"sources":["t2"],"importance":2}],"impression":"${'好'.repeat(140)}","retire":["m1",2]}`)!;
   assert.deepEqual(parsed, {
     memories: [{ sources: ['t1'], importance: 3 }, { sources: ['t2'], importance: 2 }], retire: ['m1'], impression: '好'.repeat(120), plan: '',
+    bubbles: [],
   });
+});
+
+test('bubbles keep safe muttering and drop progress claims, relative days, and overlong lines', () => {
+  const parsed = parseNightly(JSON.stringify({ memories: [], impression: '好', plan: '', bubbles: [
+    { text: '得把材料凑齐才行。', emote: 'exclamation' }, { text: '要是我爸不过敏就好了', emote: 'wink' },
+    { text: '矿洞的事，他会答应吗？', emote: 'question' }] }))!;
+  assert.deepEqual(parsed.bubbles, [{ text: '得把材料凑齐才行。', emote: 'exclamation' }, { text: '要是我爸不过敏就好了', emote: 'none' }],
+    'at most two, and an unknown emote becomes none');
+  for (const text of ['材料已经备好', '昨晚做了风筝骨架', '明天去山上', '风筝做好了', '竹条都备齐了', '一'.repeat(25), '']) {
+    assert.deepEqual(parseBubbles([{ text, emote: 'happy' }]), [], text);
+  }
+  assert.deepEqual(parseBubbles([{ text: '嘿^#$星糖[乖]|😺', emote: 'heart' }]), [{ text: '嘿星糖乖', emote: 'heart' }], 'game commands and emoji removed');
+  assert.deepEqual(parseNightly('{"memories":[],"impression":"好","bubbles":"坏的"}')!.bubbles, [], 'a broken field is no bubbles, not a rejected night');
+  assert.deepEqual(bubblesFor({ day: 31, bubbles: [{ text: '嗯。', emote: 'none' }] }, 32), [{ text: '嗯。', emote: 'none' }]);
+  assert.deepEqual(bubblesFor({ day: 30, bubbles: [{ text: '嗯。', emote: 'none' }] }, 32), [], 'only the day after');
 });
 
 test('nightly source preserves speaker ownership, negations, and invitation replies without treating quotes as new turns', async () => {
@@ -273,4 +290,31 @@ test('a consolidation cut off by stopping the backend runs again when the save i
   await until(() => h.logs.some((line) => line.startsWith('夜间整合完成')), 'the catch-up');
   again.send(openTalk(2)); await again.until('talk.reply');
   assert.match(h.fake.sent.at(-1)![0]!.content, /整体印象：可靠的同伴/);
+});
+
+test("the day's bubbles reach the Mod when the day starts, again after a late consolidation, and on a later load", { timeout: 10000 }, async (t) => {
+  const h = await harness(t);
+  const gate = deferred();
+  const bubbles: Bubble[] = [{ text: '得把材料凑齐才行。', emote: 'exclamation' }];
+  const nightly = nightlyModel([answer({ memories: [{ sources: ['t2'], importance: 4 }], impression: '会约人玩的人', plan: '和农场主做风筝', bubbles })],
+    gate.promise);
+  const server = await h.start(nightlyConsolidator({ roster: h.roster, model: nightly.model }));
+  const wire = await connect(server);
+  wire.send(openTalk()); await wire.until('talk.reply');
+  wire.send({ type: 'talk.say', npc: 'Abigail', text: '明天一起做风筝吧' }); await wire.until('talk.reply');
+  const beforeDay = wire.inbox.length;
+  const commit = await sleep(wire);
+  const early = await wire.until('day.bubbles', beforeDay) as { npcs: Record<string, unknown> };
+  assert.deepEqual(early.npcs, {}, 'still consolidating when the day starts');
+  const afterDay = wire.inbox.length;
+  gate.resolve();
+  const late = await wire.until('day.bubbles', afterDay) as { npcs: Record<string, unknown>; seq: number };
+  assert.deepEqual(late.npcs, { abigail: bubbles });
+  assert.equal(late.seq, 0);
+  assert.ok(h.logs.some((line) => line === '今天的气泡：abigail'));
+  wire.send({ type: 'title.returned' }); await wire.until('ack'); await wire.close();
+
+  const reload = await connect(server, initial('load-2', 2, commit));
+  assert.deepEqual((await reload.until('day.bubbles', 0) as { npcs: unknown }).npcs, { abigail: bubbles }, 'they follow the save point');
+  await reload.close();
 });
