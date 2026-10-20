@@ -24,6 +24,7 @@ internal sealed class MemoryTestConfig
     public bool MailOnly { get; set; }
     public bool Social { get; set; }
     public bool Offline { get; set; }
+    public bool NewParts { get; set; }
 }
 
 internal sealed partial class ModEntry
@@ -173,7 +174,7 @@ internal sealed partial class ModEntry
                         throw new InvalidOperationException("阿比盖尔已离开目标地点。");
                     if (test.Social)
                     {
-                        this.MemoryTestProgress("social", "已到组合验收场地。");
+                        this.MemoryTestProgress(this.newPartsRunning ? "new-parts" : "social", "已到组合验收场地。");
                         break;
                     }
                     if (test.BubblesOnly)
@@ -321,6 +322,9 @@ internal sealed partial class ModEntry
                 case "social":
                     this.TickSocialTest();
                     break;
+                case "new-parts":
+                    this.TickNewPartsTest();
+                    break;
                 case "social-title":
                     if (Game1.activeClickableMenu is TitleMenu && !Context.IsWorldReady && this.lifecycle.Count == 0)
                         this.MemoryTestProgress("reload-menu", "重新加载组合验收副本。");
@@ -344,7 +348,7 @@ internal sealed partial class ModEntry
                     break;
                 case "wait-title-finish":
                     if (Game1.activeClickableMenu is TitleMenu && !Context.IsWorldReady && this.lifecycle.Count == 0)
-                        this.FinishMemoryTest(true, test.Social ? "NPC 碰面聊天、送礼记忆、聊天好感及保存回滚的组合验收完成。" : test.MailOnly ? "原生信箱、附件领取、回滚和保存检查完成。" : test.BubblesOnly ? "原生气泡显示、距离、冷却与读档检查完成。" : "跨天、未保存回滚、后端重启和旧档分叉的真机流程完成。");
+                        this.FinishMemoryTest(true, test.NewParts ? "新旧功能、当面赠礼、公开家庭信息与保存回滚组合验收完成。" : test.Social ? "NPC 碰面聊天、送礼记忆、聊天好感及保存回滚的组合验收完成。" : test.MailOnly ? "原生信箱、附件领取、回滚和保存检查完成。" : test.BubblesOnly ? "原生气泡显示、距离、冷却与读档检查完成。" : "跨天、未保存回滚、后端重启和旧档分叉的真机流程完成。");
                     break;
 
                 case "saved-a":
@@ -496,6 +500,7 @@ internal sealed partial class ModEntry
             letterChecks = this.letterTestChecks, letterPackets = this.letterTestPackets,
             socialChecks = this.socialTestChecks, socialReplies = this.socialTestReplies,
             socialSceneLines = this.socialTestSceneLines,
+            newPartsChecks = this.newPartsChecks, presentDeliveries = this.newPartsDeliveries, householdSnapshots = this.newPartsWorlds,
             worldReady = Context.IsWorldReady, saveProcessing = SaveGame.IsProcessing, newDay = Game1.newDay,
             events = this.memoryTestEvents, elapsedSeconds = Math.Round((DateTime.UtcNow - this.memoryTestStarted).TotalSeconds, 2) },
             new JsonSerializerOptions { WriteIndented = true });

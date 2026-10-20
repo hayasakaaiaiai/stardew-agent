@@ -22,4 +22,7 @@ internal sealed class ModConfig
 
     /// <summary>Whether what the player says in agent conversations raises or lowers vanilla friendship (docs/npc-friendship.md).</summary>
     public bool ChatChangesFriendship { get; set; } = true;
+
+    /// <summary>Whether a close NPC may hand the player something from its card in an agent conversation (docs/npc-in-person-gifts.md).</summary>
+    public bool InPersonGifts { get; set; } = true;
 }

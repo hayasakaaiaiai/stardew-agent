@@ -11,6 +11,12 @@ namespace StardewAgentBridge;
 /// </summary>
 internal sealed partial class ModEntry
 {
+    /// <summary>
+    /// Bouquets, the mermaid's pendant, the void ghost pendant and movie tickets start dating, an engagement, a
+    /// roommate or a movie through their own vanilla paths; they are never remembered as an ordinary gift.
+    /// </summary>
+    private static readonly HashSet<string> NotGifts = new() { "(O)458", "(O)277", "(O)460", "(O)808", "(O)809" };
+
     /// <summary>NPC name → gifts given today, as last seen.</summary>
     private readonly Dictionary<string, int> giftCounts = new();
     private Object? giftHeld;
@@ -38,7 +44,7 @@ internal sealed partial class ModEntry
             if (count == before)
                 continue;
             this.giftCounts[pair.Key] = count;
-            if (count < before || held is null || !SocialNpcs.Contains(pair.Key) || !this.activeLoad || this.syncFailed
+            if (count < before || held is null || NotGifts.Contains(held.QualifiedItemId) || !SocialNpcs.Contains(pair.Key) || !this.activeLoad || this.syncFailed
                 || Game1.getCharacterFromName(pair.Key) is not NPC npc)
                 continue;
             string taste = GiftTaste(npc.getGiftTasteForThisItem(held));

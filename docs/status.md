@@ -17,8 +17,8 @@
 
 | 里程碑 | 状态 | 已完成 | 还没做 | 文档 |
 |---|---|---|---|---|
-| M1 存储与事务 | 完成 | 记忆内核：SQLite 提交树、中文检索、当天事务、存档提交和回滚、后端崩溃恢复 | 自动清理过期的临时日志 | `README.md`、`design.md` §16 |
-| M2 Agent | 前三步已合入；碰面、送礼记忆、聊天好感的 Windows 组合验收通过 | 对话；夜间原话校验；次日提计划；气泡、寄信与失败恢复已合入；新增三项在 `codex/social-windows-tests` 完成脚本验收及冷却修复 | 三项验收分支待决定同步/合入；自主行动（调度器、合并场景调用、白名单动作）；观察正常游玩和自由生成内容 | `dialogue-prototype.md`、`nightly-consolidation.md`、`next-day-plans.md`、`npc-bubbles.md`、`npc-mail.md`、`npc-chat.md`、`npc-gifts.md`、`npc-friendship.md` |
+| M1 存储与事务 | 完成；过期 nonce 清理验收通过，待合入 | 记忆内核；当天事务；存档与回滚；崩溃恢复；过期临时日志/检查点清理，失败新读档保护旧日志 | 清理验收分支待决定合入 | `README.md`、`design.md` §16 |
+| M2 Agent | 前三步已合入；第四至七步及公开家庭信息的 Windows 组合验收通过 | 对话、夜间整合、次日计划、气泡、寄信、恢复；碰面、送礼记忆、好感、当面赠礼和家庭信息在 `codex/new-parts-windows-tests` 验收通过 | 验收分支待决定同步/合入；自主行动（调度器、合并场景调用、白名单动作）；观察正常游玩和自由生成内容 | `dialogue-prototype.md`、`nightly-consolidation.md`、`next-day-plans.md`、`npc-bubbles.md`、`npc-mail.md`、`npc-chat.md`、`npc-gifts.md`、`npc-friendship.md`、`npc-in-person-gifts.md`、`world-public-facts.md` |
 | M3 接入游戏 | 完成（Windows） | 游戏里"继续聊"；真实保存/退出、跨天记忆、回滚、后端进程重启与旧档分叉；拼音输入法、原版台词保留、取消三项手测通过 | — | `game-bridge.md`、`game-memory.md` |
 | M4 内容 | 角色卡已完成 | 34 张角色卡（已审阅），"看过事件之后"共 201 条 | 物品名到 ID 的对应、各动作的上限 | `design.md` §11 |
 
@@ -48,6 +48,8 @@ M2b 第六步“聊天影响原版好感”在 `m2b-friendship` 上实现，建�
 
 23 时按用户“你写脚本测”“一个脚本测三个功能”的要求，在 `codex/social-windows-tests`（基于 `m2b-friendship` / `6654433`）新增统一入口 `tools/test-game-social.ps1`。115/115 Node、20/20 C#、类型检查、构建和 Release 零警告零错误通过；同一游戏进程完成 39 项检查、5 次真实调用、1 次真实睡觉保存和 3 次读档，80.43 秒通过。修复后端漏检 60 分钟间隔，并补上日期/异步跨天保护，正常 prompt token 增量 0。原档 6 文件哈希相同；真实模型正确回忆紫水晶，夸奖 +20、冒犯 -20。正常后端在 23:29 备份后重载为 PID 33020，协议 3 握手通过，Mod 安装哈希一致。未推送、未合入 `main`；内容编造样本和覆盖边界见 [三功能组合验收报告](test-results/2026-10-20-social-windows.md)。
 
+随后按“新的部分提交也要测”同步 `c25e331` 及其前面 4 个新提交，在 `codex/new-parts-windows-tests` 保留上一轮测试和冷却修复。统一脚本新增当面赠礼、满背包、特殊物品过滤、家庭公开事实及跨进程清理测试，125/125 Node、20/20 C#、类型检查、构建与 Release 零警告零错误通过；同一游戏进程 115.80 秒、63 项检查、8 次真实调用、2 次真实保存、6 次读档通过。实际送出羊肚菌和樱桃炸弹，皮埃尔知道阿比盖尔搬到农场，原档 6 个文件哈希相同。复现并修复无效新读档先丢弃旧日志的问题，正常 prompt token 增量 0。正常后端 23:49 备份后重载为 PID 1564，DLL 哈希一致、协议 3 握手通过。未推送、未合入 `main`，详见 [新提交组合验收报告](test-results/2026-10-20-new-parts-windows.md)。
+
 ## 3. 分支
 
 GitHub 私有仓库：https://github.com/hayasakaaiaiai/stardew-agent
@@ -65,9 +67,13 @@ GitHub 私有仓库：https://github.com/hayasakaaiaiai/stardew-agent
 | `m2b-npc-chat` | M2b 第四步上游；Windows 验收和冷却修复见 `codex/social-windows-tests` | `/Users/a11/Documents/ChatGPT/stardew-agent-chat` |
 | `m2b-gifts` | M2b 第五步上游，协议 3；Windows 验收见 `codex/social-windows-tests` | 已提交，目录现在用于下一步 |
 | `m2b-friendship` | M2b 第六步上游，包含第四、五步；Windows 验收见 `codex/social-windows-tests` | `/Users/a11/Documents/ChatGPT/stardew-agent-gifts` |
-| `codex/social-windows-tests` | 包含上述三项，Windows 统一脚本验收与后端冷却修复通过；未推送、未合入 `main` | Windows 当前：`E:\stardew-agent` |
+| `codex/social-windows-tests` | 上一轮三项统一脚本验收和冷却修复，`36999ea` 保留；未推送 | Windows 历史验收分支 |
+| `m1-scratch-cleanup` | 新读档清理其他 nonce 的临时日志和检查点，上游 `2c12b9f` | 已同步到当前验收分支 |
+| `m2b-in-person-gifts` | 当面送礼及特殊物品过滤，上游 `7a7d52d` | 已同步到当前验收分支 |
+| `world-public-facts` | 公开家庭状态与中文日志，上游 `c25e331` | 已同步到当前验收分支 |
+| `codex/new-parts-windows-tests` | 保留 `36999ea` 并合入上述新提交，统一验收与失败读档保护修复；未推送、未合入 `main` | Windows 当前：`E:\stardew-agent` |
 
-Windows 上的目录是 `E:\stardew-agent`。当前 `codex/social-windows-tests` 从 `m2b-friendship` / `6654433` 建立，包含最新远端 `main` / `db94a12` 及碰面、送礼记忆、聊天好感三项；前一个寄信验收分支仍保留。本地 `codex/next-day-plans` 的手测入口提交 `2260625` 也保留。M3b 在 `codex/game-save-memory` 上开发，2026-10-20 快进合并进 `main`；它已经包含的 `codex/abigail-auto-test` 同时删除。
+Windows 上的目录是 `E:\stardew-agent`。当前 `codex/new-parts-windows-tests` 从上一轮 `36999ea` 建立，合入 `world-public-facts` / `c25e331`；包含远端 `main` / `db94a12`、M2b 第四至七步、公开家庭信息和临时日志清理。已解决测试记录、场景中文名与 Mod 赠礼分发的合并冲突，旧测试没有覆盖掉新功能。此前所有本地验收分支及 `codex/next-day-plans` / `2260625` 均保留。
 
 本次按用户“拉下来测”“修复”的要求，Windows 在 `nightly-consolidation` 上完成远端 `3f70b27` 验证和事实归属修复。本机常驻后端已重新启动，日志确认对话 `high`、夜间整合 `low`；原游戏记忆库、临时日志及旧后端日志在更新前已备份。
 
@@ -162,7 +168,6 @@ dotnet build mod/StardewAgentBridge   # 编译 Mod，编译完自动装进游戏
 | 群体 10 心事件、科罗布斯 14 心事件还没写"看过事件之后" | `dialogue-prototype.md` §12.6 |
 | 每次都发给模型的卡片核心部分实测 530–690 token，超过最初定的 500 | `design.md` §11 |
 | 真实模型附加字段偶尔解析失败，会走现有回退路径；本次 10 次调用出现 1 次 | `test-results/2026-10-20-retest.md` |
-| 过期的临时日志不会自动清理 | `design.md` §16 |
 | 夜间事实记忆已改为原话引用；印象与计划仍由模型生成，可能夹带具体事实或遗漏内容，需继续观察 | `test-results/2026-10-20-nightly-facts-fix.md` |
 | 计划开场使用保守问句处理，可能回退为较笼统的提问；尚未解析“下周”等任意日期表达，普通对话仍可能出现事实错误 | `test-results/2026-10-20-next-day-plans.md` |
 | 气泡完成动作词过滤较保守，可能丢弃正常句子；模型可能继续追问被否认的话题，不能把规则过滤当成完整事实校验 | `test-results/2026-10-20-bubbles-windows.md` |
@@ -177,6 +182,7 @@ dotnet build mod/StardewAgentBridge   # 编译 Mod，编译完自动装进游戏
 4. **M2b 第五步：送礼记忆**：原版赠送、保存、回滚和真实回忆的组合验收通过；生日、任务与节日场景的覆盖边界见 [npc-gifts.md](npc-gifts.md) §7。Mod 与后端均已更新到协议 3。
 5. **M2b 第六步：聊天影响好感**：增减、上限、重复消息、保存与回滚通过，见 [npc-friendship.md](npc-friendship.md) §8。三项在 `codex/social-windows-tests` 一起完成，等待用户决定推送及合入；不自动合并 `main`。
 6. **自主行动**：调度器、合并场景调用和其余白名单动作另行设计。
+7. **本轮新增项已验收，等待用户决定同步及合入**：过期 nonce 清理与失败读档保护、当面赠礼、特殊物品过滤、公开家庭信息，都在 `codex/new-parts-windows-tests`；复现仍是一个 `tools/test-game-social.ps1`。自然婚礼/电影等剧情、全部 NPC 自然游玩和模型事实可靠性仍按 [本轮报告](test-results/2026-10-20-new-parts-windows.md) 的覆盖边界观察。
 
 ## 8. 文档索引
 
@@ -192,6 +198,8 @@ dotnet build mod/StardewAgentBridge   # 编译 Mod，编译完自动装进游戏
 | `docs/game-memory.md` | M3b：存档同步、跨天记忆、确认补发与崩溃恢复 |
 | `docs/nightly-consolidation.md` | 夜间整合：产出、输入、触发时机、出错处理、实测 token 和真实模型结果 |
 | `docs/npc-friendship.md` | M2b 第六步：聊天影响原版好感的决定、规则写法对比、真实模型实测、测试和 Windows 清单 |
+| `docs/npc-in-person-gifts.md` | M2b 第七步：当面送礼、与寄信共用冷却、背包满、实测和组合脚本 |
+| `docs/world-public-facts.md` | 配偶、婚约、室友和孩子的公开事实，Mod 字段及真实模型验收 |
 | `docs/npc-gifts.md` | M2b 第五步：送礼记忆的决定、模板、实测 token、测试和 Windows 清单 |
 | `docs/npc-chat.md` | M2b 第四步：NPC 碰面聊天的决定、给模型的规则、实测 token、测试和 Windows 清单 |
 | `docs/npc-mail.md` | M2b 第三步：NPC 寄信和随信附赠的决定、规则、实测 token、物品名核对、测试和 Windows 清单 |
@@ -202,6 +210,7 @@ dotnet build mod/StardewAgentBridge   # 编译 Mod，编译完自动装进游戏
 | `docs/test-results/2026-10-20-mail-windows.md` | 寄信过滤与收藏修复、97/18 检查、原生附件领取与保存、真实模型来信及保留失败 |
 | `docs/test-results/2026-10-20-nightly-recovery.md` | 格式诊断反馈、69 token 实测、103/18 检查及正式 30 秒后台恢复的真机证据 |
 | `docs/test-results/2026-10-20-social-windows.md` | 一个脚本覆盖碰面、送礼与好感，115/20 自动检查、39 项游戏断言、5 次真实调用、保存回滚及冷却修复 |
+| `docs/test-results/2026-10-20-new-parts-windows.md` | 新旧功能同一脚本，125/20 自动检查、63 项游戏断言、8 次真实调用、原档保护和失败读档日志丢失修复 |
 | `docs/test-results/2026-10-20-nightly-windows.md` | 夜间整合 Windows 真机技术验证及说话人归属错误证据 |
 | `docs/test-results/2026-10-20-nightly-facts-fix.md` | 原话来源校验、实际 token 差值、15 次真实模型和修复后的真机验收 |
 | `docs/test-results/2026-10-19-abigail.md` | 第二轮回复丢失的根因、修复验证、阿比盖尔三轮真机自动测试结果 |

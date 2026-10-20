@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
-import { readFile, writeFile } from 'node:fs/promises';
+import { readdir, readFile, writeFile } from 'node:fs/promises';
 import { test } from 'node:test';
 import { fork } from 'node:child_process';
 import { once } from 'node:events';
@@ -282,4 +282,22 @@ test('protocol rejects invalid identities, dates, sequences, pointers, and old p
   const h = await harness(t); const wire = await connect(await h.start());
   wire.raw({ type: 'hello', protocol: 1, modVersion: 'old' });
   assert.match(JSON.stringify(await wire.until('sync.error')), /协议不一致/);
+});
+
+test('after a backend restart, a new load deletes the checkpoints and journals of that save’s older loads', { timeout: 10000 }, async t => {
+  const h = await harness(t); const first = await h.start(); const wire = await connect(first);
+  wire.send(openTalk()); await wire.until('talk.reply');
+  wire.send({ type: 'talk.say', npc: 'Abigail', text: '记住重启前没保存的约定' }); await wire.until('talk.reply');
+  await h.stop(first);
+  const checkpoints = join(h.directory, 'bridge', digest(wire.loaded.lineageId));
+  const journals = join(h.directory, 'scratch', digest(wire.loaded.lineageId));
+  assert.deepEqual(await readdir(checkpoints), [`${digest('load-1')}.json`]);
+  assert.deepEqual(await readdir(journals), [`${digest('load-1')}.jsonl`]);
+
+  const again = await connect(await h.start(), initial('load-2'));
+  assert.deepEqual(await readdir(checkpoints), [`${digest('load-2')}.json`]);
+  assert.deepEqual(await readdir(journals), [`${digest('load-2')}.jsonl`]);
+  assert.ok(h.logs.includes('清理了这个存档以前读档留下的 1 个检查点。'));
+  again.send(openTalk()); await again.until('talk.reply');
+  assert.doesNotMatch(JSON.stringify(h.fake.sent.at(-1)), /重启前没保存的约定/);
 });

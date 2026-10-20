@@ -1,4 +1,4 @@
-import { mkdir, open, readFile, rm, truncate, writeFile } from 'node:fs/promises';
+import { mkdir, open, readdir, readFile, rm, truncate, writeFile } from 'node:fs/promises';
 import type { FileHandle } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { DayEntry, DayIdentity } from '../types.ts';
@@ -48,6 +48,23 @@ export class DayJournal {
     }
     if (text === undefined) await writeFile(path, `${canonical(header)}\n`, { mode: 0o600 });
     return { journal: new DayJournal(path, await open(path, 'a')), entries };
+  }
+
+  /**
+   * Deletes this lineage's journals from other loads and returns how many. The Mod picks a new nonce on every
+   * load, so once a load with a new nonce has started, the other ones can never be resumed; in one process
+   * `SaveManager` already discards them, this also covers a backend that was restarted in between. Only files
+   * named like journals are touched.
+   */
+  static async prune(directory: string, lineageId: string, keepNonce: string): Promise<number> {
+    const folder = join(directory, digest(lineageId));
+    const keep = `${digest(keepNonce)}.jsonl`;
+    let names: string[];
+    try { names = await readdir(folder); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return 0; throw error; }
+    const stale = names.filter(name => name !== keep && /^[0-9a-f]{64}\.jsonl$/.test(name));
+    await Promise.all(stale.map(name => rm(join(folder, name), { force: true })));
+    return stale.length;
   }
 
   async append(entry: DayEntry): Promise<void> {

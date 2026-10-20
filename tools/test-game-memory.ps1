@@ -71,7 +71,7 @@ $taskConfig = [pscustomobject]@{
     BackendUrl=''; RunDirectory=$taskRun; SaveDirectory=$taskCopy; GamePath=$GamePath
     Nightly=[bool]($Nightly -or $MorningPlans -or $NightlyRecovery); MorningPlans=[bool]($MorningPlans -or $NightlyRecovery)
     BubblesOnly=[bool]$BubblesOnly; MailOnly=[bool]$MailOnly; NightlyRecovery=[bool]$NightlyRecovery
-    Social=[bool]$Social; Offline=[bool]$Offline
+    Social=[bool]$Social; Offline=[bool]$Offline; NewParts=[bool]$Social
 }
 $taskConfigPath = Join-Path $taskRun 'config.json'
 $taskConfig | ConvertTo-Json | Set-Content -LiteralPath $taskConfigPath -Encoding UTF8

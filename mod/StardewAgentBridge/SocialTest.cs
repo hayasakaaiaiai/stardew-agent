@@ -45,6 +45,7 @@ internal sealed partial class ModEntry
     private void BeginSocialTest()
     {
         this.CheckMemoryTestSave();
+        if (this.newPartsRunning) { this.ResumeNewPartsTest(); return; }
         if (this.socialTestPhase == 0)
         {
             Game1.player.friendshipData["Abigail"] = new Friendship(2000);
@@ -289,7 +290,7 @@ internal sealed partial class ModEntry
                 this.socialTestStep = 80; this.CloseMemoryTestTalk("social");
                 break;
             case 80:
-                if (test.Offline) { this.MemoryTestProgress("return-finish", "三项固定模型组合检查完成。"); break; }
+                if (test.Offline) { if (test.NewParts) this.BeginNewPartsTest(); else this.MemoryTestProgress("return-finish", "三项固定模型组合检查完成。"); break; }
                 this.MemoryTestProgress("social", "social-real-ready");
                 string path = Path.Combine(test.RunDirectory, "control.json");
                 if (!File.Exists(path)) return;
@@ -334,7 +335,8 @@ internal sealed partial class ModEntry
                 this.socialTestStep = 95; this.CloseMemoryTestTalk("social");
                 break;
             case 95:
-                this.MemoryTestProgress("return-finish", "三项固定模型和真实模型组合检查完成。");
+                if (test.NewParts) this.BeginNewPartsTest();
+                else this.MemoryTestProgress("return-finish", "三项固定模型和真实模型组合检查完成。");
                 break;
         }
     }

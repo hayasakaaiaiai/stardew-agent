@@ -3,6 +3,7 @@ import { type Bubble, parseBubbles } from './bubbles.ts';
 import { consolidateCommit, type Consolidator } from './consolidation.ts';
 import { daysAgo, type PlayerIdentity } from './dialogue-memory.ts';
 import { type Exchange, OPENING_LINE, RELATIONS, SEASONS, type Season, type Standing } from './dialogue.ts';
+import { withGivenCooldown } from './in-person-gifts.ts';
 import { giftFor, safeLetter } from './letters.ts';
 import { rankMemories } from './memory.ts';
 import type { ChatMessage, ModelClient, Thinking } from '../services/model/client.ts';
@@ -133,7 +134,8 @@ export function nightlyPrompt(roster: Roster, commit: ConsolidationInput['commit
     return log && typeof log.player === 'string' && typeof log.npc === 'string' ? [log as unknown as LoggedTurn] : [];
   });
   const standing = turns.findLast((turn) => turn.standing)?.standing;
-  const gift = giftFor(card.gifts, standing, npc.state, commit.dayEnded);
+  // Something handed over in a conversation counts against the same cooldown (docs/npc-in-person-gifts.md).
+  const gift = giftFor(card.gifts, standing, withGivenCooldown(npc.state, npc.memories), commit.dayEnded);
   const player = turns.findLast((turn) => turn.playerInfo)?.playerInfo;
   const now = commit.dayEnded * 1440 + 1439;
   const today = npc.memories.filter((memory) => memory.commitId === commit.id);

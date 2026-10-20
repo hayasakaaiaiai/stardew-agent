@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { mkdtemp, rm, appendFile, readFile, readdir } from 'node:fs/promises';
+import { mkdtemp, rm, appendFile, readFile, readdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fork } from 'node:child_process';
 import { once } from 'node:events';
 import { createRuntime, consolidateCommit, SOCIAL_NPCS } from '../src/index.ts';
 import type { DayEntry } from '../src/types.ts';
+import { digest } from '../src/validation.ts';
 
 const now = { nowGameTime: 5000 };
 
@@ -387,4 +388,24 @@ test('a killed backend recovers only the same load, tolerates a torn tail, and d
     await runtime?.close();
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+test('a new load after a backend restart deletes the journals of that save’s other loads, and nothing else', async () => {
+  const f = await fixture();
+  let next: Awaited<ReturnType<typeof createRuntime>> | undefined;
+  try {
+    await (await f.runtime.ctx.saves.load({ lineageId: 'farm', loadNonce: 'before-restart', day: 1 })).record(entry(1, 'abigail', '重启前没保存的'));
+    await (await f.runtime.ctx.saves.load({ lineageId: 'other-farm', loadNonce: 'still-running', day: 1 })).record(entry(1, 'abigail', '另一个存档的'));
+    await f.runtime.close();
+    const farm = join(f.config.journalDirectory, digest('farm'));
+    await writeFile(join(farm, 'notes.txt'), '不是日志');
+    assert.deepEqual((await readdir(farm)).sort(), [`${digest('before-restart')}.jsonl`, 'notes.txt'].sort());
+
+    next = await createRuntime(f.config);
+    const fresh = await next.ctx.saves.load({ lineageId: 'farm', loadNonce: 'after-restart', day: 1 });
+    assert.deepEqual(await fresh.agent('abigail').recall(now), []);
+    assert.deepEqual((await readdir(farm)).sort(), [`${digest('after-restart')}.jsonl`, 'notes.txt'].sort());
+    const other = await next.ctx.saves.load({ lineageId: 'other-farm', loadNonce: 'still-running', day: 1 });
+    assert.equal((await other.agent('abigail').recall(now)).length, 1, 'another save’s pending day is untouched and still recovers');
+  } finally { await next?.close(); await f.close(); }
 });

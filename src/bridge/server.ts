@@ -79,6 +79,12 @@ export class BridgeServer {
 
   private log(line: string) { this.options.log?.(line); }
 
+  /** A game name such as "Abigail" as the card calls her; unknown NPCs keep their game name. */
+  private readonly cardName = (npc: string) => {
+    const id = npc.toLowerCase();
+    return this.options.roster.has(id) ? this.options.roster.get(id).name : npc;
+  };
+
   /** Runs outside the lifecycle queue like a talk turn; the Mod gets empty lines whenever nothing should show. */
   private async scene(session: Session, message: Extract<ModMessage, { type: 'scene.request' }>, send: (message: BackendMessage) => void) {
     const save = session.save!;
@@ -99,7 +105,7 @@ export class BridgeServer {
     session.scenes.pairs.add(pair);
     session.scenes.lastMinute = minute;
     try {
-      const completion = await sceneModel.chat(scenePrompt(roster, a!, b!, worldState(message.world, save.player)), {}, { json: true });
+      const completion = await sceneModel.chat(scenePrompt(roster, a!, b!, worldState(message.world, save.player, this.cardName)), {}, { json: true });
       if (save.closed || save.day !== requestedDay) return;
       const lines = parseScene(completion.content, a!, b!, save.player.name);
       reply(lines);
@@ -202,7 +208,7 @@ export class BridgeServer {
       }
       const talk: OpenTalk = { npcId,
         standing: { hearts: message.hearts, relation: message.relation, seenEvents: new Set(message.seenEvents) },
-        world: worldState(message.world, save.player) };
+        world: worldState(message.world, save.player, this.cardName) };
       session.open.set(message.npc, talk);
       void this.turn(session, talk, message, OPENING_LINE, send);
       return;
@@ -219,8 +225,7 @@ export class BridgeServer {
     if (message.type === 'gift.given') {
       const note = await save.gift(message);
       send({ type: 'ack', ...envelope(message) });
-      const npcId = message.npc.toLowerCase();
-      if (note) this.log(`${this.options.roster.has(npcId) ? this.options.roster.get(npcId).name : message.npc}记下了：${note}`);
+      if (note) this.log(`${this.cardName(message.npc)}记下了：${note}`);
       return;
     }
     if (message.type === 'scene.request') {
@@ -244,7 +249,8 @@ export class BridgeServer {
     let signal = cancel.signal;
     const active = () => !signal.aborted && session.open.get(message.npc) === talk;
     try {
-      const lease = await session.save!.begin(message, message.type === 'talk.open' ? message.world.date : message.date, cancel.signal);
+      const lease = await session.save!.begin(message, message.type === 'talk.open' ? message.world.date : message.date, cancel.signal,
+        this.options.roster.get(talk.npcId).gifts);
       if ('type' in lease) { if (active()) send(lease); return; }
       signal = lease.signal;
       const result = await runTurn({ roster: this.options.roster, model: this.options.model, memory: lease.memory },
@@ -254,6 +260,7 @@ export class BridgeServer {
       if (active()) send(reply);
       const usage = result.usage ? `输入 ${result.usage.inputTokens}，输出 ${result.usage.outputTokens}` : '无用量';
       this.log(`${talk.npcId}：首字 ${result.timing.firstReplyMs ?? '—'}ms，总 ${result.timing.totalMs}ms，${usage}${result.metaOk ? '' : '，格式解析失败'}`);
+      if (reply.gift) this.log(`${this.options.roster.get(talk.npcId).name}当面送了：${reply.gift}`);
     } catch (error) {
       if (active()) {
         const reason = error instanceof Error ? error.message : String(error);

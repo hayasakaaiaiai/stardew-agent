@@ -56,10 +56,11 @@ const CLOSE = new Set<Standing['relation']>(['dating', 'engaged', 'married', 'ro
 /**
  * The one card gift this NPC could enclose tonight. The code picks it, rotating through the card by day, so
  * nothing the player says in a conversation decides what is given; the model only decides whether to enclose it.
- * Lines marked 婚后 (and the 同上 lines after them) need marriage.
+ * Lines marked 婚后 (and the 同上 lines after them) need marriage. `usable` narrows the choice afterwards, so a 同上
+ * line still follows the line it refers to.
  */
 export function giftFor(gifts: readonly Gift[], standing: Pick<Standing, 'hearts' | 'relation'> | undefined,
-  state: NpcState, day: number): Gift | undefined {
+  state: NpcState, day: number, usable: (gift: Gift) => boolean = () => true): Gift | undefined {
   if (!standing || (standing.hearts < GIFT_MIN_HEARTS && !CLOSE.has(standing.relation))) return undefined;
   if (typeof state.lastGiftDay === 'number' && day - state.lastGiftDay < GIFT_COOLDOWN_DAYS) return undefined;
   const married = standing.relation === 'married' || standing.relation === 'roommate';
@@ -67,7 +68,7 @@ export function giftFor(gifts: readonly Gift[], standing: Pick<Standing, 'hearts
   const allowed = gifts.filter((gift) => {
     marriedOnly = gift.text.startsWith('婚后') || (gift.text.startsWith('同上') && marriedOnly);
     return married || !marriedOnly;
-  });
+  }).filter(usable);
   return allowed.length ? allowed[day % allowed.length] : undefined;
 }
 

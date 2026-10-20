@@ -44,4 +44,4 @@ finally {
         ConvertTo-Json -Depth 40 | Set-Content -LiteralPath (Join-Path $taskRun 'result.json') -Encoding UTF8
     Write-Output ('统一报告：' + (Join-Path $taskRun 'result.json'))
 }
-if (-not $taskSuccess) { throw ('三功能组合验收未通过：' + $taskFailure) }
+if (-not $taskSuccess) { throw ('组合验收未通过：' + $taskFailure) }

@@ -78,7 +78,7 @@ internal sealed partial class ModEntry
         this.bubbleTestCapture = null;
         try
         {
-            if (this.memoryTest.MailOnly)
+            if (this.memoryTest.MailOnly || (this.newPartsRunning && Game1.activeClickableMenu is not null))
             {
                 // Menus live in Stardew's separate UI render target, not the world back buffer.
                 RenderTarget2D ui = Game1.game1.uiScreen;

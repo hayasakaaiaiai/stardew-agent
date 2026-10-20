@@ -62,6 +62,7 @@ internal sealed partial class ModEntry
         this.ClearScenes();
         this.ResetGifts();
         this.ClearFriendshipToday();
+        this.ClearPresentsToday();
         this.talk = null; this.offerFor = null; this.startFor = null;
         this.initialSave = null; this.lifecycle.Clear(); this.memoryReady = false; this.syncFailed = false;
         this.activeLoad = Context.IsMainPlayer;
@@ -95,6 +96,7 @@ internal sealed partial class ModEntry
         this.ClearScenes();
         this.ResetGifts();
         this.ClearFriendshipToday();
+        this.ClearPresentsToday();
         if (!this.activeLoad || this.initialSave is null)
             return;
         this.EndTalk(null);

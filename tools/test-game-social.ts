@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { appendFile, readFile, rename, stat, writeFile } from 'node:fs/promises';
+import { appendFile, readFile, readdir, rename, stat, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { WebSocket, WebSocketServer } from 'ws';
@@ -12,10 +12,11 @@ import { nightlyConsolidator } from '../src/agent/nightly.ts';
 import { ModelClient, modelConfigFromEnv, type ChatMessage, type Completion, type StreamHandlers } from '../src/services/model/client.ts';
 import { Roster } from '../src/services/roster/index.ts';
 import { SOCIAL_NPCS } from '../src/types.ts';
+import { digest } from '../src/validation.ts';
 
 interface Config {
   RequestId: string; UniqueId: string; SaveFolder: string; SaveDirectory: string;
-  RunDirectory: string; GamePath: string; BackendUrl: string; Social: boolean; Offline: boolean;
+  RunDirectory: string; GamePath: string; BackendUrl: string; Social: boolean; Offline: boolean; NewParts?: boolean;
 }
 interface Check { label: string; passed: boolean; points: number; detail?: unknown }
 interface Report {
@@ -23,6 +24,10 @@ interface Report {
   saveProcessing: boolean; newDay: boolean; elapsedSeconds: number; day: number;
   socialChecks: Check[]; socialReplies: { seq: number; nonce: string; friendship: number; points: number }[];
   socialSceneLines: { npc: string; text: string; visible: string }[];
+  nonce: string;
+  newPartsChecks: Check[];
+  presentDeliveries: { npc: string; name: string; id: string; quality: number; stack: number; before: number; after: number; direct: boolean; nonce: string; day: number }[];
+  householdSnapshots: { label: string; world: { flags: { partner: { npc: string; status: string } | null; children: number } } }[];
 }
 const ROOT = resolve(import.meta.dirname, '..');
 const configPath = resolve(process.argv[2]!);
@@ -39,6 +44,7 @@ const paid = config.Offline ? undefined : new ModelClient(modelConfigFromEnv());
 const paidScene = paid ? new ModelClient({ ...paid.config, thinking: 'disabled' }) : undefined;
 const calls: { kind: string; real: boolean; messages: ChatMessage[]; content: string; usage: Completion['usage']; timing: Completion['timing'] }[] = [];
 let real = false;
+let newParts = false;
 function model(kind: 'dialogue' | 'scene' | 'nightly'): ModelClient {
   return { async chat(messages: ChatMessage[], handlers: StreamHandlers = {}, options = {}): Promise<Completion> {
     const actual = real && kind !== 'nightly';
@@ -49,8 +55,8 @@ function model(kind: 'dialogue' | 'scene' | 'nightly'): ModelClient {
       const content = JSON.stringify(kind === 'scene' ? { lines: [
         { speaker: 'a', text: '今天天气真不错。', emote: 'happy' }, { speaker: 'b', text: '嗯，出去走走吧。', emote: 'music' },
       ] } : kind === 'nightly' ? { memories: [], retire: [], impression: '相处自然。', plan: '', bubbles: [], letter: '', gift: false } : {
-        reply: '嗯，我记得那块紫水晶。', emotion: 'happy', options: ['再聊一会', '说说近况', '听听你的想法'],
-        remember: [], mood: Number(/^好感(-?\d)/.exec(last)?.[1] ?? 2), end: false,
+        reply: newParts ? '这个给你，今天过得怎么样？' : '嗯，我记得那块紫水晶。', emotion: 'happy', options: ['再聊一会', '说说近况', '听听你的想法'],
+        remember: [], mood: Number(/^好感(-?\d)/.exec(last)?.[1] ?? 2), give: newParts, end: false,
       });
       handlers.onContent?.(content);
       completion = { content, reasoning: '', finishReason: 'stop', usage: null, timing: { firstReasoningMs: null, firstContentMs: 0, totalMs: 0 } };
@@ -121,6 +127,14 @@ try {
       real = true;
       await json(join(directory, 'control.json'), { requestId: config.RequestId, stage: 'social-real-ready' });
     }
+    if (last?.message === 'new-parts-fixed-ready' && !newParts) {
+      real = false; newParts = true;
+      await json(join(directory, 'control.json'), { requestId: config.RequestId, stage: 'new-parts-fixed-ready' });
+    }
+    if (last?.message === 'new-parts-real-ready' && !real) {
+      real = true;
+      await json(join(directory, 'control.json'), { requestId: config.RequestId, stage: 'new-parts-real-ready' });
+    }
     if (last?.completed) break;
     await new Promise(resolve => setTimeout(resolve, 250));
   }
@@ -145,8 +159,8 @@ try {
   const mod = packets.filter(row => row.direction === 'mod' && !row.injected).map(row => row.packet);
   const gifts = mod.filter(packet => packet.type === 'gift.given');
   assert.equal(gifts.length, 2); assert.equal(gifts[0]!.taste, 'love'); assert.equal(gifts[0]!.item, '紫水晶'); assert.equal(gifts[1]!.item, '粘土');
-  assert.equal(mod.filter(packet => packet.type === 'save.loaded').length, 3);
-  assert.equal(mod.filter(packet => packet.type === 'save.saved').length, 1);
+  assert.equal(mod.filter(packet => packet.type === 'save.loaded').length, config.NewParts ? 6 : 3);
+  assert.equal(mod.filter(packet => packet.type === 'save.saved').length, config.NewParts ? 2 : 1);
   const note = '农场主送我紫水晶，我特别喜欢。';
   const prompt = (call: typeof calls[number]) => call.messages[0]!.content;
   assert.ok(calls.some(call => call.kind === 'dialogue' && prompt(call).includes(note)));
@@ -165,6 +179,34 @@ try {
   for (const row of replies) assert.ok(last.socialReplies.some(reply => reply.seq === row.packet.seq && reply.nonce === row.packet.loadNonce
     && reply.friendship === row.packet.friendship), 'the Mod must apply the backend delta for the matching request');
   assert.ok(calls.filter(call => call.kind === 'scene').every(call => !prompt(call).includes(note)), 'private gifts stay out of NPC small talk');
+  if (config.NewParts) {
+    const labels = ['present-native-delivery-on-opening', 'present-duplicate-reply-does-not-duplicate-item', 'present-disabled',
+      'present-unknown-and-overprice-rejected', 'present-full-inventory-native-debris', 'present-no-second-opening-gift',
+      'present-unsaved-item-rollback', 'present-rollback-allows-offer-again', 'present-real-save-reload-persists', 'present-next-day-weekly-cooldown',
+      ...['(O)458', '(O)277', '(O)460', '(O)808', '(O)809'].map(id => `special-item-not-ordinary-gift-${id}`),
+      ...['single', 'dating-private', 'engaged', 'roommate', 'married-child'].map(label => `public-facts-native-${label}`),
+      'public-facts-unsaved-fixture-rollback'];
+    if (!config.Offline) labels.push('present-real-model-native-item', 'public-facts-real-pierre', 'present-real-unsaved-rollback');
+    for (const label of labels) assert.ok(last.newPartsChecks.some(check => check.label === label && check.passed), label);
+    assert.ok(last.newPartsChecks.every(check => check.passed));
+    assert.ok(last.presentDeliveries.every(delivery => delivery.quality === 0));
+    assert.ok((await stat(join(directory, 'newparts-present.png'))).size > 100);
+    const handovers = packets.filter(row => row.direction === 'backend' && !row.injected && typeof row.packet.gift === 'string');
+    for (const row of handovers) assert.ok(last.presentDeliveries.some(delivery => !delivery.direct && delivery.nonce === row.packet.loadNonce
+      && delivery.name === row.packet.gift), 'a backend handover must have an actual native item receipt');
+    const givenDb = new DatabaseSync(join(directory, 'memory/memory.sqlite'), { readOnly: true });
+    try { assert.equal(givenDb.prepare("SELECT COUNT(*) AS n FROM memory WHERE npc_id='leah' AND text LIKE '我当面送了农场主%'").get()!.n, 1); }
+    finally { givenDb.close(); }
+    const checkpoints = await readdir(join(directory, 'memory/bridge', digest(config.UniqueId)));
+    assert.deepEqual(checkpoints, [digest(last.nonce) + '.json'], 'new loads prune checkpoints even during actual game reloads');
+    if (!config.Offline) {
+      const pierre = calls.findLast(call => call.real && call.messages.at(-1)?.content.startsWith('阿比盖尔最近还好吗？'));
+      assert.ok(pierre); assert.match(prompt(pierre), /玩家的配偶：阿比盖尔，已搬到玩家的农场/);
+      assert.match(prompt(pierre), /玩家的孩子：有 1 个孩子/);
+      assert.ok(packets.some(row => row.direction === 'mod' && row.packet.type === 'talk.open' && row.packet.npc === 'Pierre'
+        && (row.packet.world as { flags?: { partner?: { status: string }; children?: number } })?.flags?.partner?.status === 'married'));
+    }
+  }
   success = true;
 } catch (error) { failure = error instanceof Error ? error.message : String(error); }
 finally {
@@ -181,7 +223,7 @@ finally {
   await json(join(directory, 'result.json'), { success, failure, protocol: PROTOCOL_VERSION, mode: 'native-social-combined', offline: config.Offline,
     requestId: config.RequestId, saveFolder: config.SaveFolder, modelCalls: calls.filter(call => call.real).length,
     realCalls: calls.filter(call => call.real).map(({ kind, usage, timing }) => ({ kind, usage, timing })),
-    fixedCalls: calls.filter(call => !call.real).length, checks: last?.socialChecks.length, errors, game: last });
+    fixedCalls: calls.filter(call => !call.real).length, checks: (last?.socialChecks.length ?? 0) + (last?.newPartsChecks?.length ?? 0), errors, game: last });
 }
-console.log(JSON.stringify({ success, failure, directory, checks: last?.socialChecks.length, seconds: last?.elapsedSeconds }));
+console.log(JSON.stringify({ success, failure, directory, checks: (last?.socialChecks.length ?? 0) + (last?.newPartsChecks?.length ?? 0), seconds: last?.elapsedSeconds }));
 if (!success) process.exitCode = 1;

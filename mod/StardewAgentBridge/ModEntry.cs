@@ -367,6 +367,8 @@ internal sealed partial class ModEntry : Mod
                         friendship = message.TryGetProperty("friendship", out JsonElement socialDelta) ? socialDelta.Clone() : default,
                         points = Game1.player.friendshipData[t.Npc.Name].Points,
                         total = this.friendshipToday.GetValueOrDefault(t.Npc.Name), reply = message.GetProperty("reply").GetString() });
+                if (message.TryGetProperty("gift", out JsonElement gift) && gift.ValueKind == JsonValueKind.String && gift.GetString() is { Length: > 0 } present)
+                    this.GivePresent(t.Npc, present);
                 this.OnReply(t,
                     message.GetProperty("reply").GetString() ?? "",
                     message.GetProperty("emotion").GetString() ?? "neutral",
