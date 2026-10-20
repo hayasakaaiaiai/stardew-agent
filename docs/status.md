@@ -19,14 +19,15 @@
 |---|---|---|---|---|
 | M1 存储与事务 | 完成 | 记忆内核：SQLite 提交树、中文检索、当天事务、存档提交和回滚、后端崩溃恢复 | 自动清理过期的临时日志 | `README.md`、`design.md` §16 |
 | M2 Agent | 完成一半 | 和玩家对话：角色卡加载、对话调用、接入记忆、好感度影响记忆 | 自主行动（调度器、合并场景调用、白名单动作）、夜间整合 | `dialogue-prototype.md` |
-| M3 接入游戏 | M3a/M3b 已实现，Windows M3b 真机组合通过 | 游戏里"继续聊"；真实保存/退出、跨天记忆、回滚、后端进程重启与旧档分叉 | M3a 输入法等交互验收；Mac 验证 | `game-bridge.md`、`game-memory.md` |
+| M3 接入游戏 | M3a/M3b 已实现，Windows 真机组合通过 | 游戏里"继续聊"；真实保存/退出、跨天记忆、回滚、后端进程重启与旧档分叉 | M3a 剩下三项手测：输入法、原版台词保留、取消 | `game-bridge.md`、`game-memory.md` |
 | M4 内容 | 角色卡已完成 | 34 张角色卡（已审阅），"看过事件之后"共 201 条 | 物品名到 ID 的对应、各动作的上限 | `design.md` §11 |
 
 后端 67 个测试、类型检查和构建通过，另有 13 项 C# 流程检查。10 月 20 日阿比盖尔三轮真机回归通过，随后在独立副本中用真实模型完成跨天保留、不保存回滚、后端进程重启、旧档分叉四项真机验收：76.77 秒，13 次模型调用，3 次真实睡觉保存，原测试档 6 个文件哈希均相同。详见 [真机组合验收报告](test-results/2026-10-20-game-memory.md)。
 
-**M3a 的游戏内验证**按 `game-bridge.md` §7 的清单逐项试，Mac 和 Windows 都要试。重点看两项：
+**游戏内验证只在 Windows 上做**，Mac 只做自动测试、类型检查和编译 Mod。M3a 按 `game-bridge.md` §7 的清单还剩三项：
 - "自己说"的输入框能不能用拼音输入法打中文。
 - 聊完之后原版台词还在不在。
+- 等待回复时按 Esc 能不能取消。
 
 ## 3. 分支
 
@@ -34,11 +35,11 @@ GitHub 私有仓库：https://github.com/hayasakaaiaiai/stardew-agent
 
 | 分支 | 内容 | Mac 上的目录 |
 |---|---|---|
-| `main` | 已合入的基线：记忆内核 + 对话 + M3a | `/Users/a11/Documents/ChatGPT/stardew-agent-dialogue`（目录名是以前留下的） |
+| `main` | 已合入的基线：记忆内核 + 对话 + M3a + M3b | `/Users/a11/Documents/ChatGPT/stardew-agent-dialogue`（目录名是以前留下的） |
 | `codex/npc-memory-store` | 记忆系统的开发分支，做完一步快进合并回 `main` | `/Users/a11/Documents/ChatGPT/stardew-agent` |
 | `hardware-companion` | `main` + 硬件陪伴（机器人），还没合并 | `/Users/a11/Documents/ChatGPT/stardew-agent-hardware` |
 
-Windows 当前开发分支是 `codex/game-save-memory`，包含前一分支的菜单修复和自动测试，以及本次 M3b 接入，目录 `E:\stardew-agent`。尚未合并进 `main`。
+Windows 上的目录是 `E:\stardew-agent`，测试前切到 `main` 拉最新代码。M3b 在 `codex/game-save-memory` 上开发，2026-10-20 快进合并进 `main`；它已经包含的 `codex/abigail-auto-test` 同时删除。
 
 - Mac 上的三个目录是同一个仓库的三个 git worktree。同一个分支只能在一个目录里打开。
 - 2026-10-19 把记忆系统和对话合并进了 `main`，原来的 `dialogue-prototype` 分支已删除。
@@ -133,9 +134,9 @@ dotnet build mod/StardewAgentBridge   # 编译 Mod，编译完自动装进游戏
 
 ## 7. 下一步
 
-1. **补齐 Windows M3a 交互项目**：中文输入法、原版台词保留、取消。脚本已覆盖原版输入回调，但不能代替中文输入法组合输入的实际操作。
-2. **Mac 验收**：M3a 交互及 M3b 跨天、回滚、进程重启与旧档分叉；Windows 对应 M3b 组合已通过。当前组合启动脚本是 Windows 版本。
-3. 真机验收之后的顺序还没定，候选有夜间整合、自主行动（M2b）及硬件记忆衔接。按项目约定，开始前先确认设计。
+1. **夜间整合**（2026-10-20 选定）：存档后把当天对话压成记忆、更新关系、生成第二天的计划。记忆内核的接口已有（`consolidateCommit`），缺模型调用、触发时机和把结果用进对话。先写设计文档并实测 token 成本，确认后再写代码。
+2. **补齐 Windows M3a 手测**：中文输入法、原版台词保留、取消，随时可做，不挡开发。脚本已覆盖原版输入回调，但不能代替拼音输入法的实际操作。
+3. 之后的候选：自主行动（M2b，依赖夜间整合生成的计划）、机器人接入游戏记忆（H4）。
 
 ## 8. 文档索引
 
