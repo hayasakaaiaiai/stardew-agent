@@ -45,6 +45,7 @@ Mod → 后端：
 | `talk.close` | 离开 | npc |
 | `gift.given` | 原版送礼之后 | npc、物品显示名、原版喜好、是否生日、日期；可靠消息，等 `ack`（见 `npc-gifts.md`） |
 | `scene.request` | 两个 NPC 站在一起、玩家在旁边 | 两人的游戏内名字、世界状态（见 `npc-chat.md`） |
+| `scene.shown` | 一段碰面聊天的最后一句显示后，且不在“继续聊”中 | 对应的 `scene.request` 序号、日期；可靠消息，等 `ack`（见 `npc-news.md`） |
 
 后端 → Mod：
 

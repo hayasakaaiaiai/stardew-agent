@@ -10,8 +10,8 @@ using StardewValley;
 namespace StardewAgentBridge;
 
 /// <summary>
-/// Two NPCs standing together near the player chat over their heads (docs/npc-chat.md). Only shown: nothing is
-/// sent back or remembered. The backend checks the daily budget again.
+/// Two NPCs standing together near the player chat over their heads (docs/npc-chat.md). News is confirmed only
+/// after both participants stayed for the displayed scene (docs/npc-news.md). The backend checks the budget too.
 /// </summary>
 internal sealed partial class ModEntry
 {
@@ -24,9 +24,13 @@ internal sealed partial class ModEntry
 
     private readonly HashSet<string> scenePairs = new();
     private readonly Queue<(string Npc, string Text, string Emote)> sceneLines = new();
+    private readonly HashSet<string> sceneParticipants = new(StringComparer.OrdinalIgnoreCase);
+    private GameLocation? sceneLocation;
     private int scenesToday;
     private int lastSceneAt = -1;
     private int sceneRequestSeq;
+    /// <summary>The request whose lines are on screen; reported once the last one shows (docs/npc-news.md).</summary>
+    private int sceneShowing;
     private uint sceneRequestedTick;
     private uint nextSceneLineTick;
     private uint sceneCurrentTick;
@@ -38,6 +42,9 @@ internal sealed partial class ModEntry
         this.scenesToday = 0;
         this.lastSceneAt = -1;
         this.sceneRequestSeq = 0;
+        this.sceneShowing = 0;
+        this.sceneParticipants.Clear();
+        this.sceneLocation = null;
     }
 
     private bool HandleScenes(string type, JsonElement message)
@@ -46,6 +53,7 @@ internal sealed partial class ModEntry
             return false;
         if (this.sceneRequestSeq == 0 || !this.IsCurrentReply(message, this.sceneRequestSeq))
             return true;
+        int request = this.sceneRequestSeq;
         this.sceneRequestSeq = 0;
         if (!message.TryGetProperty("lines", out JsonElement lines) || lines.ValueKind != JsonValueKind.Array)
             return true;
@@ -61,6 +69,8 @@ internal sealed partial class ModEntry
             if (npc.Length > 0 && text.Length > 0)
                 this.sceneLines.Enqueue((npc, text, emote));
         }
+        if (this.sceneLines.Count > 0)
+            this.sceneShowing = request;
         this.nextSceneLineTick = 0;
         return true;
     }
@@ -68,6 +78,14 @@ internal sealed partial class ModEntry
     private void TickScenes(UpdateTickedEventArgs e)
     {
         this.sceneCurrentTick = e.Ticks;
+        // A departed listener did not hear the whole scene. Do not acknowledge generated but unseen news,
+        // including a scene interrupted by the player changing maps while a dialogue delays its receipt.
+        if (this.sceneShowing != 0 && (this.sceneLocation != Game1.currentLocation
+            || this.sceneParticipants.Any(id => Game1.currentLocation?.characters.Any(npc => npc.Name.Equals(id, StringComparison.OrdinalIgnoreCase)) != true)))
+        {
+            this.sceneLines.Clear(); this.sceneShowing = 0;
+            this.sceneParticipants.Clear(); this.sceneLocation = null;
+        }
         if (this.sceneLines.Count > 0 && e.Ticks >= this.nextSceneLineTick)
         {
             // A speaker who has left the map is skipped; the rest of the talk goes on.
@@ -82,6 +100,15 @@ internal sealed partial class ModEntry
                     this.socialTestSceneLines.Add(new { npc = id, text, emote, visible = this.BubbleText(npc), day = this.currentDay });
             }
             this.nextSceneLineTick = e.Ticks + SceneLineTicks;
+        }
+        // News told in these lines is remembered once they have all shown. Not during an agent conversation: the
+        // backend writes a turn under its earlier seq when the reply arrives, and the day's events must stay in order.
+        if (this.sceneLines.Count == 0 && this.sceneShowing != 0 && this.talk is null)
+        {
+            if (this.newsTestRunning) this.newsTestReports.Add(this.sceneShowing);
+            this.Send("scene.shown", new() { ["request"] = this.sceneShowing, ["date"] = GameState.Date() });
+            this.sceneShowing = 0;
+            this.sceneParticipants.Clear(); this.sceneLocation = null;
         }
         if (this.sceneRequestSeq != 0 && e.Ticks - this.sceneRequestedTick > SceneReplyTicks)
             this.sceneRequestSeq = 0;
@@ -114,6 +141,9 @@ internal sealed partial class ModEntry
                 this.scenesToday++;
                 this.lastSceneAt = Game1.timeOfDay;
                 this.sceneRequestedTick = this.sceneCurrentTick;
+                this.sceneLocation = location;
+                this.sceneParticipants.Clear();
+                this.sceneParticipants.Add(near[i].Name); this.sceneParticipants.Add(near[j].Name);
                 this.sceneRequestSeq = this.Send("scene.request", new()
                 {
                     ["npcs"] = new[] { near[i].Name, near[j].Name },

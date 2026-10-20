@@ -104,7 +104,7 @@ internal sealed partial class ModEntry
         this.CheckMemoryTestSave(); this.memoryTestSleepDay = this.currentDay;
         FarmHouse home = Utility.getHomeOfFarmer(Game1.player); Point bed = home.getBedSpot();
         LocationRequest request = Game1.getLocationRequest(home.NameOrUniqueName);
-        request.OnWarp += () => { this.MemoryTestProgress("new-parts", "实际睡觉保存当面赠礼。"); Game1.currentLocation.answerDialogueAction("Sleep_Yes", Array.Empty<string>()); };
+        request.OnWarp += () => { this.MemoryTestProgress(this.newsTestRunning ? "news" : "new-parts", "通过原版睡觉保存验收结果。"); Game1.currentLocation.answerDialogueAction("Sleep_Yes", Array.Empty<string>()); };
         this.MemoryTestProgress("warping", "返回床边保存新增功能结果。");
         Game1.warpFarmer(request, bed.X, bed.Y, 2);
     }
@@ -260,7 +260,7 @@ internal sealed partial class ModEntry
                 if (this.newPartsLiveItem.Length > 0) this.NewCheck(this.NewPartsItemCount(this.newPartsLiveItem) == this.newPartsLiveBefore, "present-real-unsaved-rollback");
                 var restored = (Dictionary<string, object?>)GameState.World()["flags"]!;
                 this.NewCheck(restored["partner"] is null && (int)restored["children"]! == 0, "public-facts-unsaved-fixture-rollback", restored);
-                this.MemoryTestProgress("return-finish", "旧三项与新增提交的组合检查全部完成。"); break;
+                this.BeginNewsTest(); break;
         }
     }
 }

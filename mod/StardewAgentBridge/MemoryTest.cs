@@ -174,7 +174,7 @@ internal sealed partial class ModEntry
                         throw new InvalidOperationException("阿比盖尔已离开目标地点。");
                     if (test.Social)
                     {
-                        this.MemoryTestProgress(this.newPartsRunning ? "new-parts" : "social", "已到组合验收场地。");
+                        this.MemoryTestProgress(this.newsTestRunning ? "news" : this.newPartsRunning ? "new-parts" : "social", "已到组合验收场地。");
                         break;
                     }
                     if (test.BubblesOnly)
@@ -325,6 +325,9 @@ internal sealed partial class ModEntry
                 case "new-parts":
                     this.TickNewPartsTest();
                     break;
+                case "news":
+                    this.TickNewsTest();
+                    break;
                 case "social-title":
                     if (Game1.activeClickableMenu is TitleMenu && !Context.IsWorldReady && this.lifecycle.Count == 0)
                         this.MemoryTestProgress("reload-menu", "重新加载组合验收副本。");
@@ -383,6 +386,7 @@ internal sealed partial class ModEntry
         }
         catch (Exception error)
         {
+            this.Monitor.Log("[MemoryTest] " + error, LogLevel.Error);
             this.FinishMemoryTest(false, error.Message);
         }
     }
@@ -501,11 +505,25 @@ internal sealed partial class ModEntry
             socialChecks = this.socialTestChecks, socialReplies = this.socialTestReplies,
             socialSceneLines = this.socialTestSceneLines,
             newPartsChecks = this.newPartsChecks, presentDeliveries = this.newPartsDeliveries, householdSnapshots = this.newPartsWorlds,
+            newsChecks = this.newsTestChecks, newsReports = this.newsTestReports,
             worldReady = Context.IsWorldReady, saveProcessing = SaveGame.IsProcessing, newDay = Game1.newDay,
             events = this.memoryTestEvents, elapsedSeconds = Math.Round((DateTime.UtcNow - this.memoryTestStarted).TotalSeconds, 2) },
             new JsonSerializerOptions { WriteIndented = true });
-        File.WriteAllText(reportPath + ".tmp", report);
-        File.Move(reportPath + ".tmp", reportPath, overwrite: true);
+        for (int attempt = 0; ; attempt++)
+        {
+            try
+            {
+                File.WriteAllText(reportPath + ".tmp", report);
+                File.Move(reportPath + ".tmp", reportPath, overwrite: true);
+                break;
+            }
+            catch (Exception error) when (attempt < 4 && (error is IOException || error is UnauthorizedAccessException))
+            {
+                // Windows readers or virus scanners may briefly hold a report without delete sharing.
+                this.Monitor.Log("[MemoryTest] 报告写入暂时被占用，重试：" + error.Message, LogLevel.Trace);
+                System.Threading.Thread.Sleep(20);
+            }
+        }
     }
 
     private void FinishMemoryTest(bool success, string message)

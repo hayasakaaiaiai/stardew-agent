@@ -363,7 +363,7 @@ Test("malformed letter rows are ignored before native game work", () =>
 Test("scene packets reject stale loads and request numbers and skip malformed rows", () =>
 {
     object mod = BubbleMod();
-    foreach (string field in new[] { "scenePairs", "sceneLines" })
+    foreach (string field in new[] { "scenePairs", "sceneLines", "sceneParticipants" })
         Set(mod, field, Activator.CreateInstance(modType.GetField(field, Fields)!.FieldType)!);
     Set(mod, "sceneRequestSeq", 42);
     foreach (var identity in new[] { ("old", 42), ("current", 41), ("current", 42) })
@@ -376,7 +376,7 @@ Test("scene packets reject stale loads and request numbers and skip malformed ro
         Check(count == (identity == ("current", 42) ? 2 : 0), "A stale scene entered the queue or valid rows were lost.");
     }
     Invoke(mod, "ClearScenes");
-    Check((int)Get(mod, "sceneRequestSeq")! == 0 && (int)Get(mod, "scenesToday")! == 0,
+    Check((int)Get(mod, "sceneRequestSeq")! == 0 && (int)Get(mod, "scenesToday")! == 0 && (int)Get(mod, "sceneShowing")! == 0,
         "A new load/day retained pending scenes or their daily budget.");
 });
 Test("disabled friendship does not change the per-NPC daily total", () =>

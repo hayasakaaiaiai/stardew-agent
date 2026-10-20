@@ -8,12 +8,13 @@ import type { DialogueMemory, Exchange, Remembered, Standing, TurnResult } from 
 import { friendshipPoints, friendshipSoFar } from '../agent/friendship.ts';
 import { giftItemName, giftMemory } from '../agent/gifts.ts';
 import { GIVEN_TOPIC, givenMemory, withInPersonGift } from '../agent/in-person-gifts.ts';
+import { shareFor } from '../agent/news.ts';
 import { type DeliveredLetter, type Letter, letterFor, letterKey } from '../agent/letters.ts';
 import { Nightly } from '../agent/nightly.ts';
 import { withMorningPlan } from '../agent/morning.ts';
 import { createRuntime, type SaveScope } from '../index.ts';
 import type { Gift } from '../services/roster/index.ts';
-import { SOCIAL_NPCS } from '../types.ts';
+import { type MemoryDraft, SOCIAL_NPCS } from '../types.ts';
 import { canonical, digest, requireValue } from '../validation.ts';
 import { absoluteDay, gameMinutes, type Envelope, type GameDate, type LoadedSave, type ModMessage, type SavePointer, type TalkReply } from './protocol.ts';
 
@@ -21,6 +22,9 @@ type Runtime = Awaited<ReturnType<typeof createRuntime>>;
 type Event = Exclude<ModMessage, { type: 'hello' } | LoadedSave>;
 type TalkRequest = Extract<Event, { type: 'talk.open' | 'talk.say' }>;
 type GiftGiven = Extract<Event, { type: 'gift.given' }>;
+type SceneShown = Extract<Event, { type: 'scene.shown' }>;
+/** Who learned what in one scene, kept until the Mod says it was shown (docs/npc-news.md). */
+export interface Heard { npcId: string; memory: MemoryDraft }
 interface Receipt { seq: number; hash: string; reply?: TalkReply }
 interface Checkpoint {
   format: 1;
@@ -144,6 +148,8 @@ export class GameSave {
   private readonly confirmed: (commitId: string) => void;
   private chain: Promise<void> = Promise.resolve();
   private live = true;
+  /** Request seq → what its listeners learned; only in memory, so a backend restart before it was shown forgets it. */
+  private readonly scenes = new Map<number, { day: number; heard: Heard[] }>();
 
   constructor(runtime: Runtime, path: string, state: Checkpoint, confirmed: (commitId: string) => void = () => {}) {
     this.runtime = runtime; this.path = path; this.state = state; this.confirmed = confirmed;
@@ -309,8 +315,8 @@ export class GameSave {
         const envelope: Envelope = { lineageId: message.lineageId, loadNonce: message.loadNonce, seq: message.seq };
         // Opening a conversation says nothing the NPC could feel anything about, and a turn that is not logged
         // could not be counted against the day's range (docs/npc-friendship.md).
-        const friendship = message.type === 'talk.open' || !staged ? 0
-          : friendshipPoints(result.meta.mood, friendshipSoFar(this.scope!.ledger.currentDay?.overlay(npcId).today ?? [], npcId));
+        const friendship = message.type === 'talk.open' || !staged || !standing ? 0
+          : friendshipPoints(result.meta.mood, friendshipSoFar(this.scope!.ledger.currentDay?.overlay(npcId).today ?? [], npcId), standing);
         // Only the item the code offered, only with a reply that is logged, so the cooldown can see it.
         const gave = staged && result.meta.give ? memory.offered()?.item : undefined;
         const reply: TalkReply = { ...envelope, type: 'talk.reply', npc: message.npc, reply: result.reply,
@@ -349,6 +355,41 @@ export class GameSave {
       this.addReceipt(receipt);
       await this.persist();
       return note?.text;
+    });
+  }
+
+  /** What each of these NPCs decided last night to tell others today (docs/npc-news.md). */
+  async news(npcIds: readonly string[]): Promise<Record<string, string>> {
+    const found: Record<string, string> = {};
+    for (const npcId of npcIds) {
+      const state = await this.runtime.ctx.store.call('state', { lineageId: this.initial.lineageId, headCommitId: this.state.head, npcId });
+      const share = shareFor(state, this.state.day);
+      if (share) found[npcId] = share;
+    }
+    return found;
+  }
+
+  noteScene(request: number, heard: Heard[]): void {
+    if (heard.length) this.scenes.set(request, { day: this.state.day, heard });
+  }
+
+  /**
+   * Writes what the listeners of a shown scene learned into their part of the day, as one event, so it is saved or
+   * rolled back with the day. Returns what was written; a resent or unknown scene writes nothing.
+   */
+  sceneShown(message: SceneShown): Promise<Heard[]> {
+    return this.enqueue(async () => {
+      if (this.check(message)) return [];
+      const receipt: Receipt = { seq: message.seq, hash: digest(canonical(message)) };
+      const scene = this.scenes.get(message.request);
+      this.scenes.delete(message.request);
+      const heard = scene && scene.day === this.day && this.state.phase === 'open' && absoluteDay(message.date) === this.day ? scene.heard : [];
+      if (heard.length) await this.scope!.record({ seq: message.seq, gameTime: gameMinutes(message.date),
+        changes: heard.map((item, index) => ({ npcId: item.npcId, memories: [item.memory],
+          log: { heard: item.memory.text, ...(index === 0 ? { bridgeReceipt: JSON.parse(canonical(receipt)) } : {}) } })) });
+      this.addReceipt(receipt);
+      await this.persist();
+      return heard;
     });
   }
 

@@ -1,6 +1,6 @@
 # 项目现状
 
-> 更新于 2026-10-20。每做完一步就更新这份文档。各部分的细节在各自的设计文档里，见 §8。
+> 更新于 2026-10-21。每做完一步就更新这份文档。各部分的细节在各自的设计文档里，见 §8。
 
 ## 1. 这个项目在做什么
 
@@ -18,7 +18,7 @@
 | 里程碑 | 状态 | 已完成 | 还没做 | 文档 |
 |---|---|---|---|---|
 | M1 存储与事务 | 完成 | 记忆内核；当天事务；存档与回滚；崩溃恢复；过期临时日志/检查点清理，失败新读档保护旧日志（2026-10-20 合入 `main`） | — | `README.md`、`design.md` §16 |
-| M2 Agent | 第一至七步及公开家庭信息已合入 | 对话、夜间整合、次日计划、气泡、寄信、恢复；碰面聊天、送礼记忆、聊天好感、当面赠礼和家庭信息（Windows 组合验收后 2026-10-20 合入 `main`） | 好感按熟悉程度分档（`m2b-friendship-by-hearts`）、NPC 之间传话（`m2b-npc-news`）待 Windows 验收；自主行动（调度器、合并场景调用）；观察正常游玩和自由生成内容 | `dialogue-prototype.md`、`nightly-consolidation.md`、`next-day-plans.md`、`npc-bubbles.md`、`npc-mail.md`、`npc-chat.md`、`npc-gifts.md`、`npc-friendship.md`、`npc-in-person-gifts.md`、`world-public-facts.md` |
+| M2 Agent | 第一至七步及公开家庭信息已合入；好感分档与在场传话 Windows 验收通过 | 对话、夜间整合、次日计划、气泡、寄信、恢复；碰面、送礼、好感、当面赠礼、家庭信息已在 `main`；分档与传话在 `codex/news-windows-tests` 115 项真机检查通过 | 本轮修复待推送/决定合入；新出的后台传话与遗留清理另行验收；观察正常游玩和自由生成内容 | `dialogue-prototype.md`、`nightly-consolidation.md`、`next-day-plans.md`、`npc-bubbles.md`、`npc-mail.md`、`npc-chat.md`、`npc-gifts.md`、`npc-friendship.md`、`npc-in-person-gifts.md`、`world-public-facts.md`、`npc-news.md` |
 | M3 接入游戏 | 完成（Windows） | 游戏里"继续聊"；真实保存/退出、跨天记忆、回滚、后端进程重启与旧档分叉；拼音输入法、原版台词保留、取消三项手测通过 | — | `game-bridge.md`、`game-memory.md` |
 | M4 内容 | 角色卡已完成 | 34 张角色卡（已审阅），"看过事件之后"共 201 条 | 物品名到 ID 的对应、各动作的上限 | `design.md` §11 |
 
@@ -52,6 +52,12 @@ M2b 第六步“聊天影响原版好感”在 `m2b-friendship` 上实现，建�
 
 用户随后明确要求“推送”。验收代码 `a966ea6`（包含上一轮 `36999ea`）已上传到 GitHub 的 `codex/new-parts-windows-tests`，本分支已设置远端跟踪。前文“未推送”为当时验收完成的状态；目前仍未合入 `main`。
 
+按用户“陌生时容易扣、难加，熟悉时不容易扣、容易加”，`m2b-friendship-by-hearts` 把好感换算改成按熟悉程度分档：加分每档 0–1 心 5、2–4 心 10、5–7 心 15、8 心以上或亲密关系 20；扣分反过来是 20、15、10、5；每天 −40 到 +30 的上限不变，token 成本 0。已变基到合并后的 `main`，Windows 组合脚本的好感预期改为按同一张表计算（测试档阿比盖尔 8 心：`+30,0,0,-10×7,0`）。见 [npc-friendship.md](npc-friendship.md) §2.1。
+
+M2b 第八步“NPC 之间传话”在 `m2b-npc-news` 上实现：当晚和玩家聊过的 NPC 在夜间整合时自己决定一件愿意告诉别人的事（谁要求保密的、自己的秘密和心事、普通寒暄都不写），第二天碰面聊天时可以说出来；Mod 显示完后发 `scene.shown`，听到的人记“阿比盖尔跟我说：“……””，跟当天保存或回滚。真实模型：夜间 48 次全部符合预期，16 次秘密都没说出去；碰面聊天 9 次转述都没超出给定内容。每晚每位 NPC +77 输入（可缓存）、约 +45 输出；碰面规则 +62（可缓存），有新鲜事时 +约 32。已和 Windows 的碰面冷却修复合在一起，变基后 130/130、类型检查、构建和 Release 编译通过，见 [npc-news.md](npc-news.md)。
+
+2026-10-21 按用户“又提交了新的 测试”扩展统一入口，分支已变基到 `main / ed9eb28`，纳入 `m2b-npc-news / dc6d1d2`（含 `6774889`）。11 种好感状态、原生传话、公开/保密、显示中断、重复确认及保存回滚全部通过；修复听者离场仍确认、同连接新读档继承旧场景预算，正常 token 增量 0。最终 132/132 Node、20/20 C#、类型检查、构建、Release 零警告/错误通过；115 项真机检查、250.33 秒、22 次真实调用、4 次保存、8 次读档，原档 6 文件哈希一致。正常后端 00:38:37 备份后更新为 PID 12072，DLL 哈希一致，新协议消息探测通过。截图中“我弟”原始回复属于山姆，塞巴的卡片仍正确写妹妹玛鲁；添写文森特也听说了的内容未当成真实事件。完整证据、采样限制和错误/中止记录见 [本轮报告](test-results/2026-10-21-news-windows.md)。
+
 ## 3. 分支
 
 GitHub 私有仓库：https://github.com/hayasakaaiaiai/stardew-agent
@@ -74,10 +80,12 @@ GitHub 私有仓库：https://github.com/hayasakaaiaiai/stardew-agent
 | `m2b-in-person-gifts` | 当面送礼及特殊物品过滤，上游 `7a7d52d` | 已同步到当前验收分支 |
 | `world-public-facts` | 公开家庭状态与中文日志，上游 `c25e331` | 已同步到当前验收分支 |
 | `codex/new-parts-windows-tests` | 统一验收与失败读档保护修复；2026-10-20 按用户“合并到 main”快进合入 `main` | Windows：`E:\stardew-agent` |
-| `m2b-friendship-by-hearts` | 好感按熟悉程度分档（陌生难加易扣，熟悉易加难扣），已变基到新 `main`，待 Windows 验收 | `/Users/a11/Documents/ChatGPT/stardew-agent-gifts` |
-| `m2b-npc-news` | M2b 第八步：NPC 之间传话，建在 `m2b-friendship-by-hearts` 上，待 Windows 验收 | `/Users/a11/Documents/ChatGPT/stardew-agent-gifts` |
+| `m2b-friendship-by-hearts` | 好感按熟悉程度分档；Windows 验收见 `codex/news-windows-tests` | `/Users/a11/Documents/ChatGPT/stardew-agent-gifts` |
+| `m2b-npc-news` | 在场传话，基线 `dc6d1d2`；Windows 验收及修复见 `codex/news-windows-tests` | `/Users/a11/Documents/ChatGPT/stardew-agent-gifts` |
+| `codex/news-windows-tests` | 最新 `main / ed9eb28` + `dc6d1d2`，好感分档与传话组合验收及两处修复；本轮未推送 | Windows 当前：`E:\stardew-agent` |
+| `m2c-offscreen-news`、`legacy-cleanup` | 本轮结束时又发现 `3fcfda6`、`6e4800e`；后台传话及全部改用 high 等变化尚未纳入本轮数据 | 待独立验收 |
 
-Windows 上的目录是 `E:\stardew-agent`。当前 `codex/new-parts-windows-tests` 从上一轮 `36999ea` 建立，合入 `world-public-facts` / `c25e331`；包含远端 `main` / `db94a12`、M2b 第四至七步、公开家庭信息和临时日志清理。已解决测试记录、场景中文名与 Mod 赠礼分发的合并冲突，旧测试没有覆盖掉新功能。此前所有本地验收分支及 `codex/next-day-plans` / `2260625` 均保留。
+Windows 上的目录是 `E:\stardew-agent`。当前 `codex/news-windows-tests` 从上一轮 `908e73b` 建立，测试期间发现主线更新后先备份改动、变基到 `origin/main / ed9eb28`，再纳入最新 `m2b-npc-news / dc6d1d2`，保留上游新加的动态好感预期与本轮真机夹具。此前所有本地验收分支及 `codex/next-day-plans` / `2260625` 均保留。
 
 本次按用户“拉下来测”“修复”的要求，Windows 在 `nightly-consolidation` 上完成远端 `3f70b27` 验证和事实归属修复。本机常驻后端已重新启动，日志确认对话 `high`、夜间整合 `low`；原游戏记忆库、临时日志及旧后端日志在更新前已备份。
 
@@ -187,12 +195,14 @@ dotnet build mod/StardewAgentBridge   # 编译 Mod，编译完自动装进游戏
 5. **M2b 第六步：聊天影响好感**：增减、上限、重复消息、保存与回滚通过，见 [npc-friendship.md](npc-friendship.md) §8；已合入 `main`。按熟悉程度分档在 `m2b-friendship-by-hearts`。
 6. **自主行动**：调度器、合并场景调用和其余白名单动作另行设计。
 7. **已合入 `main`（2026-10-20）**：用户提交组合验收结果并要求合并后，`codex/new-parts-windows-tests` / `908e73b` 快进合入；Mac 上复核 125/125、类型检查、构建和 Release 编译。包含第四至七步、公开家庭信息、临时日志清理，以及 Windows 修的后端碰面冷却与失败读档保护。自然婚礼/电影等剧情、全部 NPC 自然游玩和模型事实可靠性仍按 [本轮报告](test-results/2026-10-20-new-parts-windows.md) 的覆盖边界观察。
-8. **待 Windows 验收**：`m2b-npc-news`（包含 `m2b-friendship-by-hearts`），按 [npc-friendship.md](npc-friendship.md) §2.1 和 [npc-news.md](npc-news.md) §7 测；可以继续用 `tools/test-game-social.ps1` 的框架补检查。
+8. **好感分档与在场传话已验收**：`codex/news-windows-tests` 的统一脚本 115 项真机检查通过，含两处修复。结果、失败保留与范围见 [10 月 21 日报告](test-results/2026-10-21-news-windows.md)，本轮未推送、未合入 `main`。
+9. **后续新增项**：结束时发现 `m2c-offscreen-news / 3fcfda6` 与 `legacy-cleanup / 6e4800e`。后台传话与全部改 high 等变化需要另行测试；不能将本轮 `dc6d1d2` 的 low/disabled 数据当作它们已通过。
 
 ## 8. 文档索引
 
 | 文档 | 讲什么 |
 |---|---|
+| `docs/test-results/2026-10-21-news-windows.md` | 好感分档、NPC 传话、显示中断与同日读档预算的组合验收和失败证据 |
 | `AGENTS.md` | 给 AI 助手的协作约定（Claude Code 通过 `CLAUDE.md` 读取它） |
 | `docs/status.md` | 本文档：进度、分支、环境、遗留问题、下一步 |
 | `docs/design.md` | 整体设计：已确认的决策、架构、存档和回滚、协议、角色卡、里程碑 |
@@ -202,6 +212,7 @@ dotnet build mod/StardewAgentBridge   # 编译 Mod，编译完自动装进游戏
 | `docs/game-bridge.md` | M3a：Mod 和后端的协议、原版界面怎么复用、游戏内测试清单 |
 | `docs/game-memory.md` | M3b：存档同步、跨天记忆、确认补发与崩溃恢复 |
 | `docs/nightly-consolidation.md` | 夜间整合：产出、输入、触发时机、出错处理、实测 token 和真实模型结果 |
+| `docs/npc-news.md` | M2b 第八步：NPC 之间传话的决定、规则写法对比、真实模型实测、测试和 Windows 清单 |
 | `docs/npc-friendship.md` | M2b 第六步：聊天影响原版好感的决定、规则写法对比、真实模型实测、测试和 Windows 清单 |
 | `docs/npc-in-person-gifts.md` | M2b 第七步：当面送礼、与寄信共用冷却、背包满、实测和组合脚本 |
 | `docs/world-public-facts.md` | 配偶、婚约、室友和孩子的公开事实，Mod 字段及真实模型验收 |

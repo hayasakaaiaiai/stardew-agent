@@ -35,14 +35,14 @@ test('scene lines keep short small talk between the two and drop anything about 
     { speaker: 'c', text: '我是谁？', emote: 'none' },
     { speaker: 'b', text: '先来一杯*啤酒*😀', emote: 'wink' },
     { speaker: 'a', text: '一'.repeat(25), emote: 'none' },
-  ]), 'gus', 'pam', '小林'), [
+  ]), 'gus', 'pam', '小林').lines, [
     { npc: 'gus', text: '嘿，潘姆！今天来得挺早啊。', emote: 'happy' },
     { npc: 'pam', text: '先来一杯啤酒', emote: 'none' },
   ]);
-  assert.deepEqual(parseScene(lines([{ speaker: 'a', text: '嘿。', emote: 'none' }, { speaker: 'b', text: '农场主呢？', emote: 'none' }]), 'gus', 'pam', '小林'),
+  assert.deepEqual(parseScene(lines([{ speaker: 'a', text: '嘿。', emote: 'none' }, { speaker: 'b', text: '农场主呢？', emote: 'none' }]), 'gus', 'pam', '小林').lines,
     [], 'one line left is not a conversation');
-  assert.equal(parseScene(lines(Array.from({ length: 6 }, (_, i) => ({ speaker: i % 2 ? 'b' : 'a', text: `第${i}句`, emote: 'none' }))), 'gus', 'pam', '').length, 4);
-  assert.deepEqual(parseScene('不是 JSON', 'gus', 'pam', ''), []);
+  assert.equal(parseScene(lines(Array.from({ length: 6 }, (_, i) => ({ speaker: i % 2 ? 'b' : 'a', text: `第${i}句`, emote: 'none' }))), 'gus', 'pam', '').lines.length, 4);
+  assert.deepEqual(parseScene('不是 JSON', 'gus', 'pam', ''), { lines: [], told: [] });
 });
 
 test('the scene prompt has both people, how they see each other, and the moment, but nothing private', async () => {

@@ -3,7 +3,8 @@ import type { AddressInfo } from 'node:net';
 import { type WebSocket, WebSocketServer } from 'ws';
 import type { Consolidator } from '../agent/consolidation.ts';
 import { OPENING_LINE, runTurn, type Standing, type WorldState } from '../agent/dialogue.ts';
-import { parseScene, type SceneLine, SCENES_PER_DAY, SCENE_GAP_MINUTES, scenePrompt } from '../agent/scene.ts';
+import { heardMemory } from '../agent/news.ts';
+import { parseScene, type SceneLine, type SceneNews, SCENES_PER_DAY, SCENE_GAP_MINUTES, scenePrompt } from '../agent/scene.ts';
 import type { ModelClient } from '../services/model/client.ts';
 import type { Roster } from '../services/roster/index.ts';
 import { SOCIAL_NPCS } from '../types.ts';
@@ -105,11 +106,18 @@ export class BridgeServer {
     session.scenes.pairs.add(pair);
     session.scenes.lastMinute = minute;
     try {
-      const completion = await sceneModel.chat(scenePrompt(roster, a!, b!, worldState(message.world, save.player, this.cardName)), {}, { json: true });
+      const found = await save.news([a!, b!]);
+      const news: SceneNews = { ...(found[a!] ? { a: found[a!] } : {}), ...(found[b!] ? { b: found[b!] } : {}) };
+      const completion = await sceneModel.chat(scenePrompt(roster, a!, b!, worldState(message.world, save.player, this.cardName), news),
+        {}, { json: true });
       if (save.closed || save.day !== requestedDay) return;
-      const lines = parseScene(completion.content, a!, b!, save.player.name);
+      const { lines, told } = parseScene(completion.content, a!, b!, save.player.name, news);
+      // The listener keeps the teller's words from last night, not whatever line the model put on screen.
+      save.noteScene(message.seq, told.map(teller => ({ npcId: teller === a ? b! : a!,
+        memory: heardMemory({ id: teller, name: roster.get(teller).name }, found[teller]!) })));
       reply(lines);
-      this.log(`碰面聊天：${roster.get(a!).name}和${roster.get(b!).name}，${lines.length ? `${lines.length} 句` : '没有可显示的'}`);
+      this.log(`碰面聊天：${roster.get(a!).name}和${roster.get(b!).name}，${lines.length ? `${lines.length} 句` : '没有可显示的'}`
+        + (told.length ? `，${told.map(teller => roster.get(teller).name).join('、')}说了新鲜事` : ''));
     } catch (error) {
       this.log(`碰面聊天失败：${error instanceof Error ? error.message : String(error)}`);
       reply([]);
@@ -181,7 +189,11 @@ export class BridgeServer {
       session.open.clear();
       if (session.save && this.owners.get(session.save.initial.lineageId) === session)
         this.owners.delete(session.save.initial.lineageId);
+      const previousSave = session.save;
       session.save = await this.memory.load(message);
+      // A rollback with a fresh nonce restarts the day's native scene budget. A repeated announcement of the
+      // same load keeps it, and a failed load above must not erase the current load's budget.
+      if (session.save !== previousSave) session.scenes = { day: session.save.day, pairs: new Set(), lastMinute: -1 };
       const previous = this.owners.get(message.lineageId);
       if (previous && previous !== session) {
         previous.pending?.abort('Connection superseded');
@@ -226,6 +238,12 @@ export class BridgeServer {
       const note = await save.gift(message);
       send({ type: 'ack', ...envelope(message) });
       if (note) this.log(`${this.cardName(message.npc)}记下了：${note}`);
+      return;
+    }
+    if (message.type === 'scene.shown') {
+      const heard = await save.sceneShown(message);
+      send({ type: 'ack', ...envelope(message) });
+      for (const item of heard) this.log(`${this.cardName(item.npcId)}记下了：${item.memory.text}`);
       return;
     }
     if (message.type === 'scene.request') {
