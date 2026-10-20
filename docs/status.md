@@ -144,7 +144,7 @@ dotnet build mod/StardewAgentBridge   # 编译 Mod，编译完自动装进游戏
 
 ## 7. 下一步
 
-1. **H4 机器人接回游戏存档**：夜间整合已在 2026-10-20 按用户“全部按推荐来”的授权快进合并进 `main`；接着把 `hardware-companion` 变基上来，按 `companion-device.md` §13 实现 H4。Windows 上测试前切回 `main` 拉最新代码。
+1. **硬件陪伴（暂停）**：用户 2026-10-20 决定 H 线先不做。H4（机器人接回游戏存档）已在 `hardware-companion` 实现并变基到最新 `main`，恢复时按 `companion-device.md` §13.9 在 Windows 上测。
 2. **M2b 第一步已合入 `main`**：[次日主动提起计划](next-day-plans.md)；继续观察自然语言日期与重复邀约。实际行动、调度器和白名单动作另行设计。
 3. **M2b 第二步：头顶气泡和表情**（2026-10-20，用户在测 M3a 时要求继续做，按推荐方案）：夜间整合顺带写第二天的 0–2 句自言自语，玩家走近时显示并配原版表情，不改存档状态、不进记忆。在 `m2b-bubbles` 分支（Mac 目录 `/Users/a11/Documents/ChatGPT/stardew-agent-m2b`），86 个测试通过，不合入 `main`。Windows 测试清单见 [npc-bubbles.md](npc-bubbles.md) §7；Mod 要重新编译。
 
