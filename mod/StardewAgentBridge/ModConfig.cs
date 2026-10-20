@@ -19,4 +19,7 @@ internal sealed class ModConfig
 
     /// <summary>Whether two NPCs standing together near the player chat over their heads (docs/npc-chat.md).</summary>
     public bool NpcChat { get; set; } = true;
+
+    /// <summary>Whether what the player says in agent conversations raises or lowers vanilla friendship (docs/npc-friendship.md).</summary>
+    public bool ChatChangesFriendship { get; set; } = true;
 }

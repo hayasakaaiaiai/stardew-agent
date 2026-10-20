@@ -359,6 +359,9 @@ internal sealed partial class ModEntry : Mod
                 t.WaitedTicks = 0; // Still generating, so not timed out.
                 break;
             case "talk.reply":
+                if (message.TryGetProperty("friendship", out JsonElement points) && points.ValueKind == JsonValueKind.Number
+                    && points.TryGetInt32(out int delta))
+                    this.ApplyFriendship(t.Npc, delta);
                 this.OnReply(t,
                     message.GetProperty("reply").GetString() ?? "",
                     message.GetProperty("emotion").GetString() ?? "neutral",

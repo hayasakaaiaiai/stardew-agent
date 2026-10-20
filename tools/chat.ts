@@ -303,6 +303,7 @@ function printMeta(result: TurnResult) {
   const options = meta.options.map((option, i) => `${i + 1}) ${option}`).join('  ');
   console.log(`  [${EMOTION_LABEL[meta.emotion]}] ${options}${metaOk ? '' : '  ⚠ 格式解析失败'}`);
   if (meta.remember.length) console.log(`  记住：${meta.remember.map((m) => `${m.text}（${m.importance}）`).join('；')}`);
+  if (meta.mood) console.log(`  好感变化：${meta.mood > 0 ? '+' : ''}${meta.mood}（游戏里每档 10 点，见 docs/npc-friendship.md）`);
   if (meta.end) console.log('  （对方想结束对话）');
   console.log(`  ${turnStats(result)}`);
 }
@@ -362,6 +363,7 @@ async function saveTranscript(npcId: string, scenario: Scenario, turns: Turn[]):
       '', `**玩家**：${turn.playerLine}`, '', `**${card.name}**：${result.reply}`, '',
       `- 表情：${EMOTION_LABEL[result.meta.emotion]} · 选项：${result.meta.options.join(' / ')}${result.meta.end ? ' · 想结束对话' : ''}`,
       ...(result.meta.remember.length ? [`- 记住：${result.meta.remember.map((m) => `${m.text}（${m.importance}）`).join('；')}`] : []),
+      ...(result.meta.mood ? [`- 好感变化：${result.meta.mood > 0 ? '+' : ''}${result.meta.mood}`] : []),
       `- ${turnStats(result)}${result.metaOk ? '' : ' · ⚠ 格式解析失败'}`,
       ...(result.metaOk ? [] : ['', '原始输出：', '', '```', result.attempts.at(-1)!.content, '```']),
       ...(result.attempts.at(-1)!.reasoning ? ['', '<details><summary>推理过程</summary>', '', result.attempts.at(-1)!.reasoning.trim(), '', '</details>'] : []),

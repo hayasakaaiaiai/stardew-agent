@@ -95,7 +95,11 @@ export type BackendMessage =
   /** Answers a scene.request with its seq; empty when nothing should be shown. */
   | ({ type: 'scene.lines'; lines: SceneLine[] } & Envelope);
 
-export type TalkReply = { type: 'talk.reply'; npc: string; reply: string; emotion: Emotion; options: string[]; end: boolean } & Envelope;
+export type TalkReply = {
+  type: 'talk.reply'; npc: string; reply: string; emotion: Emotion; options: string[]; end: boolean;
+  /** Points the Mod adds to vanilla friendship with this reply, already within the day's range (docs/npc-friendship.md). */
+  friendship: number;
+} & Envelope;
 
 export function absoluteDay(date: Pick<GameDate, 'year' | 'season' | 'day'>): number {
   return (date.year - 1) * 112 + ['spring', 'summer', 'fall', 'winter'].indexOf(date.season) * 28 + date.day;

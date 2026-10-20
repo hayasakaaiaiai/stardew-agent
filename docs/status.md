@@ -18,7 +18,7 @@
 | 里程碑 | 状态 | 已完成 | 还没做 | 文档 |
 |---|---|---|---|---|
 | M1 存储与事务 | 完成 | 记忆内核：SQLite 提交树、中文检索、当天事务、存档提交和回滚、后端崩溃恢复 | 自动清理过期的临时日志 | `README.md`、`design.md` §16 |
-| M2 Agent | 对话、夜间整合、次日计划、头顶气泡、寄信与格式失败恢复已合入 | 对话；夜间原话校验；首次“继续聊”提计划；头顶气泡和表情；寄信与随信附赠；夜间格式失败有限补跑（2026-10-20 合并进 `main`） | NPC 碰面聊天（`m2b-npc-chat`）、送礼记忆（`m2b-gifts`），待 Windows 验收；自主行动（调度器、合并场景调用、白名单动作）；观察正常游玩和自由生成内容 | `dialogue-prototype.md`、`nightly-consolidation.md`、`next-day-plans.md`、`npc-bubbles.md`、`npc-mail.md`、`npc-chat.md`、`npc-gifts.md` |
+| M2 Agent | 对话、夜间整合、次日计划、头顶气泡、寄信与格式失败恢复已合入 | 对话；夜间原话校验；首次“继续聊”提计划；头顶气泡和表情；寄信与随信附赠；夜间格式失败有限补跑（2026-10-20 合并进 `main`） | NPC 碰面聊天（`m2b-npc-chat`）、送礼记忆（`m2b-gifts`）、聊天影响好感（`m2b-friendship`），待 Windows 验收；自主行动（调度器、合并场景调用、白名单动作）；观察正常游玩和自由生成内容 | `dialogue-prototype.md`、`nightly-consolidation.md`、`next-day-plans.md`、`npc-bubbles.md`、`npc-mail.md`、`npc-chat.md`、`npc-gifts.md`、`npc-friendship.md` |
 | M3 接入游戏 | 完成（Windows） | 游戏里"继续聊"；真实保存/退出、跨天记忆、回滚、后端进程重启与旧档分叉；拼音输入法、原版台词保留、取消三项手测通过 | — | `game-bridge.md`、`game-memory.md` |
 | M4 内容 | 角色卡已完成 | 34 张角色卡（已审阅），"看过事件之后"共 201 条 | 物品名到 ID 的对应、各动作的上限 | `design.md` §11 |
 
@@ -44,6 +44,8 @@ M2b 第四步“NPC 碰面聊天”在 `m2b-npc-chat` 上实现，已建在新�
 
 M2b 第五步“NPC 记得玩家送的礼物”在 `m2b-gifts` 上实现，建在 `m2b-npc-chat` 上：Mod 对比原版的当天送礼计数发现送礼，发可靠的 `gift.given`；后端按模板给这位 NPC 记一条“农场主送我紫水晶，我特别喜欢。”，重要度按原版喜好，跟着存档保存或回滚；夜间整合不再把这类记忆当成对话笔记替换掉。不调用模型，固定 token 0，被想起时每条 16–22 token。协议版本升到 3。真实模型 6 次问“喜欢我送的东西吗”，回答都和原版喜好一致。111/111、类型检查、构建和 Release 编译通过，等 Windows 验收，见 [npc-gifts.md](npc-gifts.md) §6。
 
+M2b 第六步“聊天影响原版好感”在 `m2b-friendship` 上实现，建在 `m2b-gifts` 上：对话每轮模型多给一个 -2 到 2 的 `mood`，代码按每档 10 点换算，每位 NPC 每天合计截在 −40 到 +30（`design.md` §8），随回复发给 Mod，Mod 再核对一次后调用原版 `changeFriendship`；开场一律 0，当天合计从当天日志加总，跟存档保存或回滚。规则最短写法 57 token；真实模型 48 次实测每轮多 59 输入（可缓存）、约 19 输出 token，字段齐全 48/48，讨要好感和奉承没有加分。114/114、类型检查、构建和 Release 编译通过，等 Windows 验收，见 [npc-friendship.md](npc-friendship.md) §7。
+
 ## 3. 分支
 
 GitHub 私有仓库：https://github.com/hayasakaaiaiai/stardew-agent
@@ -59,7 +61,8 @@ GitHub 私有仓库：https://github.com/hayasakaaiaiai/stardew-agent
 | `m2b-mail` | NPC 寄信与随信附赠，2026-10-20 随 `codex/mail-windows-tests` 合入 `main` | `/Users/a11/Documents/ChatGPT/stardew-agent-mail` |
 | `codex/mail-windows-tests` | 气泡、寄信验收与修复，追加夜间格式失败恢复；2026-10-20 快进合并进 `main` | Windows：`E:\stardew-agent` |
 | `m2b-npc-chat` | M2b 第四步：NPC 碰面聊天（旁听），建在最新 `main` 上，等 Windows 验收 | `/Users/a11/Documents/ChatGPT/stardew-agent-chat` |
-| `m2b-gifts` | M2b 第五步：NPC 记得玩家送的礼物，建在 `m2b-npc-chat` 上，等 Windows 验收；协议版本 3 | `/Users/a11/Documents/ChatGPT/stardew-agent-gifts` |
+| `m2b-gifts` | M2b 第五步：NPC 记得玩家送的礼物，建在 `m2b-npc-chat` 上，等 Windows 验收；协议版本 3 | 已提交，目录现在用于下一步 |
+| `m2b-friendship` | M2b 第六步：聊天影响原版好感，建在 `m2b-gifts` 上，等 Windows 验收 | `/Users/a11/Documents/ChatGPT/stardew-agent-gifts` |
 
 Windows 上的目录是 `E:\stardew-agent`。当前从 `m2b-mail` 建立寄信验收分支，并合入本地 `910c127` 的气泡修复；已包含最新远端 `main` / `6c151f2`。本地 `codex/next-day-plans` 的手测入口提交 `2260625` 仍保留，并复用到验收分支。M3b 在 `codex/game-save-memory` 上开发，2026-10-20 快进合并进 `main`；它已经包含的 `codex/abigail-auto-test` 同时删除。
 
@@ -167,8 +170,9 @@ dotnet build mod/StardewAgentBridge   # 编译 Mod，编译完自动装进游戏
 1. **硬件陪伴（暂停）**：用户 2026-10-20 决定 H 线先不做。H4（机器人接回游戏存档）已在 `hardware-companion` 实现并变基到最新 `main`，恢复时按 `companion-device.md` §13.9 在 Windows 上测。
 2. **M2b 前三步已合入 `main`**：[次日主动提起计划](next-day-plans.md)、[头顶气泡和表情](npc-bubbles.md)、[寄信与随信附赠](npc-mail.md)，以及[夜间格式失败恢复](test-results/2026-10-20-nightly-recovery.md)。继续观察正常游玩中的自然语言日期、重复邀约、气泡过滤和自由生成内容。
 3. **M2b 第四步：NPC 碰面聊天**：`m2b-npc-chat` 已实现，等 Windows 按 [npc-chat.md](npc-chat.md) §7 验收；通过后合入 `main`。
-4. **M2b 第五步：送礼记忆**：`m2b-gifts` 已实现，等 Windows 按 [npc-gifts.md](npc-gifts.md) §6 验收。它包含第四步，可以一起测；两步都通过后一起合入 `main`。Mod 和后端要一起更新（协议 3）。
-5. **自主行动**：调度器、合并场景调用、白名单动作另行设计。
+4. **M2b 第五步：送礼记忆**：`m2b-gifts` 已实现，等 Windows 按 [npc-gifts.md](npc-gifts.md) §6 验收。Mod 和后端要一起更新（协议 3）。
+5. **M2b 第六步：聊天影响好感**：`m2b-friendship` 已实现，等 Windows 按 [npc-friendship.md](npc-friendship.md) §7 验收。它包含第四、五步，可以一次切到这个分支把三步一起测，都通过后一起合入 `main`。
+6. **自主行动**：调度器、合并场景调用和其余白名单动作另行设计。
 
 ## 8. 文档索引
 
@@ -183,6 +187,7 @@ dotnet build mod/StardewAgentBridge   # 编译 Mod，编译完自动装进游戏
 | `docs/game-bridge.md` | M3a：Mod 和后端的协议、原版界面怎么复用、游戏内测试清单 |
 | `docs/game-memory.md` | M3b：存档同步、跨天记忆、确认补发与崩溃恢复 |
 | `docs/nightly-consolidation.md` | 夜间整合：产出、输入、触发时机、出错处理、实测 token 和真实模型结果 |
+| `docs/npc-friendship.md` | M2b 第六步：聊天影响原版好感的决定、规则写法对比、真实模型实测、测试和 Windows 清单 |
 | `docs/npc-gifts.md` | M2b 第五步：送礼记忆的决定、模板、实测 token、测试和 Windows 清单 |
 | `docs/npc-chat.md` | M2b 第四步：NPC 碰面聊天的决定、给模型的规则、实测 token、测试和 Windows 清单 |
 | `docs/npc-mail.md` | M2b 第三步：NPC 寄信和随信附赠的决定、规则、实测 token、物品名核对、测试和 Windows 清单 |

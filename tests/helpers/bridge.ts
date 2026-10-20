@@ -21,16 +21,19 @@ export const openTalk = (day = 1, npc = 'Abigail') => ({ type: 'talk.open', npc,
 export function fakeModel() {
   const sent: ChatMessage[][] = [];
   let hold: (() => Promise<void>) | undefined;
+  let defaultMood = 0;
   const model = { async chat(messages: ChatMessage[], handlers: StreamHandlers): Promise<Completion> {
     sent.push(messages);
     await hold?.();
     const last = messages.at(-1)!.content;
     const remember = last.startsWith('记住') ? [{ text: last.slice(2), importance: 5 }] : [];
-    const content = JSON.stringify({ reply: `回复${sent.length}`, emotion: 'happy', options: ['一', '二', '三'], remember, end: false });
+    // “好感2……” rates the line, like the model's mood field (docs/npc-friendship.md).
+    const mood = Number(/^好感(-?\d)/.exec(last)?.[1] ?? defaultMood);
+    const content = JSON.stringify({ reply: `回复${sent.length}`, emotion: 'happy', options: ['一', '二', '三'], remember, mood, end: false });
     handlers.onContent?.(content);
     return { content, reasoning: '', finishReason: 'stop', usage: null, timing: { firstReasoningMs: null, firstContentMs: 1, totalMs: 1 } };
   } } as unknown as ModelClient;
-  return { model, sent, hold: (run?: () => Promise<void>) => { hold = run; } };
+  return { model, sent, hold: (run?: () => Promise<void>) => { hold = run; }, mood: (value: number) => { defaultMood = value; } };
 }
 
 export function deferred() {

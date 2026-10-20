@@ -73,7 +73,7 @@ test('a talk streams deltas, then a reply; history builds up and a new day clear
     const first = await until('talk.reply');
     assert.ok(first.filter((m) => m.type === 'talk.delta').length >= 1);
     assert.equal(first.filter((m) => m.type === 'talk.delta').map((m) => (m as { text: string }).text).join(''), '第1句。');
-    assert.deepEqual(first.at(-1), { ...ENVELOPE, seq: 3, type: 'talk.reply', npc: 'Abigail', reply: '第1句。', emotion: 'happy', options: ['一', '二', '三'], end: false });
+    assert.deepEqual(first.at(-1), { ...ENVELOPE, seq: 3, type: 'talk.reply', npc: 'Abigail', reply: '第1句。', emotion: 'happy', options: ['一', '二', '三'], end: false, friendship: 0 });
     const system = fake.sent[0]![0]!.content;
     assert.match(system, /第 1 年春季 17 日（周三）15:30，下雨/);
     assert.match(system, /玩家：小林（女），经营晴空农场/);

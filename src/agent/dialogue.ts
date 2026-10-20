@@ -59,6 +59,8 @@ export interface DialogueMeta {
   emotion: Emotion;
   options: string[];
   remember: Remembered[];
+  /** How the player's line moved the NPC's feeling, −2 to 2 (docs/npc-friendship.md); 0 when missing or invalid. */
+  mood: number;
   end: boolean;
 }
 
@@ -89,13 +91,14 @@ export const RULES = `# 角色扮演规则
 
 ## 输出格式
 只输出一个 JSON 对象，reply 必须是第一个字段。例如：
-{"reply":"嘿。下雨天你也出门了？","emotion":"happy","options":["一起走走吧","你喜欢下雨？","我先回农场了"],"remember":[],"end":false}
+{"reply":"嘿。下雨天你也出门了？","emotion":"happy","options":["一起走走吧","你喜欢下雨？","我先回农场了"],"remember":[],"mood":0,"end":false}
 
 字段：
 - reply：你说的台词，只写台词。
 - emotion：说这句话时的表情，取 neutral、happy、sad、blush、angry、special 之一。
 - options：玩家下一句可以说的话，正好 3 条，用玩家的口吻，每条不超过 15 字，方向要不同，比如一条顺着聊、一条追问、一条告别或岔开。
 - remember：这轮里值得你长期记住的事，0–2 条，每条写成 {"text":"……","importance":1到5}，用你自己的视角写，比如“小林说她最喜欢下雨天”。玩家说出的喜好、计划、承诺、经历和心里话都要记；寒暄和你自己说的话不用记；没有就写 []。
+- mood：这句话让你对玩家好感的变化，-2 到 2：闲聊 0，合心意 1，很感动 2，冒犯 -1，很过分 -2；讨好感、空奉承算 0。
 - end：你想结束这次对话时写 true，比如玩家道别或你不想再聊了；否则写 false。`;
 
 /**
@@ -103,7 +106,7 @@ export const RULES = `# 角色扮演规则
  * DeepSeek's JSON mode returns nothing but whitespace; naming the fields stops it copying the reply-only
  * shape of the history (measured 3/6 complete without, 6/6 with).
  */
-export const JSON_HINT = '（用 json 回复，字段齐全：reply、emotion、options、remember、end）';
+export const JSON_HINT = '（用 json 回复，字段齐全：reply、emotion、options、remember、mood、end）';
 
 export interface PromptInput {
   npcName: string;
@@ -211,7 +214,7 @@ export class ReplyStream {
  * reply already shown to the player, used when the JSON as a whole cannot be parsed.
  */
 export function parseOutput(content: string, streamed = ''): { reply: string; meta: DialogueMeta; ok: boolean } {
-  const fallback = { reply: streamed.trim(), meta: { emotion: 'neutral' as const, options: [...FALLBACK_OPTIONS], remember: [], end: false }, ok: false };
+  const fallback = { reply: streamed.trim(), meta: { emotion: 'neutral' as const, options: [...FALLBACK_OPTIONS], remember: [], mood: 0, end: false }, ok: false };
   const start = content.indexOf('{');
   const end = content.lastIndexOf('}');
   if (start < 0 || end < start) return { ...fallback, reply: fallback.reply || content.trim() };
@@ -241,6 +244,7 @@ export function parseOutput(content: string, streamed = ''): { reply: string; me
       emotion: validEmotion ? data.emotion as Emotion : 'neutral',
       options: options.length ? [...options, ...FALLBACK_OPTIONS].slice(0, 3) : [...FALLBACK_OPTIONS],
       remember,
+      mood: Number.isInteger(data.mood) && Math.abs(data.mood as number) <= 2 ? data.mood as number : 0,
       end: data.end === true,
     },
     ok: reply !== '' && options.length === 3 && validEmotion && typeof data.end === 'boolean',

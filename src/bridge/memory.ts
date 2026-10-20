@@ -5,6 +5,7 @@ import type { Consolidator } from '../agent/consolidation.ts';
 import { type Bubble, bubblesFor } from '../agent/bubbles.ts';
 import { AgentMemory, turnLog } from '../agent/dialogue-memory.ts';
 import type { DialogueMemory, Exchange, Remembered, Standing, TurnResult } from '../agent/dialogue.ts';
+import { friendshipPoints, friendshipSoFar } from '../agent/friendship.ts';
 import { giftItemName, giftMemory } from '../agent/gifts.ts';
 import { type DeliveredLetter, type Letter, letterFor, letterKey } from '../agent/letters.ts';
 import { Nightly } from '../agent/nightly.ts';
@@ -282,12 +283,16 @@ export class GameSave {
         signal.throwIfAborted(); this.check(message);
         requireValue(this.live && this.state.phase === 'open', 'DAY_CLOSED', '这轮对话所属日期已经关闭');
         const envelope: Envelope = { lineageId: message.lineageId, loadNonce: message.loadNonce, seq: message.seq };
+        // Opening a conversation says nothing the NPC could feel anything about, and a turn that is not logged
+        // could not be counted against the day's range (docs/npc-friendship.md).
+        const friendship = message.type === 'talk.open' || !staged ? 0
+          : friendshipPoints(result.meta.mood, friendshipSoFar(this.scope!.ledger.currentDay?.overlay(npcId).today ?? [], npcId));
         const reply: TalkReply = { ...envelope, type: 'talk.reply', npc: message.npc, reply: result.reply,
-          emotion: result.meta.emotion, options: result.meta.options, end: result.meta.end };
+          emotion: result.meta.emotion, options: result.meta.options, end: result.meta.end, friendship };
         const receipt: Receipt = { seq: message.seq, hash: digest(canonical(message)), reply };
         if (staged) await agent.record({ seq: message.seq, gameTime: gameMinutes(date),
           log: { player: staged.exchange.player, npc: staged.exchange.npc, ...turnLog(standing, this.player),
-            bridgeReceipt: JSON.parse(canonical(receipt)) },
+            ...(friendship ? { friendship } : {}), bridgeReceipt: JSON.parse(canonical(receipt)) },
           memories: staged.remembered.map(item => ({ text: item.text, importance: item.importance,
             kind: 'conversation', subjects: ['player'], visibility: 'private' })),
         });
