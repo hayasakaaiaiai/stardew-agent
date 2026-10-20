@@ -63,7 +63,9 @@ export function scenePrompt(roster: Roster, a: string, b: string, world: WorldSt
     `## 两个人\n${person('a', first)}\n${person('b', second)}`,
     ...(relations.length ? [`## 关系\n${relations.join('\n')}`] : []),
     [`## 现在`, `- 第 ${world.year} 年${SEASONS[world.season]} ${world.day} 日 ${world.time}，${world.weather}，${world.location}`,
-      ...(facts.length ? [`- 镇上的情况：${facts.join('；')}`] : [])].join('\n'),
+      ...(facts.length ? [`- 镇上的情况：${facts.join('；')}`] : []),
+      // Only news brings the player up; without this the model guesses “他” (docs/npc-news.md §4).
+      ...(told.length ? [`- 农场主：${world.player.name}（${world.player.gender === 'female' ? '女' : '男'}）`] : [])].join('\n'),
     ...(told.length ? [`## 想说的事\n${told.join('\n')}`] : []),
     SCENE_HINT,
   ].join('\n\n');

@@ -69,6 +69,7 @@ test('news written at night is told in a scene the next day, remembered once sho
   const shown = await wire.until('scene.lines', from) as unknown as { lines: { text: string }[] };
   assert.equal(shown.lines[0]!.text, '嘿，测试送了我紫水晶！');
   assert.match(scenes.sent[0]![1]!.content, new RegExp(`## 想说的事\\n- a（阿比盖尔）："${SHARE}"`));
+  assert.match(scenes.sent[0]![1]!.content, /\n- 农场主：测试（女）\n/, 'news brings the player up, so the model needs her gender');
   assert.ok(h.logs.some(line => line.endsWith('阿比盖尔说了新鲜事')));
   const note = `阿比盖尔跟我说："${SHARE}"`;
   from = wire.inbox.length;
