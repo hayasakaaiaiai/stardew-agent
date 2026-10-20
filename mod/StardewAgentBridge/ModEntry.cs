@@ -64,12 +64,14 @@ internal sealed partial class ModEntry : Mod
     public override void Entry(IModHelper helper)
     {
         this.config = helper.ReadConfig<ModConfig>();
+        this.ConfigureMemoryTest();
         this.bridge = new BridgeClient(new Uri(this.config.BackendUrl), this.Monitor, this.ModManifest.Version.ToString());
 
         helper.Events.GameLoop.GameLaunched += (_, _) =>
         {
             this.bridge.Start();
             this.BeginAbigailTestIfRequested();
+            this.BeginMemoryTestIfRequested();
         };
         helper.Events.GameLoop.SaveLoaded += (_, _) => this.OnSaveLoaded();
         helper.Events.GameLoop.DayStarted += (_, _) => this.OnDayStarted();
@@ -113,6 +115,8 @@ internal sealed partial class ModEntry : Mod
     {
         if (e.Button == SButton.Escape && this.abigailTestRequest is not null)
             this.FinishAbigailTest(false, "用户按 Esc 取消自动测试。");
+        if (e.Button == SButton.Escape && this.memoryTest is not null)
+            this.FinishMemoryTest(false, "用户按 Esc 取消记忆验收。");
         if (this.talk is { Waiting: true } && e.Button == SButton.Escape)
             this.EndTalk(null);
     }
@@ -137,6 +141,7 @@ internal sealed partial class ModEntry : Mod
             this.TickTalk(t);
 
         this.TickAbigailTest();
+        this.TickMemoryTest();
 
         // Everything below opens a menu, so it waits until the previous one has fully closed.
         if (Game1.activeClickableMenu is not null || Game1.dialogueUp || !Context.IsWorldReady)

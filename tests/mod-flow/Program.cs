@@ -220,5 +220,68 @@ Test("late replies with the wrong nonce or request sequence never enter game UI 
     Check((bool)Invoke(mod, "IsCurrentReply", valid.RootElement, 12)!, "The current request's reply was rejected.");
 });
 
+string? previousMemoryTest = Environment.GetEnvironmentVariable("STARDEW_AGENT_TEST_MEMORY");
+string testDirectory = Path.Combine(Path.GetTempPath(), "stardew-memory-guard-" + Guid.NewGuid().ToString("N"));
+Directory.CreateDirectory(testDirectory);
+Type configType = modAssembly.GetType("StardewAgentBridge.ModConfig", throwOnError: true)!;
+object TestMod()
+{
+    object mod = RuntimeHelpers.GetUninitializedObject(modType);
+    Set(mod, "config", Activator.CreateInstance(configType, nonPublic: true)!);
+    return mod;
+}
+try
+{
+    Test("normal launches do not activate the memory acceptance scenario or override the backend", () =>
+    {
+        Environment.SetEnvironmentVariable("STARDEW_AGENT_TEST_MEMORY", null);
+        object mod = TestMod();
+        Invoke(mod, "ConfigureMemoryTest");
+        Check(Get(mod, "memoryTest") is null, "A normal launch activated the test scenario.");
+        Check((string?)configType.GetProperty("BackendUrl")!.GetValue(Get(mod, "config")) == "ws://127.0.0.1:47711", "A normal launch changed its backend.");
+    });
+
+    Test("memory acceptance rejects the original save, wrong folder, remote backend and malformed request", () =>
+    {
+        foreach (var invalid in new[]
+        {
+            (Id: "436774213", Folder: "MemoryTest_436774213", Url: "ws://127.0.0.1:12345", Request: Guid.NewGuid().ToString()),
+            (Id: "1234567890", Folder: "测试_436774213", Url: "ws://127.0.0.1:12345", Request: Guid.NewGuid().ToString()),
+            (Id: "1234567890", Folder: "MemoryTest_1234567890", Url: "ws://example.com:12345", Request: Guid.NewGuid().ToString()),
+            (Id: "1234567890", Folder: "MemoryTest_1234567890", Url: "ws://127.0.0.1:12345", Request: "not-a-request"),
+        })
+        {
+            string path = Path.Combine(testDirectory, "config.json");
+            File.WriteAllText(path, JsonSerializer.Serialize(new { RequestId = invalid.Request, UniqueId = invalid.Id,
+                SaveFolder = invalid.Folder, BackendUrl = invalid.Url, RunDirectory = testDirectory }));
+            Environment.SetEnvironmentVariable("STARDEW_AGENT_TEST_MEMORY", path);
+            object mod = TestMod();
+            bool rejected = false;
+            try { Invoke(mod, "ConfigureMemoryTest"); }
+            catch (TargetInvocationException error) when (error.InnerException is InvalidOperationException) { rejected = true; }
+            Check(rejected && Get(mod, "memoryTest") is null, "An unsafe acceptance configuration was accepted.");
+        }
+    });
+
+    Test("an explicit isolated memory scenario uses its own loopback backend without changing saved config", () =>
+    {
+        string path = Path.Combine(testDirectory, "config.json");
+        File.WriteAllText(path, JsonSerializer.Serialize(new { RequestId = Guid.NewGuid().ToString(), UniqueId = "1234567890",
+            SaveFolder = "MemoryTest_1234567890", BackendUrl = "ws://127.0.0.1:12345", RunDirectory = testDirectory }));
+        Environment.SetEnvironmentVariable("STARDEW_AGENT_TEST_MEMORY", path);
+        object mod = TestMod();
+        Invoke(mod, "ConfigureMemoryTest");
+        Check(Get(mod, "memoryTest") is not null, "The explicit test scenario was not activated.");
+        Check((string?)configType.GetProperty("BackendUrl")!.GetValue(Get(mod, "config")) == "ws://127.0.0.1:12345", "The isolated backend was not selected.");
+    });
+}
+finally
+{
+    Environment.SetEnvironmentVariable("STARDEW_AGENT_TEST_MEMORY", previousMemoryTest);
+    // Only the fixture file created above is removed; preserve the directory if unexpected data appeared.
+    File.Delete(Path.Combine(testDirectory, "config.json"));
+    if (!Directory.EnumerateFileSystemEntries(testDirectory).Any()) Directory.Delete(testDirectory);
+}
+
 Console.WriteLine($"Mod flow checks: {checks - failures}/{checks} passed.");
 return failures == 0 ? 0 : 1;

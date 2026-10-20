@@ -1,6 +1,7 @@
 ﻿[CmdletBinding()]
 param(
-    [string]$GamePath = 'E:\games\steamapps\common\Stardew Valley'
+    [string]$GamePath = 'E:\games\steamapps\common\Stardew Valley',
+    [switch]$PrepareOnly
 )
 
 $ErrorActionPreference = 'Stop'
@@ -59,6 +60,7 @@ try {
     Copy-Item -LiteralPath $taskBuiltDll -Destination (Join-Path $taskPendingDirectory 'StardewAgentBridge.dll') -Force
     [pscustomobject]@{ Sha256=$taskHash; Fix='M3b save memory, menu lifecycle fix and opt-in Abigail test' } |
         ConvertTo-Json | Set-Content -LiteralPath (Join-Path $taskPendingDirectory 'install.json') -Encoding UTF8
+    if ($PrepareOnly) { return }
 
     $taskBridge = Join-Path $taskRoot 'tools\bridge.ts'
     $taskListener = Get-NetTCPConnection -State Listen -LocalPort 47711 -ErrorAction SilentlyContinue | Select-Object -First 1
