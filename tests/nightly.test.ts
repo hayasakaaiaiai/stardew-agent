@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { test } from 'node:test';
 import { type Bubble, bubblesFor, parseBubbles } from '../src/agent/bubbles.ts';
+import { GIFT_COOLDOWN_DAYS, giftFor, letterFor, safeLetter } from '../src/agent/letters.ts';
 import { nightlyConsolidator, nightlyPrompt, NIGHTLY_RULES, parseNightly, type NightlyOutput } from '../src/agent/nightly.ts';
 import { runTurn, type WorldState } from '../src/agent/dialogue.ts';
 import type { ChatMessage, Completion, ModelClient, StreamHandlers } from '../src/services/model/client.ts';
@@ -87,7 +88,7 @@ test('nightly output clips state, defaults importance, and rejects unsupported m
     + `{"sources":["t2"],"importance":2}],"impression":"${'好'.repeat(140)}","retire":["m1",2]}`)!;
   assert.deepEqual(parsed, {
     memories: [{ sources: ['t1'], importance: 3 }, { sources: ['t2'], importance: 2 }], retire: ['m1'], impression: '好'.repeat(120), plan: '',
-    bubbles: [],
+    bubbles: [], letter: '', gift: false,
   });
 });
 
@@ -316,5 +317,92 @@ test("the day's bubbles reach the Mod when the day starts, again after a late co
 
   const reload = await connect(server, initial('load-2', 2, commit));
   assert.deepEqual((await reload.until('day.bubbles', 0) as { npcs: unknown }).npcs, { abigail: bubbles }, 'they follow the save point');
+  await reload.close();
+});
+
+test('letters keep notes read the next morning and drop wrong days, progress claims, and overlong text', () => {
+  for (const text of ['矿洞的事你还没回我呢，想一起去的话说一声。', '纸船做好了吗？', '要是我爸不过敏就好了。', '今天山上见，你可别迟到呀。', '昨天聊得真开心。']) {
+    assert.equal(safeLetter(text), text, text);
+  }
+  for (const text of ['我明天自己去墓地转转。', '风筝材料我今晚去找。', '材料已经备好了。', '骨架做好了，等你来。', '一'.repeat(101)]) {
+    assert.equal(safeLetter(text), undefined, text);
+  }
+  assert.equal(safeLetter('嘿@，^送你%item object 72 1 %%'), '嘿，送你item object 72 1', 'game commands removed');
+  assert.deepEqual(letterFor({ day: 31, letter: { text: '可别忘啦。', importance: 4, item: '紫水晶' } }, 32),
+    { text: '可别忘啦。', importance: 4, item: '紫水晶' });
+  assert.equal(letterFor({ day: 31, letter: null }, 32), undefined);
+  assert.equal(letterFor({ day: 30, letter: { text: '可别忘啦。', importance: 4 } }, 32), undefined, 'only the morning after');
+});
+
+test('the code picks one gift: six hearts or a close relation, marriage-only lines, the cooldown, and a rotation by day', () => {
+  const gifts = [{ item: '紫水晶', text: '捡到的' }, { item: '蝙蝠翅膀', text: '战利品' }, { item: '樱桃炸弹', text: '婚后，塞给玩家防身' },
+    { item: '炸弹', text: '同上' }];
+  const pick = (hearts: number, relation: 'friend' | 'dating' | 'married', state = {}, day = 30) =>
+    giftFor(gifts, { hearts, relation }, state, day)?.item;
+  assert.equal(pick(5, 'friend'), undefined);
+  assert.equal(pick(4, 'dating'), '紫水晶', 'a close relation counts; marriage-only lines are skipped (30 % 2 = 0)');
+  assert.equal(pick(6, 'friend', {}, 31), '蝙蝠翅膀', 'rotated by day');
+  assert.equal(pick(10, 'married', {}, 34), '樱桃炸弹', 'after marriage every line can come up (34 % 4 = 2)');
+  assert.equal(pick(8, 'friend', { lastGiftDay: 30 - GIFT_COOLDOWN_DAYS + 1 }), undefined, 'one gift a week');
+  assert.equal(pick(8, 'friend', { lastGiftDay: 30 - GIFT_COOLDOWN_DAYS }), '紫水晶');
+  assert.equal(giftFor(gifts, undefined, {}, 30), undefined, 'unknown standing');
+});
+
+test('a night encloses only the gift the code offered, never one the model names, and clears an old letter', async () => {
+  const roster = new Roster({ directory: resolve(import.meta.dirname, '../data/npcs'), npcIds: SOCIAL_NPCS });
+  await roster.load();
+  const input = factsInput(FACTS_FIXTURES.find((fixture) => fixture.id === 'accepted')!);
+  const prompt = nightlyPrompt(roster, input.commit, input.npcs[0]!);
+  const offered = giftFor(roster.get('abigail').gifts, { hearts: 8, relation: 'friend' }, {}, 31)!;
+  assert.equal(prompt.gift, offered.item);
+  assert.ok(prompt.messages[1]!.content.includes(`## 可以随信附上的东西\n关系不错，这次写信可以附上一样你自己有的东西：${offered.item}（${offered.text}）`));
+  assert.equal(prompt.messages[1]!.content.split('\n').filter((line) => line.startsWith('- ') && line.includes('紫水晶：')).length, 0,
+    'only the one item is shown, not the card list');
+  const run = async (output: Record<string, unknown>, state = {}) => {
+    const content = JSON.stringify({ memories: [{ sources: ['t2'], importance: 4 }], retire: [], impression: '好', plan: '', ...output });
+    const model = nightlyModel([content]).model;
+    const [change] = await nightlyConsolidator({ roster, model })({ ...input, npcs: [{ ...input.npcs[0]!, state }] }, new AbortController().signal);
+    return change!.state!;
+  };
+  const sent = await run({ letter: '说好一起做风筝的，可别忘啦。', gift: true });
+  assert.deepEqual(sent.letter, { text: '说好一起做风筝的，可别忘啦。', importance: 4, item: offered.item });
+  assert.equal(sent.lastGiftDay, 31);
+  const named = await run({ letter: '可别忘啦。', gift: '铱锭' });
+  assert.deepEqual(named.letter, { text: '可别忘啦。', importance: 4 }, 'a model that names an item gives nothing; the letter stays');
+  assert.equal(named.lastGiftDay, undefined);
+  assert.equal((await run({ letter: '', gift: true }, { letter: { text: '旧信', importance: 3 }, lastGiftDay: 10 })).letter, null,
+    "no letter tonight clears yesterday's, and a gift needs a letter");
+  const cooling = nightlyPrompt(roster, input.commit, { ...input.npcs[0]!, state: { lastGiftDay: 30 } });
+  assert.doesNotMatch(cooling.messages[1]!.content, /可以随信附上的东西/, 'within the cooldown nothing is offered');
+});
+
+test('the morning brings one letter, from the NPC whose night mattered most, with its gift', { timeout: 10000 }, async (t) => {
+  const h = await harness(t);
+  const nightly = nightlyModel([
+    answer({ memories: [{ sources: ['t2'], importance: 5 }], impression: '好', letter: '说好一起做风筝的，可别忘啦。', gift: true }),
+    answer({ memories: [{ sources: ['t2'], importance: 3 }], impression: '好', letter: '谢谢你来看我。' }),
+  ]);
+  const server = await h.start(nightlyConsolidator({ roster: h.roster, model: nightly.model }));
+  const wire = await connect(server);
+  for (const npc of ['Abigail', 'Haley']) {
+    wire.send(openTalk(1, npc)); await wire.until('talk.reply');
+    wire.send({ type: 'talk.say', npc, text: '明天一起做风筝吧' }); await wire.until('talk.reply');
+    wire.send({ type: 'talk.close', npc }); await wire.until('ack');
+  }
+  const commit = await sleep(wire);
+  await until(() => h.logs.some((line) => line.startsWith('夜间整合完成：第 1 天，2 位 NPC')), 'the consolidation');
+  type Letters = { type: string; letters: { key: string; npc: string; text: string; item?: string }[] };
+  const delivered = () => (wire.inbox as unknown as Letters[]).filter((m) => m.type === 'day.letters' && m.letters.length);
+  await until(() => delivered().length > 0, 'the letters after consolidation');
+  const letters = delivered()[0]!;
+  assert.equal(letters.letters.length, 1);
+  const offered = giftFor(h.roster.get('abigail').gifts, { hearts: 8, relation: 'friend' }, {}, 1)!.item;
+  assert.deepEqual({ ...letters.letters[0], key: undefined }, { key: undefined, npc: 'abigail', text: '说好一起做风筝的，可别忘啦。', item: offered });
+  assert.match(letters.letters[0]!.key, /^StardewAgent\.[0-9a-f]{16}$/);
+  assert.ok(h.logs.includes('今天的信：abigail'));
+  wire.send({ type: 'title.returned' }); await wire.until('ack'); await wire.close();
+  const reload = await connect(server, initial('load-2', 2, commit));
+  const again = await reload.until('day.letters', 0) as unknown as { letters: { key: string }[] };
+  assert.equal(again.letters[0]!.key, letters.letters[0]!.key, 'the same letter from the same save point keeps its key');
   await reload.close();
 });

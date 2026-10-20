@@ -1,6 +1,7 @@
 /** Messages between the SMAPI mod and the backend (docs/game-bridge.md §3, design §10). */
 import type { Bubble } from '../agent/bubbles.ts';
 import type { Emotion, Season } from '../agent/dialogue.ts';
+import type { DeliveredLetter } from '../agent/letters.ts';
 import type { Relation } from '../services/roster/index.ts';
 
 export const PROTOCOL_VERSION = 2;
@@ -80,6 +81,8 @@ export type BackendMessage =
   | ({ type: 'sync.error'; message: string } & Partial<Envelope>)
   /** Today's lines to mutter when the player is near, by NPC id (docs/npc-bubbles.md); seq is 0. */
   | ({ type: 'day.bubbles'; npcs: Record<string, Bubble[]> } & Envelope)
+  /** At most one letter for the mailbox this morning (docs/npc-mail.md); seq is 0. */
+  | ({ type: 'day.letters'; letters: DeliveredLetter[] } & Envelope)
   | ({ type: 'talk.delta'; npc: string; text: string } & Envelope)
   | TalkReply
   | ({ type: 'talk.error'; npc: string; message: string } & Envelope);

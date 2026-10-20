@@ -133,7 +133,9 @@ export function parseCard(id: string, markdown: string, knownIds: ReadonlySet<st
   });
 
   const gifts = items(bodies.get('gifts')).map((item): Gift => {
-    const [what, why] = splitOnce(item);
+    // 「」 keeps a colon that belongs to the item's own name, e.g. 「传送图腾：农场」.
+    const quoted = /^「(.+?)」：(.+)$/.exec(item);
+    const [what, why] = quoted ? [quoted[1]!, quoted[2]!.trim()] : splitOnce(item);
     if (why === undefined) problems.push(`gift needs "物品：说明": "${item}"`);
     return { item: what, text: why ?? '' };
   });

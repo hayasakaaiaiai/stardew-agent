@@ -24,6 +24,13 @@ test('all 34 cards parse, and only the two known conditions are left to the mode
   assert.ok(result.warnings.some((w) => w.startsWith('pam.md')));
 });
 
+test('a gift whose own name has a colon is written in 「」 and keeps the whole name', async () => {
+  const { roster } = await loadAll();
+  const totem = roster.get('maru').gifts.find((gift) => gift.item.startsWith('传送图腾'));
+  assert.deepEqual(totem, { item: '传送图腾：农场', text: '婚后，失眠时在工作间做的，希望玩家用得上。' });
+  assert.ok(roster.get('penny').gifts.some((gift) => gift.item === '蛋'), 'the in-game name, which the Mod looks up');
+});
+
 test('rule conditions: event ids, “任何时候”, and natural language', () => {
   assert.deepEqual(parseRule('看过 6 心事件（事件 4，深夜墓地）之前：不说自己在练剑。'),
     { kind: 'unseen', events: ['4'], text: '不说自己在练剑。' });

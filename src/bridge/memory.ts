@@ -5,6 +5,7 @@ import type { Consolidator } from '../agent/consolidation.ts';
 import { type Bubble, bubblesFor } from '../agent/bubbles.ts';
 import { AgentMemory, turnLog } from '../agent/dialogue-memory.ts';
 import type { DialogueMemory, Exchange, Remembered, Standing, TurnResult } from '../agent/dialogue.ts';
+import { type DeliveredLetter, type Letter, letterFor, letterKey } from '../agent/letters.ts';
 import { Nightly } from '../agent/nightly.ts';
 import { withMorningPlan } from '../agent/morning.ts';
 import { createRuntime, type SaveScope } from '../index.ts';
@@ -301,15 +302,24 @@ export class GameSave {
   }
   discard(): Promise<void> { return this.enqueue(() => this.discardNow()); }
 
-  /** Today's bubbles of every NPC whose last consolidation wrote some (docs/npc-bubbles.md). */
-  async bubbles(): Promise<Record<string, Bubble[]>> {
+  /**
+   * What last night's consolidation left for today: every NPC's bubbles (docs/npc-bubbles.md), and the one letter
+   * from the NPC whose night mattered most (docs/npc-mail.md).
+   */
+  async today(): Promise<{ bubbles: Record<string, Bubble[]>; letters: DeliveredLetter[] }> {
     const { lineageId } = this.initial;
     const headCommitId = this.state.head;
-    const result: Record<string, Bubble[]> = {};
+    const bubbles: Record<string, Bubble[]> = {};
+    let best: { npcId: string; letter: Letter } | undefined;
     for (const npcId of SOCIAL_NPCS) {
-      const lines = bubblesFor(await this.runtime.ctx.store.call('state', { lineageId, headCommitId, npcId }), this.state.day);
-      if (lines.length) result[npcId] = lines;
+      const state = await this.runtime.ctx.store.call('state', { lineageId, headCommitId, npcId });
+      const lines = bubblesFor(state, this.state.day);
+      if (lines.length) bubbles[npcId] = lines;
+      const letter = letterFor(state, this.state.day);
+      if (letter && (!best || letter.importance > best.letter.importance)) best = { npcId, letter };
     }
-    return result;
+    const letters = best ? [{ key: letterKey(lineageId, headCommitId, best.npcId), npc: best.npcId, text: best.letter.text,
+      ...(best.letter.item ? { item: best.letter.item } : {}) }] : [];
+    return { bubbles, letters };
   }
 }

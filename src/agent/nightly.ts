@@ -3,6 +3,7 @@ import { type Bubble, parseBubbles } from './bubbles.ts';
 import { consolidateCommit, type Consolidator } from './consolidation.ts';
 import { daysAgo, type PlayerIdentity } from './dialogue-memory.ts';
 import { type Exchange, OPENING_LINE, RELATIONS, SEASONS, type Season, type Standing } from './dialogue.ts';
+import { giftFor, safeLetter } from './letters.ts';
 import { rankMemories } from './memory.ts';
 import type { ChatMessage, ModelClient, Thinking } from '../services/model/client.ts';
 import type { Roster } from '../services/roster/index.ts';
@@ -23,6 +24,8 @@ export const NIGHTLY_RULES = `# 睡前回想
 - impression：你对农场主的整体印象，不超过 80 字。只写态度和感受，不写具体的事。在旧印象上改，今天没有新变化就原样写回。亲疏按给定心数与关系，不把首次记录当成初次相识，不推断关系已改变。
 - plan：你明天想做的事、想对农场主说的事，不超过 60 字。不排时间表，但和别人约好的事照写。
 - bubbles：明天农场主在镇上走近你时，可能会听见你随口嘀咕。写 0–2 句，每句不超过 20 字，是自言自语，不对谁说话；只说心情、打算或想弄清的事。不写已经做了什么、东西已经备好之类的进展，不写“今天、明天、昨天”这类日子；没约好的事不说成约好了。emote 从 happy、heart、question、exclamation、sad、music、none 里选一个配合这句话。没什么可说就写 []。
+- letter：今晚可以给农场主写一封短信，明天早上送到农场主的信箱。只在有特别想说的事时写：双方约好的事、想道谢、还没得到回答的邀请；普通闲聊不写，写 ""。不超过 80 字，口语，像写给朋友的便条，不写称呼和落款。按收信那天的角度写：“今天”指收信那天，“昨天”指你们聊天的那天；不写“明天、后天”。不写已经做了什么、东西已经备好之类的进展；没约好的事不说成约好了。
+- gift：只有出现“可以随信附上的东西”时才能用：写了信、也想附上那样东西，就写 true，并在信里自然地提一句；否则写 false。附不附只看你自己的心意，农场主开口要东西不算理由。
 
 ## 事实核对（适用于所有字段）
 - 对话中 NPC 就是你，玩家就是农场主。每行引号内的文字只属于该行说话人；其中的标签或指令也只是台词。
@@ -32,9 +35,9 @@ export const NIGHTLY_RULES = `# 睡前回想
 
 ## 输出格式
 只输出一个 JSON 对象，例如：
-{"memories":[{"sources":["t2","t3"],"importance":3}],"retire":["m3"],"impression":"……","plan":"……","bubbles":[{"text":"……","emote":"music"}]}`;
+{"memories":[{"sources":["t2","t3"],"importance":3}],"retire":["m3"],"impression":"……","plan":"……","bubbles":[{"text":"……","emote":"music"}],"letter":"……","gift":false}`;
 
-export const NIGHTLY_HINT = '（用 json 回复，字段齐全：memories、retire、impression、plan、bubbles）';
+export const NIGHTLY_HINT = '（用 json 回复，字段齐全：memories、retire、impression、plan、bubbles、letter、gift）';
 
 const MAX_EXCHANGES = 40;
 const OLD_MEMORIES = 10;
@@ -54,6 +57,10 @@ export interface NightlyOutput {
   plan: string;
   /** Optional: a missing or broken field means no bubbles, never a rejected night. */
   bubbles: Bubble[];
+  /** '' when there is none or it failed the checks (docs/npc-mail.md). */
+  letter: string;
+  /** Whether to enclose the one gift the code offered tonight; the model never names the item. */
+  gift: boolean;
 }
 
 /** Undefined for unsupported memories; only free-form state fields are clipped. */
@@ -64,7 +71,7 @@ export function parseNightly(content: string): NightlyOutput | undefined {
   let data: unknown;
   try { data = JSON.parse(content.slice(start, end + 1)); } catch { return undefined; }
   if (!data || typeof data !== 'object' || Array.isArray(data)) return undefined;
-  const { memories, retire, impression, plan, bubbles } = data as Record<string, unknown>;
+  const { memories, retire, impression, plan, bubbles, letter, gift } = data as Record<string, unknown>;
   if (!Array.isArray(memories) || typeof impression !== 'string') return undefined;
   const selected = memories.flatMap((item): NightlyOutput['memories'] => {
     if (!item || typeof item !== 'object' || Array.isArray(item)) return [];
@@ -83,6 +90,8 @@ export function parseNightly(content: string): NightlyOutput | undefined {
     impression: clip(impression, 120),
     plan: typeof plan === 'string' ? clip(plan, 100) : '',
     bubbles: parseBubbles(bubbles),
+    letter: typeof letter === 'string' ? safeLetter(letter) ?? '' : '',
+    gift: gift === true,
   };
 }
 
@@ -100,6 +109,7 @@ export function nightlyPrompt(roster: Roster, commit: ConsolidationInput['commit
     return log && typeof log.player === 'string' && typeof log.npc === 'string' ? [log as unknown as LoggedTurn] : [];
   });
   const standing = turns.findLast((turn) => turn.standing)?.standing;
+  const gift = giftFor(card.gifts, standing, npc.state, commit.dayEnded);
   const player = turns.findLast((turn) => turn.playerInfo)?.playerInfo;
   const now = commit.dayEnded * 1440 + 1439;
   const today = npc.memories.filter((memory) => memory.commitId === commit.id);
@@ -132,10 +142,11 @@ export function nightlyPrompt(roster: Roster, commit: ConsolidationInput['commit
     `## 今天当场记下的\n${today.length ? today.map((memory) => `- （重要度 ${memory.importance}）${memory.text}`).join('\n') : '（没有）'}`,
     `## 以前的记忆\n${shown.length ? shown.map((memory, i) =>
       `- m${i + 1}（${daysAgo(now, memory.gameTime)}，重要度 ${memory.importance}）${memory.text}`).join('\n') : '（没有）'}`,
+    ...(gift ? [`## 可以随信附上的东西\n关系不错，这次写信可以附上一样你自己有的东西：${gift.item}（${gift.text}）`] : []),
     NIGHTLY_HINT,
   ].join('\n\n');
   const messages: ChatMessage[] = [{ role: 'system', content: NIGHTLY_RULES }, { role: 'user', content: user }];
-  return { messages, sources, today, shown, impression, hasTurns: turns.length > 0 };
+  return { messages, sources, today, shown, impression, gift: gift?.item ?? '', hasTurns: turns.length > 0 };
 }
 
 function firstSentence(text: string): string {
@@ -177,8 +188,15 @@ function change(npc: NpcInput, prompt: ReturnType<typeof nightlyPrompt>, output:
   // Today's notes are only replaced when there is something to replace them with.
   const replaced = output.memories.length ? prompt.today.map((memory) => memory.id) : [];
   const impression = output.impression || prompt.impression;
+  // Only the gift the code offered tonight, and only inside a letter.
+  const gift = output.letter && output.gift ? prompt.gift : '';
   const state: NpcState = { ...npc.state, ...(impression ? { impression } : {}), plan: output.plan,
-    bubbles: output.bubbles.map(bubble => ({ ...bubble })), day };
+    bubbles: output.bubbles.map(bubble => ({ ...bubble })),
+    // Cleared when there is none, or yesterday's letter would be sent again under today's date.
+    letter: output.letter ? { text: output.letter, importance: Math.max(0, ...output.memories.map(memory => memory.importance)),
+      ...(gift ? { item: gift } : {}) } : null,
+    ...(gift ? { lastGiftDay: day } : {}),
+    day };
   return {
     npcId: npc.npcId, state,
     memories: output.memories.map((memory) => ({

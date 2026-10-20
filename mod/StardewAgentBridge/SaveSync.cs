@@ -62,6 +62,7 @@ internal sealed partial class ModEntry
         this.talk = null; this.offerFor = null; this.startFor = null;
         this.initialSave = null; this.lifecycle.Clear(); this.memoryReady = false; this.syncFailed = false;
         this.activeLoad = Context.IsMainPlayer;
+        this.LoadLetters();
         if (!this.activeLoad)
         {
             this.Monitor.Log("当前为农场帮手，AI 记忆由主玩家管理，本机不写共享存档。", LogLevel.Info);
@@ -125,6 +126,7 @@ internal sealed partial class ModEntry
     private void OnReturnedToTitle()
     {
         this.ClearBubbles();
+        this.letters = new();
         this.talk = null; this.offerFor = null; this.startFor = null;
         this.activeLoad = false; this.memoryReady = false;
         if (this.initialSave is not null)

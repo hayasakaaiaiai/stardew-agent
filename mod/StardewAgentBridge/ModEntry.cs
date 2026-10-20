@@ -80,6 +80,7 @@ internal sealed partial class ModEntry : Mod
         helper.Events.GameLoop.ReturnedToTitle += (_, _) => this.OnReturnedToTitle();
         helper.Events.GameLoop.UpdateTicked += this.OnUpdateTicked;
         helper.Events.Display.MenuChanged += this.OnMenuChanged;
+        helper.Events.Content.AssetRequested += this.OnAssetRequested;
         helper.Events.Input.ButtonPressed += this.OnButtonPressed;
     }
 
@@ -344,7 +345,7 @@ internal sealed partial class ModEntry : Mod
     private void Handle(JsonElement message)
     {
         string type = message.TryGetProperty("type", out JsonElement typeValue) ? typeValue.GetString() ?? "" : "";
-        if (this.HandleSync(type, message) || this.HandleBubbles(type, message))
+        if (this.HandleSync(type, message) || this.HandleBubbles(type, message) || this.HandleLetters(type, message))
             return;
         string npc = message.TryGetProperty("npc", out JsonElement npcValue) ? npcValue.GetString() ?? "" : "";
         if (this.talk is not { Waiting: true } t || t.Npc.Name != npc || !this.IsCurrentReply(message, t.RequestSeq))

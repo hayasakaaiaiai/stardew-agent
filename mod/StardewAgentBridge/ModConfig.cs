@@ -13,4 +13,7 @@ internal sealed class ModConfig
 
     /// <summary>Whether NPCs mutter last night's lines over their heads when the player is near (docs/npc-bubbles.md).</summary>
     public bool ShowBubbles { get; set; } = true;
+
+    /// <summary>Whether NPCs' letters go into the mailbox (docs/npc-mail.md).</summary>
+    public bool SendLetters { get; set; } = true;
 }

@@ -44,7 +44,7 @@ export class BridgeServer {
     server.on('connection', socket => this.accept(socket));
     memory.onConsolidated = (lineageId, commitId) => {
       const owner = this.owners.get(lineageId);
-      if (owner?.save?.head === commitId) void this.sendBubbles(owner);
+      if (owner?.save?.head === commitId) void this.sendToday(owner);
     };
   }
 
@@ -70,18 +70,24 @@ export class BridgeServer {
 
   private log(line: string) { this.options.log?.(line); }
 
-  /** Replaces the Mod's bubbles for the day; sent again when a late consolidation finishes (docs/npc-bubbles.md). */
-  private async sendBubbles(session: Session): Promise<void> {
+  /**
+   * Replaces the Mod's bubbles for the day and offers this morning's letter; sent again when a late consolidation
+   * finishes (docs/npc-bubbles.md, docs/npc-mail.md). The Mod ignores a letter it already has.
+   */
+  private async sendToday(session: Session): Promise<void> {
     const save = session.save;
     if (!save || save.closed) return;
     try {
-      const npcs = await save.bubbles();
+      const { bubbles, letters } = await save.today();
       if (session.save !== save || save.closed) return;
-      session.send({ type: 'day.bubbles', lineageId: save.initial.lineageId, loadNonce: save.loadNonce, seq: 0, npcs });
-      const names = Object.keys(npcs);
+      const envelope = { lineageId: save.initial.lineageId, loadNonce: save.loadNonce, seq: 0 };
+      session.send({ type: 'day.bubbles', ...envelope, npcs: bubbles });
+      session.send({ type: 'day.letters', ...envelope, letters });
+      const names = Object.keys(bubbles);
       if (names.length) this.log(`今天的气泡：${names.join('、')}`);
+      if (letters.length) this.log(`今天的信：${letters.map(letter => letter.npc).join('、')}`);
     } catch (error) {
-      this.log(`读取气泡失败：${error instanceof Error ? error.message : String(error)}`);
+      this.log(`读取今天的气泡和信失败：${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
@@ -135,7 +141,7 @@ export class BridgeServer {
       }
       this.owners.set(message.lineageId, session);
       send({ type: 'save.ready', ...envelope(message), day: session.save.day });
-      void this.sendBubbles(session);
+      void this.sendToday(session);
       this.log(`记忆已就绪：${message.player.name}，${message.player.farm}农场，第 ${session.save.day} 天`);
       return;
     }
@@ -175,7 +181,7 @@ export class BridgeServer {
       session.pending = undefined;
     });
     send({ type: 'ack', ...envelope(message) });
-    if (message.type === 'day.started') void this.sendBubbles(session);
+    if (message.type === 'day.started') void this.sendToday(session);
   }
 
   private async turn(session: Session, talk: OpenTalk, message: Extract<ModMessage, { type: 'talk.open' | 'talk.say' }>,

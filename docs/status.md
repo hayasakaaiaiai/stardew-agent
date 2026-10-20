@@ -147,6 +147,7 @@ dotnet build mod/StardewAgentBridge   # 编译 Mod，编译完自动装进游戏
 1. **硬件陪伴（暂停）**：用户 2026-10-20 决定 H 线先不做。H4（机器人接回游戏存档）已在 `hardware-companion` 实现并变基到最新 `main`，恢复时按 `companion-device.md` §13.9 在 Windows 上测。
 2. **M2b 第一步已合入 `main`**：[次日主动提起计划](next-day-plans.md)；继续观察自然语言日期与重复邀约。实际行动、调度器和白名单动作另行设计。
 3. **M2b 第二步：头顶气泡和表情**（2026-10-20，用户在测 M3a 时要求继续做，按推荐方案）：夜间整合顺带写第二天的 0–2 句自言自语，玩家走近时显示并配原版表情，不改存档状态、不进记忆。在 `m2b-bubbles` 分支（Mac 目录 `/Users/a11/Documents/ChatGPT/stardew-agent-m2b`），86 个测试通过，不合入 `main`。Windows 测试清单见 [npc-bubbles.md](npc-bubbles.md) §7；Mod 要重新编译。
+4. **M2b 第三步：NPC 寄信**（2026-10-20，用户确认按推荐做，并要求关系好时可以附赠物品、不能要什么给什么、不给铱星金星）：夜间整合顺带写信，第二天早上进信箱，一天最多一封；6 心以上时可附角色卡里的一样东西，由代码选，普通品质、原价不超过 500 金、7 天一次。在 `m2b-mail` 分支（建在 `m2b-bubbles` 上，Mac 目录 `/Users/a11/Documents/ChatGPT/stardew-agent-mail`），不合入 `main`。Windows 清单见 [npc-mail.md](npc-mail.md) §7。
 
 ## 8. 文档索引
 
@@ -161,6 +162,7 @@ dotnet build mod/StardewAgentBridge   # 编译 Mod，编译完自动装进游戏
 | `docs/game-bridge.md` | M3a：Mod 和后端的协议、原版界面怎么复用、游戏内测试清单 |
 | `docs/game-memory.md` | M3b：存档同步、跨天记忆、确认补发与崩溃恢复 |
 | `docs/nightly-consolidation.md` | 夜间整合：产出、输入、触发时机、出错处理、实测 token 和真实模型结果 |
+| `docs/npc-mail.md` | M2b 第三步：NPC 寄信和随信附赠的决定、规则、实测 token、物品名核对、测试和 Windows 清单 |
 | `docs/npc-bubbles.md` | M2b 第二步：头顶气泡和表情的决定、规则、实测 token、测试和 Windows 清单 |
 | `docs/next-day-plans.md` | M2b 第一步设计与实现：首次开场、原话核对、日期换算、回滚与最终 token 实测 |
 | `docs/test-results/2026-10-20-next-day-plans.md` | 84 项测试、最终 12 次模型开场、日期与动作陈述处理和 Windows 真机验收 |
