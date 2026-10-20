@@ -47,6 +47,8 @@ Windows 上的目录是 `E:\stardew-agent`，测试前切到 `main` 拉最新代
 
 本次按用户“拉下来测”“修复”的要求，Windows 在 `nightly-consolidation` 上完成远端 `3f70b27` 验证和事实归属修复。本机常驻后端已重新启动，日志确认对话 `high`、夜间整合 `low`；原游戏记忆库、临时日志及旧后端日志在更新前已备份。
 
+用户同意继续后，已将修复和验收记录 `e49535b`、`5896878` 推送到远端 `nightly-consolidation`，`main` 尚未合入。Windows 当前在 `codex/next-day-plans` 准备 M2b 第一步；[设计草案](next-day-plans.md) 与真实模型成本预试验完成，等待确认触发方式后实施。
+
 - Mac 上的三个目录是同一个仓库的三个 git worktree。同一个分支只能在一个目录里打开。
 - 2026-10-19 把记忆系统和对话合并进了 `main`，原来的 `dialogue-prototype` 分支已删除。
 - 不经你同意不合并进 `main`。`main` 有新提交时，把还没合并的分支变基到 `main` 上。
@@ -143,7 +145,7 @@ dotnet build mod/StardewAgentBridge   # 编译 Mod，编译完自动装进游戏
 
 1. **H4 机器人接回游戏存档**：夜间整合已在 2026-10-20 按用户“全部按推荐来”的授权快进合并进 `main`；接着把 `hardware-companion` 变基上来，按 `companion-device.md` §13 实现 H4。Windows 上测试前切回 `main` 拉最新代码。
 2. **补齐 Windows M3a 手测**：中文输入法、原版台词保留、取消，随时可做，不挡开发。脚本已覆盖原版输入回调，但不能代替拼音输入法的实际操作。
-3. 之后的候选：自主行动（M2b，依赖夜间整合生成的计划）。
+3. **M2b 第一步设计待确认**：[次日主动提起计划](next-day-plans.md)，推荐复用当天首次“继续聊”开场，实测增加 138–142 输入 token；暂未改产品代码。之后再考虑实际行动、机器人接入游戏记忆（H4）。
 
 ## 8. 文档索引
 
@@ -158,6 +160,7 @@ dotnet build mod/StardewAgentBridge   # 编译 Mod，编译完自动装进游戏
 | `docs/game-bridge.md` | M3a：Mod 和后端的协议、原版界面怎么复用、游戏内测试清单 |
 | `docs/game-memory.md` | M3b：存档同步、跨天记忆、确认补发与崩溃恢复 |
 | `docs/nightly-consolidation.md` | 夜间整合：产出、输入、触发时机、出错处理、实测 token 和真实模型结果 |
+| `docs/next-day-plans.md` | M2b 第一步设计草案：首次开场主动提起、原话核对、回滚语义与输入 token 实测 |
 | `docs/test-results/2026-10-20-nightly-windows.md` | 夜间整合 Windows 真机技术验证及说话人归属错误证据 |
 | `docs/test-results/2026-10-20-nightly-facts-fix.md` | 原话来源校验、实际 token 差值、15 次真实模型和修复后的真机验收 |
 | `docs/test-results/2026-10-19-abigail.md` | 第二轮回复丢失的根因、修复验证、阿比盖尔三轮真机自动测试结果 |
