@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import { createRuntime } from '../index.ts';
 import type { ModelClient } from '../services/model/client.ts';
 import type { Roster } from '../services/roster/index.ts';
+import type { PortraitPacks } from './assets.ts';
 import { DatabaseBusyError, DatabaseLock, SaveLocks } from './locks.ts';
 import { CompanionRegistry } from './registry.ts';
 import { type DeviceConnection, type DeviceHandler, DevicePairing, DeviceServer } from './server.ts';
@@ -26,6 +27,8 @@ export interface CompanionOptions {
   npcIds: readonly string[];
   port: number;
   host?: string;
+  /** NPC face packs (docs/companion-device.md §14); without them the robot keeps the firmware's emoji. */
+  faces?: PortraitPacks;
   /** Two minutes by default. */
   idleMs?: number;
   log?: (line: string) => void;
@@ -56,6 +59,7 @@ export class CompanionService {
   private device: DeviceConnection | undefined;
   private releaseGame: (() => void) | undefined;
   private chain: Promise<unknown> = Promise.resolve();
+  private facesMissingLogged = false;
 
   private constructor(options: CompanionOptions) {
     this.options = options;
@@ -69,6 +73,7 @@ export class CompanionService {
     await service.pairing.load();
     service.server = await DeviceServer.start({
       port: options.port, pairing: service.pairing, onConnection: (connection) => service.connect(connection),
+      ...(options.faces ? { faces: (npcId: string) => options.faces!.pack(npcId) } : {}),
       ...(options.host ? { host: options.host } : {}), ...(options.log ? { log: options.log } : {}),
     });
     return service;
@@ -93,6 +98,16 @@ export class CompanionService {
   /** Commits what was said; null when there was no session or nothing was said. */
   stop(reason: EndReason = 'stop'): Promise<string | null> {
     return this.serial(() => this.finish(reason));
+  }
+
+  /** Sends the current NPC's face again, e.g. after a download failed. False when no robot is connected. */
+  refreshFace(): Promise<boolean> {
+    return this.serial(async () => {
+      if (!this.device) return false;
+      await this.pairing.setFace(this.device.deviceId, undefined);
+      await this.present(this.device);
+      return true;
+    });
   }
 
   /** The game loaded a save: a robot session on it is committed first, so the game continues from it. */
@@ -137,7 +152,7 @@ export class CompanionService {
       await writeJson(this.file('companion/active.json'), session.identity);
       const releaseSave = this.locks.acquire(snapshot.lineageId, 'companion');
       this.active = { runtime, lock, session, releaseSave };
-      if (this.device) session.attach(this.device);
+      if (this.device) await this.present(this.device);
       return session;
     } catch (error) {
       await runtime?.close();
@@ -193,7 +208,34 @@ export class CompanionService {
     this.device = connection;
     this.log(`机器人已连接（${connection.deviceId}）`);
     connection.handler = this.handlerFor(connection);
-    this.active?.session.attach(connection);
+    void this.serial(() => this.present(connection));
+  }
+
+  /** Attaches the session, unless the device first has to restart with this NPC's face. */
+  private async present(connection: DeviceConnection): Promise<void> {
+    const session = this.active?.session;
+    if (!session || this.device !== connection) return;
+    if (!await this.changeFace(connection, session.identity.npcId, session.npcName)) session.attach(connection);
+  }
+
+  /** True when the device was told to download the face and restart; it connects again once done. */
+  private async changeFace(connection: DeviceConnection, npcId: string, npcName: string): Promise<boolean> {
+    const faces = this.options.faces;
+    if (!faces || this.pairing.face(connection.deviceId) === npcId) return false;
+    if (!await faces.pack(npcId)) {
+      if (!this.facesMissingLogged) this.log('还没有导出头像，机器人先用小智自带的表情（见 docs/companion-device.md §14）');
+      this.facesMissingLogged = true;
+      return false;
+    }
+    try {
+      await connection.installFace(npcId);
+    } catch (error) {
+      this.log(`换头像失败，先用原来的表情：${error instanceof Error ? error.message : String(error)}`);
+      return false;
+    }
+    await this.pairing.setFace(connection.deviceId, npcId);
+    this.log(`机器人正在换上${npcName}的头像：它会重启并下载头像包，好了以后说唤醒词继续`);
+    return true;
   }
 
   private handlerFor(connection: DeviceConnection): DeviceHandler {

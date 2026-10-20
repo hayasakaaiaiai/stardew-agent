@@ -7,17 +7,18 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { AddressInfo } from 'node:net';
 import { type WebSocket, WebSocketServer } from 'ws';
 import type { Emotion } from '../agent/dialogue.ts';
+import { DEVICE_EMOTIONS } from './assets.ts';
 import { FRAME_MS, FramePacer, OpusDecoder, OpusEncoder } from './opus.ts';
 import { readJson, writeJson } from './snapshot.ts';
 import { INPUT_RATE, OUTPUT_RATE } from './voice.ts';
 
 export const OTA_PATH = '/xiaozhi/ota/';
 export const WS_PATH = '/xiaozhi/v1/';
+/** `<npc>.bin?token=…`: the firmware downloads a face pack from here after a reboot (docs/companion-device.md §14). */
+export const ASSETS_PATH = '/xiaozhi/assets/';
+/** How long a tool call on the device may take to answer. */
+const TOOL_TIMEOUT_MS = 5000;
 
-/** The firmware's names for its built-in faces; H3 replaces the pictures, not the names. */
-const DEVICE_EMOTIONS: Record<Emotion, string> = {
-  neutral: 'neutral', happy: 'happy', sad: 'sad', blush: 'embarrassed', angry: 'angry', special: 'surprised',
-};
 
 /** What a session sends to the device; implemented by DeviceConnection. */
 export interface DeviceLink {
@@ -52,6 +53,8 @@ export interface DeviceHandler {
 interface DevicesFile {
   token: string;
   devices: string[];
+  /** Device → NPC whose face pack it was last told to download. */
+  faces?: Record<string, string>;
 }
 
 /** Only paired devices get the token. Pairing admits the next unknown device within a short window. */
@@ -85,6 +88,18 @@ export class DevicePairing {
     return this.data.devices.includes(deviceId);
   }
 
+  face(deviceId: string): string | undefined {
+    return this.data.faces?.[deviceId];
+  }
+
+  async setFace(deviceId: string, npcId: string | undefined): Promise<void> {
+    const faces = { ...this.data.faces };
+    if (npcId) faces[deviceId] = npcId;
+    else delete faces[deviceId];
+    this.data = { ...this.data, faces };
+    await writeJson(this.file, this.data);
+  }
+
   /** Known devices pass; an unknown one is added only while pairing is open, which then closes. */
   async admit(deviceId: string): Promise<'known' | 'paired' | 'denied'> {
     if (this.allowed(deviceId)) return 'known';
@@ -100,16 +115,21 @@ export class DeviceConnection implements DeviceLink {
   readonly deviceId: string;
   readonly sessionId = randomUUID();
   handler: DeviceHandler | undefined;
+  /** Where this device can download an NPC's face pack, as reached by the device. */
+  readonly faceUrl: (npcId: string) => string;
   private readonly socket: WebSocket;
+  private readonly calls = new Map<number, { resolve: (result: unknown) => void; reject: (error: Error) => void }>();
+  private nextCall = 1;
   private readonly decoder = new OpusDecoder(INPUT_RATE);
   private readonly encoder = new OpusEncoder(OUTPUT_RATE);
   private readonly pacer: FramePacer;
   private speaking = false;
   private ready = false;
 
-  constructor(socket: WebSocket, deviceId: string, onReady: (connection: DeviceConnection) => void) {
+  constructor(socket: WebSocket, deviceId: string, faceUrl: (npcId: string) => string, onReady: (connection: DeviceConnection) => void) {
     this.socket = socket;
     this.deviceId = deviceId;
+    this.faceUrl = faceUrl;
     this.pacer = new FramePacer((frame) => { if (socket.readyState === socket.OPEN) socket.send(frame); });
     socket.on('message', (data, binary) => {
       const buffer = Buffer.isBuffer(data) ? data : Buffer.from(data as ArrayBuffer);
@@ -118,7 +138,7 @@ export class DeviceConnection implements DeviceLink {
         if (pcm.length && this.ready) this.handler?.audio(pcm);
         return;
       }
-      let message: { type?: string; state?: string; text?: string };
+      let message: { type?: string; state?: string; text?: string; payload?: { id?: unknown; result?: unknown; error?: { message?: string } } };
       try { message = JSON.parse(buffer.toString()); } catch { return; }
       if (message.type === 'hello') {
         this.send({
@@ -134,9 +154,16 @@ export class DeviceConnection implements DeviceLink {
         this.handler?.abort();
       } else if (message.type === 'text' && typeof message.text === 'string' && message.text.trim()) {
         this.handler?.text(message.text.trim());
+      } else if (message.type === 'mcp' && typeof message.payload?.id === 'number') {
+        const call = this.calls.get(message.payload.id);
+        this.calls.delete(message.payload.id);
+        if (message.payload.error) call?.reject(new Error(message.payload.error.message ?? 'Tool call failed'));
+        else call?.resolve(message.payload.result);
       }
     });
     socket.on('close', () => {
+      for (const call of this.calls.values()) call.reject(new Error('Device disconnected'));
+      this.calls.clear();
       this.pacer.clear();
       this.decoder.close();
       this.encoder.close();
@@ -186,6 +213,26 @@ export class DeviceConnection implements DeviceLink {
     this.socket.close();
   }
 
+  /** One of the firmware's MCP tools, e.g. self.reboot; answered by the device or rejected after a timeout. */
+  callTool(name: string, args: Record<string, unknown> = {}): Promise<unknown> {
+    const id = this.nextCall++;
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.calls.delete(id);
+        reject(new Error(`${name} timed out`));
+      }, TOOL_TIMEOUT_MS);
+      const settle = <T>(done: (value: T) => void) => (value: T) => { clearTimeout(timer); done(value); };
+      this.calls.set(id, { resolve: settle(resolve), reject: settle(reject) });
+      this.send({ type: 'mcp', payload: { jsonrpc: '2.0', method: 'tools/call', params: { name, arguments: args }, id } });
+    });
+  }
+
+  /** The firmware only downloads assets while booting, so it is told where, then restarted. */
+  async installFace(npcId: string): Promise<void> {
+    await this.callTool('self.assets.set_download_url', { url: this.faceUrl(npcId) });
+    await this.callTool('self.reboot');
+  }
+
   private endSpeaking(): void {
     if (this.speaking) this.send({ type: 'tts', state: 'stop' });
     this.speaking = false;
@@ -204,6 +251,8 @@ export interface DeviceServerOptions {
   host?: string;
   pairing: DevicePairing;
   onConnection: (connection: DeviceConnection) => void;
+  /** An NPC's face pack, or undefined when none was exported. */
+  faces?: (npcId: string) => Promise<Buffer | undefined>;
   log?: (line: string) => void;
 }
 
@@ -225,8 +274,10 @@ export class DeviceServer {
         socket.end('HTTP/1.1 401 Unauthorized\r\n\r\n');
         return;
       }
+      const host = request.headers.host;
+      const faceUrl = (npcId: string) => `http://${host}${ASSETS_PATH}${npcId}.bin?token=${encodeURIComponent(options.pairing.token)}`;
       this.sockets.handleUpgrade(request, socket, head, (ws) => {
-        new DeviceConnection(ws, deviceId, options.onConnection);
+        new DeviceConnection(ws, deviceId, faceUrl, options.onConnection);
       });
     });
   }
@@ -250,9 +301,37 @@ export class DeviceServer {
     return new Promise((resolve) => this.http.close(() => resolve()));
   }
 
+  /** Paired devices know the token; the pack holds game portraits, so nobody else gets it. */
+  private async face(request: IncomingMessage, response: ServerResponse): Promise<void> {
+    const url = new URL(request.url!, 'http://device');
+    const npcId = /^([a-z]+)\.bin$/.exec(url.pathname.slice(ASSETS_PATH.length))?.[1];
+    if (url.searchParams.get('token') !== this.options.pairing.token) {
+      response.writeHead(403).end();
+      return;
+    }
+    let pack: Buffer | undefined;
+    try {
+      pack = npcId ? await this.options.faces?.(npcId) : undefined;
+    } catch (error) {
+      this.options.log?.(`头像包出错：${error instanceof Error ? error.message : String(error)}`);
+      response.writeHead(500).end();
+      return;
+    }
+    if (!pack) {
+      response.writeHead(404).end();
+      return;
+    }
+    // The firmware needs the length up front: it erases flash for the whole pack before writing.
+    response.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Content-Length': pack.length }).end(pack);
+  }
+
   /** The firmware's version check: answer with the WebSocket address and token, and no firmware update. */
   private async request(request: IncomingMessage, response: ServerResponse): Promise<void> {
     request.resume();
+    if (request.url?.startsWith(ASSETS_PATH)) {
+      await this.face(request, response);
+      return;
+    }
     if (!request.url?.startsWith(OTA_PATH)) {
       response.writeHead(404).end();
       return;

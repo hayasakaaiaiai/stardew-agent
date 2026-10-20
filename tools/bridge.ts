@@ -11,6 +11,7 @@ import { join, resolve } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { NIGHTLY_THINKING, nightlyConsolidator } from '../src/agent/nightly.ts';
 import { BridgeServer } from '../src/bridge/server.ts';
+import { PortraitPacks } from '../src/companion/assets.ts';
 import { CompanionError, CompanionService } from '../src/companion/service.ts';
 import { OTA_PATH } from '../src/companion/server.ts';
 import { gameDate } from '../src/companion/session.ts';
@@ -43,6 +44,7 @@ const companion = await CompanionService.start({
   roster, model: voiceModel, speech, npcIds: SOCIAL_NPCS,
   voiceFor: (npcId) => voices.npcs[npcId] ?? voices.default,
   port: Number(process.env.NPC_DEVICE_PORT ?? 47712),
+  faces: new PortraitPacks(join(ROOT, '.runtime/companion/assets')),
   log,
 });
 const server = await BridgeServer.start({
@@ -63,6 +65,7 @@ console.log('输入 /robot 选择存档和角色，/help 查看命令；按 Ctrl
 const HELP = `/robot          选择存档和角色，让机器人开始
 /robot stop     结束机器人这次的聊天，写回存档
 /robot pair     两分钟内允许一台新机器人配对
+/robot face     重新给机器人下发当前角色的头像
 /help           显示这些命令`;
 
 const rl = createInterface({ input: process.stdin, output: process.stdout });
@@ -88,6 +91,8 @@ async function command(input: string) {
   else if (input === '/robot pair') {
     companion.pairing.open(120_000);
     log('两分钟内，第一台请求连接的新机器人会被允许。现在重启机器人。');
+  } else if (input === '/robot face') {
+    if (!await companion.refreshFace()) log('机器人没有连着');
   } else if (input === '/robot') await pick();
   else console.log('未知命令，/help 查看命令');
 }

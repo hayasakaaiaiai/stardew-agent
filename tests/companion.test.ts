@@ -8,6 +8,7 @@ import WebSocket, { WebSocketServer } from 'ws';
 import {
   buildMessages, parseOutput, runTurn, VOICE_JSON_HINT, type WorldState,
 } from '../src/agent/dialogue.ts';
+import { PortraitPacks } from '../src/companion/assets.ts';
 import { DatabaseBusyError } from '../src/companion/locks.ts';
 import { OpusEncoder } from '../src/companion/opus.ts';
 import { CompanionRegistry, isCompanionCommit } from '../src/companion/registry.ts';
@@ -21,6 +22,7 @@ import type { ChatMessage, Completion, ModelClient, StreamHandlers } from '../sr
 import { Roster } from '../src/services/roster/index.ts';
 import { SOCIAL_NPCS } from '../src/types.ts';
 import { ChatSave } from '../tools/chat/session.ts';
+import { writePortraits } from './helpers/faces.ts';
 
 const WORLD: WorldState = {
   year: 1, season: 'spring', day: 17, time: '15:00', weather: '晴', location: '海滩',
@@ -109,7 +111,7 @@ async function until(check: () => boolean, what: string, timeoutMs = 5000) {
   }
 }
 
-interface Message { type: string; state?: string; text?: string; emotion?: string }
+interface Message { type: string; state?: string; text?: string; emotion?: string; payload?: { id: number; params: { name: string; arguments: { url?: string } } } }
 
 /** A robot as the firmware behaves: config endpoint first, then the WebSocket and hello. */
 async function connectDevice(port: number, deviceId = '02:00:00:00:00:01') {
@@ -157,9 +159,11 @@ async function townSave(directory: string, roster: Roster, days = 1): Promise<Sa
   return saved;
 }
 
-async function startCompanion(directory: string, roster: Roster, model: ModelClient, speech: SpeechServices, idleMs = 60_000) {
+async function startCompanion(directory: string, roster: Roster, model: ModelClient, speech: SpeechServices, idleMs = 60_000,
+  faces?: PortraitPacks) {
   const service = await CompanionService.start({
     dataDirectory: directory, roster, model, speech, voiceFor: () => 'voice', npcIds: SOCIAL_NPCS, port: 0, host: '127.0.0.1', idleMs,
+    ...(faces ? { faces } : {}),
   });
   service.pairing.open(60_000);
   return service;
@@ -288,6 +292,47 @@ test('a robot session greets, answers with a face, sentences and audio, and writ
       await save.close();
     }
   } finally {
+    await cleanup();
+  }
+});
+
+test("a robot with another NPC's face downloads this one and restarts before the NPC talks", async () => {
+  const { directory, roster, cleanup } = await setup();
+  const [snapshot] = await townSave(directory, roster);
+  await writePortraits(join(directory, 'faces'), 'haley');
+  const voice = voiceModel([{ reply: '嗨，又见面了。', emotion: 'happy' }]);
+  const service = await startCompanion(directory, roster, voice.model, fakeSpeech().speech, 60_000, new PortraitPacks(join(directory, 'faces')));
+  try {
+    const robot = await connectDevice(service.port);
+    const calls = () => robot.messages.filter((m) => m.type === 'mcp').map((m) => m.payload!);
+    const answer = (id: number) => robot.send({ type: 'mcp', payload: { jsonrpc: '2.0', id, result: { content: [{ type: 'text', text: 'true' }] } } });
+    const begun = service.begin(snapshot!, 'haley');
+    await until(() => calls().length === 1, 'the download url');
+    const url = calls()[0]!.params.arguments.url!;
+    assert.equal(calls()[0]!.params.name, 'self.assets.set_download_url');
+    assert.match(url, /^http:\/\/127\.0\.0\.1:\d+\/xiaozhi\/assets\/haley\.bin\?token=/);
+    answer(calls()[0]!.id);
+    await until(() => calls().length === 2, 'the reboot');
+    assert.equal(calls()[1]!.params.name, 'self.reboot');
+    answer(calls()[1]!.id);
+    await begun;
+    assert.equal(voice.sent.length, 0, 'nobody talks to a robot that is restarting');
+
+    const pack = await fetch(url);
+    assert.equal(pack.status, 200);
+    assert.equal(Number(pack.headers.get('content-length')), (await new PortraitPacks(join(directory, 'faces')).pack('haley'))!.length);
+    assert.equal((await fetch(url.replace(/token=.*/, 'token=wrong'))).status, 403);
+    assert.equal((await fetch(url.replace('haley', 'abigail'))).status, 404, 'not exported');
+
+    // The firmware restarts, downloads the pack, and connects again on its wake word.
+    robot.socket.close();
+    await robot.closed;
+    const again = await connectDevice(service.port);
+    await until(() => again.stops() === 1, 'the greeting');
+    assert.equal(again.messages.filter((m) => m.type === 'mcp').length, 0, 'the face is already right');
+    assert.ok(again.messages.some((m) => m.type === 'llm' && m.emotion === 'happy'));
+  } finally {
+    await service.close();
     await cleanup();
   }
 });
