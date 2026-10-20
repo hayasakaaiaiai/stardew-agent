@@ -134,7 +134,7 @@ dotnet build mod/StardewAgentBridge   # 编译 Mod，编译完自动装进游戏
 
 ## 7. 下一步
 
-1. **夜间整合**（2026-10-20 选定）：存档后把当天对话压成记忆、更新关系、生成第二天的计划。记忆内核的接口已有（`consolidateCommit`），缺模型调用、触发时机和把结果用进对话。先写设计文档并实测 token 成本，确认后再写代码。
+1. **夜间整合**（2026-10-20 选定）：存档后把当天对话压成记忆、更新对农场主的印象、生成第二天的计划。设计稿 `nightly-consolidation.md` 已写好，含实测 token 和真实模型结果，§9 有三项等你确认，确认后再写代码。分支 `nightly-consolidation`，目录 `/Users/a11/Documents/ChatGPT/stardew-agent-nightly`。
 2. **补齐 Windows M3a 手测**：中文输入法、原版台词保留、取消，随时可做，不挡开发。脚本已覆盖原版输入回调，但不能代替拼音输入法的实际操作。
 3. 之后的候选：自主行动（M2b，依赖夜间整合生成的计划）、机器人接入游戏记忆（H4）。
 
@@ -150,6 +150,7 @@ dotnet build mod/StardewAgentBridge   # 编译 Mod，编译完自动装进游戏
 | `docs/dialogue-prototype.md` | 角色卡加载、对话调用、命令行、探测题，以及接入记忆和好感度影响记忆 |
 | `docs/game-bridge.md` | M3a：Mod 和后端的协议、原版界面怎么复用、游戏内测试清单 |
 | `docs/game-memory.md` | M3b：存档同步、跨天记忆、确认补发与崩溃恢复 |
+| `docs/nightly-consolidation.md` | 夜间整合：产出、输入、触发时机、出错处理、实测 token 和真实模型结果 |
 | `docs/test-results/2026-10-19-abigail.md` | 第二轮回复丢失的根因、修复验证、阿比盖尔三轮真机自动测试结果 |
 | `docs/test-results/2026-10-20-memory.md` | M3b 代码、67 项测试及真机握手成功/模型网络失败的验证记录 |
 | `docs/test-results/2026-10-20-retest.md` | 网络恢复后的三轮真机、真实模型记忆链路、存档指针对齐和失败暂停修复 |
