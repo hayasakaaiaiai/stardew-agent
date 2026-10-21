@@ -18,7 +18,7 @@
 | 里程碑 | 状态 | 已完成 | 还没做 | 文档 |
 |---|---|---|---|---|
 | M1 存储与事务 | 完成 | 记忆内核；当天事务；存档与回滚；崩溃恢复；过期临时日志/检查点清理，失败新读档保护旧日志（2026-10-20 合入 `main`） | — | `README.md`、`design.md` §16 |
-| M2 Agent | 第一至八步、公开家庭信息、好感分档已合入；后台传话等 Windows 功能断言通过 | 对话、夜间整合、次日计划、气泡、寄信、恢复；碰面、送礼、好感（按熟悉程度分档）、当面赠礼、家庭信息、在场传话（2026-10-21 Windows 验收后合入 `main`）；后台两手传播、遗留清理、性别提示和道谢过滤在 `codex/offscreen-windows-tests` 131 项原生检查通过，修复关闭赠礼仍写赠礼记忆（已摘到 `festival-memories`） | 同图小动作（`m2c-ambient-lines`）、补内容（`group-events`）和节日记忆（`festival-memories`）待 Windows 验收；字符串记忆仍能混入改写的未选项，正在设计来源校验；观察自由生成内容 | `dialogue-prototype.md`、`nightly-consolidation.md`、`next-day-plans.md`、`npc-bubbles.md`、`npc-mail.md`、`npc-chat.md`、`npc-gifts.md`、`npc-friendship.md`、`npc-in-person-gifts.md`、`world-public-facts.md`、`npc-news.md`、`offscreen-news.md`、`legacy-cleanup.md`、`ambient-lines.md`、`festival-memories.md` |
+| M2 Agent | 第一至八步、公开家庭信息、好感分档已合入；后台传话等 Windows 功能断言通过 | 对话、夜间整合、次日计划、气泡、寄信、恢复；碰面、送礼、好感（按熟悉程度分档）、当面赠礼、家庭信息、在场传话（2026-10-21 Windows 验收后合入 `main`）；后台两手传播、遗留清理、性别提示和道谢过滤在 `codex/offscreen-windows-tests` 131 项原生检查通过，修复关闭赠礼仍写赠礼记忆（已摘到 `festival-memories`） | 同图小动作（`m2c-ambient-lines`）、补内容（`group-events`）和节日记忆（`festival-memories`）待 Windows 验收；`remember` 先写、再出选项（`remember-source`）待 Windows 验收；观察自由生成内容 | `dialogue-prototype.md`、`nightly-consolidation.md`、`next-day-plans.md`、`npc-bubbles.md`、`npc-mail.md`、`npc-chat.md`、`npc-gifts.md`、`npc-friendship.md`、`npc-in-person-gifts.md`、`world-public-facts.md`、`npc-news.md`、`offscreen-news.md`、`legacy-cleanup.md`、`ambient-lines.md`、`festival-memories.md` |
 | M3 接入游戏 | 完成（Windows） | 游戏里"继续聊"；真实保存/退出、跨天记忆、回滚、后端进程重启与旧档分叉；拼音输入法、原版台词保留、取消三项手测通过 | — | `game-bridge.md`、`game-memory.md` |
 | M4 内容 | 角色卡已完成 | 34 张角色卡（已审阅），"看过事件之后"共 201 条（`group-events` 补群体 10 心和科罗布斯 14 心后 226 条） | 物品名到 ID 的对应、各动作的上限 | `design.md` §11 |
 
@@ -76,6 +76,8 @@ M2b 第八步“NPC 之间传话”在 `m2b-npc-news` 上实现：当晚和玩�
 
 按用户“先合进来”，把 Windows 的 `bda43f3`（赠礼开关修复、统一脚本扩展和本轮报告）摘到 `festival-memories` 上，记录原提交号，保持一条直线；代码自动合并，只手动合并了本文档和 `legacy-cleanup.md`（Windows 那段排为 §7）。这样 Windows 只测最前端一个分支就包含所有修复。
 
+来源校验（`remember-source`，建在 `festival-memories` 上）：模型原来按 `reply → emotion → options → remember` 输出，写 `remember` 时刚编完还没被选的选项，会把选项写成“农场主说……”。真实模型复现 Windows 那个场景（阿比盖尔夸画），现状 17 次里 5 次抄了选项。比较四种做法：先写 remember 再写 options 0/16、规则 token 0；加规则 1/16、+24；只让模型给重要度、代码存原话 0 次、−20，但点选项回答问题时只存下半句；代码按选项里的词兜底漏 3 条、误删 8 条。用户选第一种。正式代码复测 0/16，其他场景 16 次正常；仍有 8/16 把 NPC 自己回复里说的画名并进记忆。156/156、类型检查、构建通过，见 [legacy-cleanup.md](legacy-cleanup.md) §8。
+
 ## 3. 分支
 
 GitHub 私有仓库：https://github.com/hayasakaaiaiai/stardew-agent
@@ -106,7 +108,8 @@ GitHub 私有仓库：https://github.com/hayasakaaiaiai/stardew-agent
 | `less-fabrication` | 自由编造实测（不加规则）与 `share` 道谢过滤，建在 `scene-player-gender` 上 | 已提交 |
 | `m2c-ambient-lines` | 同图小动作，建在 `less-fabrication` 上；待 Windows 验收 | 已推送 |
 | `group-events` | 群体 10 心、科罗布斯 14 心的“看过事件之后”和疏远期处理，建在 `m2c-ambient-lines` 上 | 已推送 |
-| `festival-memories` | 节日记忆，建在 `group-events` 上，现在是最前端；待 Windows 验收 | `/Users/a11/Documents/ChatGPT/stardew-agent-gifts` |
+| `festival-memories` | 节日记忆，建在 `group-events` 上，并摘入 Windows 的 `bda43f3`；待 Windows 验收 | 已推送节日记忆，摘入的提交未推送 |
+| `remember-source` | `remember` 先写、再出选项，建在 `festival-memories` 上，现在是最前端；待 Windows 验收 | `/Users/a11/Documents/ChatGPT/stardew-agent-gifts` |
 | `codex/offscreen-windows-tests` | `main / 35affae` + `less-fabrication / f98222c`，扩展统一脚本、赠礼开关修复及真实内容问题记录；已推送，修复已摘到 `festival-memories` | Windows：`E:\stardew-agent` |
 
 Windows 上的目录是 `E:\stardew-agent`，当前分支 `codex/offscreen-windows-tests` 以包含上一轮修复的新 `main / 35affae` 为祖先，纳入 `less-fabrication / f98222c` 的整条提交链。上一轮 `codex/news-windows-tests` 从 `908e73b` 建立，变基到 `ed9eb28` 后纳入 `dc6d1d2`，如今代码已由上游合入主线。此前所有本地验收分支及 `codex/next-day-plans` / `2260625` 均保留。
@@ -197,7 +200,7 @@ dotnet build mod/StardewAgentBridge   # 编译 Mod，编译完自动装进游戏
 
 | 问题 | 在哪记的 |
 |---|---|
-| 字符串 remember 能把未选选项改写成玩家说过的事实，进入当天后续 prompt；当前仅剔除逐字相同的选项，未解决改写污染。正在设计来源校验 | `test-results/2026-10-21-offscreen-windows.md` §6 |
+| 字符串 remember 能把未选选项改写成玩家说过的事实，进入当天后续 prompt；`remember-source` 改为先写 remember 再出选项，真实模型抄选项 5/17 → 0/16，待 Windows 验收；NPC 自己回复里的细节仍可能并进记忆（8/16），靠夜间整合换成原话 | `legacy-cleanup.md` §8、`test-results/2026-10-21-offscreen-windows.md` §6 |
 | 85 条未发生事件已补限制，刘易斯未看/已看各 2 次正确；全部自然剧情仍需观察 | `legacy-cleanup.md` §4、`test-results/2026-10-21-offscreen-windows.md` §6 |
 | 推理强度 `high` 偶尔推理太长：66 道探测题重测后用户仍选 `high`；Windows 41 次中 2 次超过 8 秒，最长 10.775 秒 | `legacy-cleanup.md` §3、`test-results/2026-10-21-offscreen-windows.md` §6 |
 | 偶尔有小的事实错误，比如矮人说族里"就剩我一个了" | `dialogue-prototype.md` §11 |
@@ -220,8 +223,7 @@ dotnet build mod/StardewAgentBridge   # 编译 Mod，编译完自动装进游戏
 7. **已合入 `main`（2026-10-20）**：用户提交组合验收结果并要求合并后，`codex/new-parts-windows-tests` / `908e73b` 快进合入；Mac 上复核 125/125、类型检查、构建和 Release 编译。包含第四至七步、公开家庭信息、临时日志清理，以及 Windows 修的后端碰面冷却与失败读档保护。自然婚礼/电影等剧情、全部 NPC 自然游玩和模型事实可靠性仍按 [本轮报告](test-results/2026-10-20-new-parts-windows.md) 的覆盖边界观察。
 8. **好感分档与在场传话已合入 `main`（2026-10-21）**：`codex/news-windows-tests` / `7ff44ea` 的统一脚本 115 项真机检查通过，含两处修复；按用户要求快进合入，Mac 复核 132/132、类型检查、构建和 Release 编译。结果、失败保留与范围见 [10 月 21 日报告](test-results/2026-10-21-news-windows.md)。
 9. **本轮测试完成，内容问题待处理**：`codex/offscreen-windows-tests` 纳入 `less-fabrication / f98222c`，后台传话、遗留清理、性别提示和道谢过滤的功能断言通过，新增赠礼开关修复。142/142、20/20、131 项原生检查通过，三类真实调用均 high；结果和失败见 [本轮报告](test-results/2026-10-21-offscreen-windows.md)。赠礼开关修复已摘到 `festival-memories`；未合入 main。
-10. **待验收**：同图小动作、补内容和节日记忆在最前端 `festival-memories`（已包含上面的全部提交和赠礼开关修复），切到它一起测，清单见 `ambient-lines.md` §8、`legacy-cleanup.md` §6.3、`festival-memories.md` §9。
-11. **正在做**：`remember` 的来源校验，防止把没选的选项改写成玩家说过的事（先定做法再写代码）。
+10. **待验收**：同图小动作、补内容、节日记忆和 `remember` 来源都在最前端 `remember-source`（已包含上面的全部提交和赠礼开关修复），切到它一起测，清单见 `ambient-lines.md` §8、`legacy-cleanup.md` §6.3 和 §8、`festival-memories.md` §9。
 
 ## 8. 文档索引
 
@@ -241,7 +243,7 @@ dotnet build mod/StardewAgentBridge   # 编译 Mod，编译完自动装进游戏
 | `docs/festival-memories.md` | 节日记忆：每项结果从游戏哪里读、记什么、实测 token、消息、测试、真实模型抽测和 Windows 清单 |
 | `docs/ambient-lines.md` | 自主行动第二步：同图小动作的决定、规则、打不打招呼的实测对比、消息、测试和 Windows 清单 |
 | `docs/offscreen-news.md` | 自主行动第一步：玩家不在场时也传话的决定、消息、成本、测试和 Windows 清单 |
-| `docs/legacy-cleanup.md` | 遗留问题清理：字符串记忆、气泡过滤、三档推理强度实测、没发生过的事件、0 心门槛、卡片标准、压低编造、群体 10 心和科罗布斯 14 心 |
+| `docs/legacy-cleanup.md` | 遗留问题清理：字符串记忆、气泡过滤、三档推理强度实测、没发生过的事件、0 心门槛、卡片标准、压低编造、群体 10 心和科罗布斯 14 心、Windows 组合测试、remember 的来源 |
 | `docs/npc-news.md` | M2b 第八步：NPC 之间传话的决定、规则写法对比、真实模型实测、测试和 Windows 清单 |
 | `docs/npc-friendship.md` | M2b 第六步：聊天影响原版好感的决定、规则写法对比、真实模型实测、测试和 Windows 清单 |
 | `docs/npc-in-person-gifts.md` | M2b 第七步：当面送礼、与寄信共用冷却、背包满、实测和组合脚本 |
