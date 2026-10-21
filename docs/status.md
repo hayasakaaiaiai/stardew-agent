@@ -80,6 +80,8 @@ M2b 第八步“NPC 之间传话”在 `m2b-npc-news` 上实现：当晚和玩�
 
 2026-10-21 晚 Windows 推送 `codex/ambient-windows-tests / 5a1ef78` 后，把它合并进 `remember-source`（合并提交，不改写已推送的历史）。代码自动合并；测试脚本类文件（`MemoryTest.cs`、`SocialTest.cs`、`TownTest.cs`、`tools/test-game-social.ts`、`tests/offscreen-recovery.test.ts`）我们这边只有摘过来的 `bda43f3`，直接用 Windows 的版本；手动合并了 `SaveSync.cs`（两边各加一种测试记录）、本文档和 `legacy-cleanup.md`（Windows 那段排为 §9）。用户随后决定按 Windows 的来（实测较优）：正文由代码换成玩家原话，撤回先写 remember 的字段调换，对话代码和测试与 Windows 一致，见 `legacy-cleanup.md` §9 末尾。163/163、类型检查、构建和 Release 编译（0 警告、0 错误）通过。
 
+调度器（`m2c-scheduler`，建在 `remember-source` 上）设计稿，等用户确认：分两步，先做模型网关（一条队列、对话优先、对话以外最多 3 个并发、等太久丢弃、保存时记一行当天用量，prompt 不变），再加后台场景：玩家不在的地方，整点挑一组有 5 心以上熟人的 NPC（最多 3 人）合并调用一次，各记一条“在哪和谁聊天：……”，只复述能往下传的新鲜事和节日，不互相约定，一天最多 6 次，不推理。实测不推理每次输入约 644、输出 76 token、2 秒（`high` 输出约 1500、8–13 秒），一天最多约 3.9k 输入、0.5k 输出。见 [scheduler.md](scheduler.md)。
+
 ## 3. 分支
 
 GitHub 私有仓库：https://github.com/hayasakaaiaiai/stardew-agent
@@ -111,7 +113,8 @@ GitHub 私有仓库：https://github.com/hayasakaaiaiai/stardew-agent
 | `m2c-ambient-lines` | 同图小动作，建在 `less-fabrication` 上，`56b29e4`；Windows 修复和验收在 `codex/ambient-windows-tests` | 已推送 |
 | `group-events` | 群体 10 心、科罗布斯 14 心的“看过事件之后”和疏远期处理，建在 `m2c-ambient-lines` 上，`89e572c`；Windows 验收在 `codex/ambient-windows-tests` | 已推送 |
 | `festival-memories` | 节日记忆，建在 `group-events` 上，并摘入 Windows 的 `bda43f3`；待 Windows 验收 | 已推送（`0f23c0d`） |
-| `remember-source` | 建在 `festival-memories` 上；合并了 `codex/ambient-windows-tests / 5a1ef78`，按用户决定撤回“先写 remember”、用 Windows 的原话正文；是代码的最前端，待 Windows 验收节日记忆 | 已推送；`/Users/a11/Documents/ChatGPT/stardew-agent-gifts` |
+| `remember-source` | 建在 `festival-memories` 上；合并了 `codex/ambient-windows-tests / 5a1ef78`，按用户决定撤回“先写 remember”、用 Windows 的原话正文；是代码的最前端，待 Windows 验收节日记忆 | 已推送 |
+| `m2c-scheduler` | 调度器：模型网关和后台场景，建在 `remember-source` 上；设计稿待确认 | `/Users/a11/Documents/ChatGPT/stardew-agent-gifts` |
 | `codex/offscreen-windows-tests` | `main / 35affae` + `less-fabrication / f98222c`，上一轮组合验收与赠礼开关修复；`bda43f3` 已推送，修复已摘到 `festival-memories`，未合入 main | Windows 历史验收分支 |
 | `codex/ambient-windows-tests` | 上轮三处修复 + 慢回复、原话来源、完成动作过滤、事件语义修复；完整真实 176 项通过；`5a1ef78` 已推送，已合并进 `remember-source` | Windows：`E:\stardew-agent` |
 
@@ -222,7 +225,7 @@ dotnet build mod/StardewAgentBridge   # 编译 Mod，编译完自动装进游戏
 3. **M2b 第四步：NPC 碰面聊天**：Windows 组合验收通过，后端 60 分钟冷却/日期修复在 `codex/social-windows-tests`；继续观察镇上自然碰面，见 [npc-chat.md](npc-chat.md) §8。
 4. **M2b 第五步：送礼记忆**：原版赠送、保存、回滚和真实回忆的组合验收通过；生日、任务与节日场景的覆盖边界见 [npc-gifts.md](npc-gifts.md) §7。Mod 与后端均已更新到协议 3。
 5. **M2b 第六步：聊天影响好感**：增减、上限、重复消息、保存与回滚通过，见 [npc-friendship.md](npc-friendship.md) §8；已合入 `main`。按熟悉程度分档在 `m2b-friendship-by-hearts`。
-6. **自主行动**：后台传话与[同图小动作](ambient-lines.md)已完成 Windows 修复和完整真实组合（176 项）。后台等待改为 60 秒、原话来源和完成动作过滤已测；自然游玩仍按清单观察，见[修复报告](test-results/2026-10-21-reliability-windows.md)。[节日记忆](festival-memories.md)已实现，待 Windows 验收（清单见该文档 §9）。
+6. **自主行动**：[调度器](scheduler.md)设计稿待确认（模型网关、后台场景）。后台传话与[同图小动作](ambient-lines.md)已完成 Windows 修复和完整真实组合（176 项）。后台等待改为 60 秒、原话来源和完成动作过滤已测；自然游玩仍按清单观察，见[修复报告](test-results/2026-10-21-reliability-windows.md)。[节日记忆](festival-memories.md)已实现，待 Windows 验收（清单见该文档 §9）。
 7. **已合入 `main`（2026-10-20）**：用户提交组合验收结果并要求合并后，`codex/new-parts-windows-tests` / `908e73b` 快进合入；Mac 上复核 125/125、类型检查、构建和 Release 编译。包含第四至七步、公开家庭信息、临时日志清理，以及 Windows 修的后端碰面冷却与失败读档保护。自然婚礼/电影等剧情、全部 NPC 自然游玩和模型事实可靠性仍按 [本轮报告](test-results/2026-10-20-new-parts-windows.md) 的覆盖边界观察。
 8. **好感分档与在场传话已合入 `main`（2026-10-21）**：`codex/news-windows-tests` / `7ff44ea` 的统一脚本 115 项真机检查通过，含两处修复；按用户要求快进合入，Mac 复核 132/132、类型检查、构建和 Release 编译。结果、失败保留与范围见 [10 月 21 日报告](test-results/2026-10-21-news-windows.md)。
 9. **本轮修复已推送**：当前功能分支 154/154、22/22、固定完整 166 项、真实完整 176 项通过，已更新本机。推送后已检查节日记忆和 remember 字段顺序分支，隔离快照 156/156 / 类型检查通过；新功能未合并、未做节日游戏验收。原话与概括的语境取舍见[新提交记录](test-results/2026-10-21-new-commits.md)。历史污染和自由内容限制见[最新报告](test-results/2026-10-21-reliability-windows.md)。
@@ -247,6 +250,7 @@ dotnet build mod/StardewAgentBridge   # 编译 Mod，编译完自动装进游戏
 | `docs/game-bridge.md` | M3a：Mod 和后端的协议、原版界面怎么复用、游戏内测试清单 |
 | `docs/game-memory.md` | M3b：存档同步、跨天记忆、确认补发与崩溃恢复 |
 | `docs/nightly-consolidation.md` | 夜间整合：产出、输入、触发时机、出错处理、实测 token 和真实模型结果 |
+| `docs/scheduler.md` | 调度器：模型网关的分级排队和用量统计，后台场景的挑组、prompt、写入时机、推理强度实测和 Windows 清单 |
 | `docs/festival-memories.md` | 节日记忆：每项结果从游戏哪里读、记什么、实测 token、消息、测试、真实模型抽测和 Windows 清单 |
 | `docs/ambient-lines.md` | 自主行动第二步：同图小动作的决定、规则、打不打招呼的实测对比、消息、测试和 Windows 清单 |
 | `docs/offscreen-news.md` | 自主行动第一步：玩家不在场时也传话的决定、消息、成本、测试和 Windows 清单 |
