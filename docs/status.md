@@ -66,6 +66,8 @@ M2b 第八步“NPC 之间传话”在 `m2b-npc-news` 上实现：当晚和玩�
 
 压低自由编造（`less-fabrication`，建在 `scene-player-gender` 上）：8 道诱导补写的题实测 24 次里 7 次有没依据的小细节（紫水晶摆在哪、镇上谁夸了你），两种规则（35–50 token）都没有减少，不加；夜间 `share` 把普通道谢当新鲜事（4 次 3 次），改为代码过滤“谢”（谢恩除外），复测 4/4 拦下、真新鲜事照传，0 token。见 [legacy-cleanup.md](legacy-cleanup.md) §5。
 
+同图小动作（`m2c-ambient-lines`，建在 `less-fabrication` 上）设计稿，等用户确认：玩家附近最多 4 位 NPC 合并调用一次，每人最多冒一句、可以每天跟农场主打一次招呼；每位 NPC 两个游戏小时最多一次、两次调用隔 30 游戏分钟、一天最多 12 次；只显示，不写记忆。真实模型 21 次平均输入 799、输出 248 token、2.9 秒，一天最多约 9.6k 输入、3.0k 输出。见 [ambient-lines.md](ambient-lines.md)。
+
 ## 3. 分支
 
 GitHub 私有仓库：https://github.com/hayasakaaiaiai/stardew-agent
@@ -93,7 +95,8 @@ GitHub 私有仓库：https://github.com/hayasakaaiaiai/stardew-agent
 | `codex/news-windows-tests` | 最新 `main / ed9eb28` + `dc6d1d2`，好感分档与传话组合验收及两处修复；2026-10-21 按用户“合并完继续下一步”快进合入 `main` | Windows：`E:\stardew-agent` |
 | `m2c-offscreen-news`、`legacy-cleanup` | 不在场传话；遗留清理与全部改用 high。已变基到新 `main`，待独立验收 | 已提交 |
 | `scene-player-gender` | 碰面聊天补上玩家性别，建在 `legacy-cleanup` 上 | 已提交 |
-| `less-fabrication` | 自由编造实测（不加规则）与 `share` 道谢过滤，建在 `scene-player-gender` 上，现在是最前端 | `/Users/a11/Documents/ChatGPT/stardew-agent-gifts` |
+| `less-fabrication` | 自由编造实测（不加规则）与 `share` 道谢过滤，建在 `scene-player-gender` 上 | 已提交 |
+| `m2c-ambient-lines` | 同图小动作，建在 `less-fabrication` 上；设计稿待确认 | `/Users/a11/Documents/ChatGPT/stardew-agent-gifts` |
 
 Windows 上的目录是 `E:\stardew-agent`。当前 `codex/news-windows-tests` 从上一轮 `908e73b` 建立，测试期间发现主线更新后先备份改动、变基到 `origin/main / ed9eb28`，再纳入最新 `m2b-npc-news / dc6d1d2`，保留上游新加的动态好感预期与本轮真机夹具。此前所有本地验收分支及 `codex/next-day-plans` / `2260625` 均保留。
 
@@ -203,7 +206,7 @@ dotnet build mod/StardewAgentBridge   # 编译 Mod，编译完自动装进游戏
 3. **M2b 第四步：NPC 碰面聊天**：Windows 组合验收通过，后端 60 分钟冷却/日期修复在 `codex/social-windows-tests`；继续观察镇上自然碰面，见 [npc-chat.md](npc-chat.md) §8。
 4. **M2b 第五步：送礼记忆**：原版赠送、保存、回滚和真实回忆的组合验收通过；生日、任务与节日场景的覆盖边界见 [npc-gifts.md](npc-gifts.md) §7。Mod 与后端均已更新到协议 3。
 5. **M2b 第六步：聊天影响好感**：增减、上限、重复消息、保存与回滚通过，见 [npc-friendship.md](npc-friendship.md) §8；已合入 `main`。按熟悉程度分档在 `m2b-friendship-by-hearts`。
-6. **自主行动**：调度器、合并场景调用和其余白名单动作另行设计。
+6. **自主行动**：第一步不在场传话待验收；第二步[同图小动作](ambient-lines.md)设计稿等用户确认。
 7. **已合入 `main`（2026-10-20）**：用户提交组合验收结果并要求合并后，`codex/new-parts-windows-tests` / `908e73b` 快进合入；Mac 上复核 125/125、类型检查、构建和 Release 编译。包含第四至七步、公开家庭信息、临时日志清理，以及 Windows 修的后端碰面冷却与失败读档保护。自然婚礼/电影等剧情、全部 NPC 自然游玩和模型事实可靠性仍按 [本轮报告](test-results/2026-10-20-new-parts-windows.md) 的覆盖边界观察。
 8. **好感分档与在场传话已合入 `main`（2026-10-21）**：`codex/news-windows-tests` / `7ff44ea` 的统一脚本 115 项真机检查通过，含两处修复；按用户要求快进合入，Mac 复核 132/132、类型检查、构建和 Release 编译。结果、失败保留与范围见 [10 月 21 日报告](test-results/2026-10-21-news-windows.md)。
 9. **待验收**：`m2c-offscreen-news`（不在场传话）和 `legacy-cleanup`（字符串记忆、气泡过滤、没发生过的事件、0 心门槛、全部改用 high）已变基到新 `main`，切到最前端的 `less-fabrication` 一起测；不能将 `dc6d1d2` 的 low/disabled 数据当作它们已通过。
@@ -222,6 +225,7 @@ dotnet build mod/StardewAgentBridge   # 编译 Mod，编译完自动装进游戏
 | `docs/game-bridge.md` | M3a：Mod 和后端的协议、原版界面怎么复用、游戏内测试清单 |
 | `docs/game-memory.md` | M3b：存档同步、跨天记忆、确认补发与崩溃恢复 |
 | `docs/nightly-consolidation.md` | 夜间整合：产出、输入、触发时机、出错处理、实测 token 和真实模型结果 |
+| `docs/ambient-lines.md` | 自主行动第二步：同图小动作的决定、规则、打不打招呼的实测对比、消息、测试和 Windows 清单 |
 | `docs/offscreen-news.md` | 自主行动第一步：玩家不在场时也传话的决定、消息、成本、测试和 Windows 清单 |
 | `docs/legacy-cleanup.md` | 遗留问题清理：字符串记忆、气泡过滤、三档推理强度实测、没发生过的事件、0 心门槛、卡片标准 |
 | `docs/npc-news.md` | M2b 第八步：NPC 之间传话的决定、规则写法对比、真实模型实测、测试和 Windows 清单 |
