@@ -20,7 +20,7 @@ internal sealed partial class ModEntry
     private const int ScenesPerDay = 4;
     private const int SceneGapMinutes = 60;
     private const int SceneLineTicks = 180;
-    private const int SceneReplyTicks = 600;
+    private const int SceneReplyTicks = 60 * 60;
 
     private readonly HashSet<string> scenePairs = new();
     private readonly Queue<(string Npc, string Text, string Emote)> sceneLines = new();

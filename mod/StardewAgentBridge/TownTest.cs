@@ -56,7 +56,7 @@ internal sealed partial class ModEntry
 
     private void TownPlace(string id, string map, int x, int y)
     {
-        NPC npc = Game1.getCharacterFromName(id);
+        NPC npc = this.SocialActor(id);
         npc.controller = null; npc.ignoreScheduleToday = true; npc.isSleeping.Value = false; npc.IsInvisible = false;
         Game1.warpCharacter(npc, Game1.getLocationFromName(map), new Vector2(x, y)); npc.Halt();
     }

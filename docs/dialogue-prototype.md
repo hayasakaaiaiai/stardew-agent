@@ -313,7 +313,7 @@ node tools/chat.ts abigail --scenario rainy-spring --hearts 4 --seen 1,2
 | 时机 | 调用 | 内容 |
 |---|---|---|
 | 调用模型前 | `agent.context({ query: 玩家这句话, nowGameTime })` | 召回的记忆，以及今天和这个 NPC 的对话记录 |
-| 拿到回复后 | `agent.record({ seq, gameTime, log, memories })` | `log` 是这一轮的原话 `{ player, npc }`；`memories` 是模型给的 `remember`，记为 `private` 的对话记忆 |
+| 拿到回复后 | `agent.record({ seq, gameTime, log, memories })` | `log` 是这一轮的原话 `{ player, npc }`；模型决定是否记和重要度，`memories` 正文取本轮玩家完整原话，记为 `private`（2026-10-21 来源修复见 `reliability-fixes.md`） |
 
 - 今天的对话记录从记忆系统读，不再放在命令行的内存里。命令行重启后，同一天的对话还在，记忆系统的临时日志会恢复它。
 - 不写 `state`。`state` 是整对象快照，现在没有需要它的字段，留给后面的计划和情绪。

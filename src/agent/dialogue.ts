@@ -1,5 +1,6 @@
 import type { ChatMessage, Completion, ModelClient, StreamHandlers, Usage } from '../services/model/client.ts';
 import type { Relation, RenderedCard, Roster } from '../services/roster/index.ts';
+import { sourceRemembered } from './turn-facts.ts';
 
 /** One player ↔ NPC dialogue call (design §7.6, prototype in docs/dialogue-prototype.md). */
 
@@ -348,7 +349,9 @@ export async function runTurn(
     if (completion.content.trim() || tries >= MAX_ATTEMPTS) break;
   }
   const parsed = parseOutput(attempts.at(-1)!.content, stream.text);
-  const { reply, meta } = recalled.replyView?.(parsed.reply, parsed.meta) ?? parsed;
+  const viewed = recalled.replyView?.(parsed.reply, parsed.meta) ?? parsed;
+  const { reply } = viewed;
+  const meta = { ...viewed.meta, remember: sourceRemembered(input.playerLine, viewed.meta.remember, input.playerLine === OPENING_LINE) };
   handlers.signal?.throwIfAborted();
   if (reply) await memory.record({ player: input.playerLine, npc: reply }, meta.remember);
   if (reply && recalled.replyView) {

@@ -158,10 +158,36 @@ internal sealed partial class ModEntry
                 if (this.ambientLines.Count > 0) return;
                 this.AmbientCheck(this.ambientTestShown.Count == this.ambientTestBefore, "ambient-thirteen-tile-speaker-skipped");
                 this.AmbientArrange(); this.ClearAmbient(); this.ClearBubbles();
+                this.ambientRequestSeq = 776;
+                this.ambientRequestedTick = unchecked(this.ambientCurrentTick - 20 * 60);
+                this.TickAmbient(this.ambientTestUpdate!);
+                this.AmbientCheck(this.ambientRequestSeq == 776, "ambient-twenty-second-reply-still-accepted");
+                using (JsonDocument slow = JsonDocument.Parse(JsonSerializer.Serialize(new { lineageId = this.lineageId, loadNonce = this.loadNonce,
+                    seq = 776, lines = new[] { new { npc = "pierre", to = "self", text = "欢迎光临！", emote = "happy" } } })))
+                    this.HandleAmbient("ambient.lines", slow.RootElement);
+                this.AmbientCheck(this.ambientLines.Count == 1, "ambient-twenty-second-valid-packet-queued");
+                this.ClearAmbient(); this.ClearScenes();
+                this.sceneRequestSeq = 775;
+                this.sceneRequestedTick = unchecked(this.sceneCurrentTick - 20 * 60);
+                this.TickScenes(this.ambientTestUpdate!);
+                this.AmbientCheck(this.sceneRequestSeq == 775, "scene-twenty-second-reply-still-accepted");
+                using (JsonDocument slow = JsonDocument.Parse(JsonSerializer.Serialize(new { lineageId = this.lineageId, loadNonce = this.loadNonce,
+                    seq = 775, lines = new[] { new { npc = "pierre", text = "欢迎光临！", emote = "happy" } } })))
+                    this.HandleScenes("scene.lines", slow.RootElement);
+                this.AmbientCheck(this.sceneLines.Count == 1, "scene-twenty-second-valid-packet-queued");
+                this.ClearScenes(); this.sceneRequestSeq = 774;
+                this.sceneRequestedTick = unchecked(this.sceneCurrentTick - SceneReplyTicks - 1);
+                this.TickScenes(this.ambientTestUpdate!);
+                this.AmbientCheck(this.sceneRequestSeq == 0, "scene-sixty-second-timeout-releases-request");
+                using (JsonDocument lateScene = JsonDocument.Parse(JsonSerializer.Serialize(new { lineageId = this.lineageId, loadNonce = this.loadNonce,
+                    seq = 774, lines = new[] { new { npc = "pierre", text = "这句不该显示。" } } })))
+                    this.HandleScenes("scene.lines", lateScene.RootElement);
+                this.AmbientCheck(this.sceneLines.Count == 0, "scene-timed-out-late-packet-ignored");
+                this.ClearScenes();
                 this.ambientRequestSeq = 777;
                 this.ambientRequestedTick = unchecked(this.ambientCurrentTick - AmbientReplyTicks - 1);
                 this.TickAmbient(this.ambientTestUpdate!);
-                this.AmbientCheck(this.ambientRequestSeq == 0, "ambient-ten-second-timeout-releases-request");
+                this.AmbientCheck(this.ambientRequestSeq == 0, "ambient-sixty-second-timeout-releases-request");
                 using (JsonDocument late = JsonDocument.Parse(JsonSerializer.Serialize(new { lineageId = this.lineageId, loadNonce = this.loadNonce,
                     seq = 777, lines = new[] { new { npc = "pierre", to = "farmer", text = "这句不该显示。", emote = "happy" } } })))
                     this.HandleAmbient("ambient.lines", late.RootElement);

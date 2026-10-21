@@ -70,7 +70,7 @@ internal sealed partial class ModEntry
     private void NewsTalk(string id, int next)
     {
         this.CloseSocialMenu();
-        NPC npc = Game1.getCharacterFromName(id);
+        NPC npc = this.SocialActor(id);
         npc.controller = null; npc.ignoreScheduleToday = true; npc.isSleeping.Value = false; npc.IsInvisible = false;
         Game1.warpCharacter(npc, Game1.currentLocation, new Vector2(7, 8));
         npc.Halt(); Game1.player.CanMove = true;

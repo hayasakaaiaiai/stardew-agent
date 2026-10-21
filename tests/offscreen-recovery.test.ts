@@ -31,7 +31,8 @@ test('string memories reach a zero-heart NPC after save and backend restart; opt
   const reload = await connect(await h.start(), initial('reload', 2, commit));
   reload.send({ ...openTalk(2, 'Jodi'), hearts: 0 }); await reload.until('talk.reply');
   const prompt = h.fake.sent.at(-1)![0]!.content;
-  assert.match(prompt, /测试说周末会给文森特做蓝色风筝。/);
+  assert.match(prompt, /农场主说："我答应周末给文森特做蓝色风筝。"/);
+  assert.doesNotMatch(prompt, /测试说周末会给文森特做蓝色风筝。/, 'only the actual player source is stored');
   assert.doesNotMatch(prompt, /那孩子一定会高兴的。/, 'a reply echoed as a string must not become a memory');
   assert.doesNotMatch(prompt, /\n- .*一(?:\n|$)/, 'an unchosen option must not become a memory');
   await reload.close();

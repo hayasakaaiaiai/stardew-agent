@@ -67,7 +67,8 @@ const townGates = new Set<string>();
 const TOWN_PUBLIC = '我给自己的蓝色风筝取名云尾，你可以跟朋友们说。';
 const THANKS = '谢谢你上次帮我的忙。';
 const STRING_LINE = '我答应周末给文森特做蓝色风筝。';
-const STRING_NOTE = '记忆验收说周末会给文森特做蓝色风筝。';
+const STRING_SUMMARY = '记忆验收说周末会给文森特做蓝色风筝。';
+const STRING_NOTE = `农场主说：${JSON.stringify(STRING_LINE)}`;
 const HEARD_WIND = /(?:阿比盖尔跟我说|格斯跟我说，阿比盖尔说过)：["“][^\n]+云尾/;
 const PUBLIC_CAT = '我养的小猫叫星糖，你可以跟朋友们说。';
 const SECRET = '这是秘密，别告诉别人：我其实很怕黑。';
@@ -101,7 +102,7 @@ function model(kind: 'dialogue' | 'scene' | 'nightly'): ModelClient {
           : messages[0]!.content.includes(STRING_NOTE) ? '你答应给文森特做蓝色风筝。' : '我还没听说呢。'
           : news ? HEARD.test(text) ? '阿比盖尔跟我说，你的小猫叫星糖。' : '嗯，今天过得怎么样？'
           : newParts ? '这个给你，今天过得怎么样？' : '嗯，我记得那块紫水晶。', emotion: 'happy', options: ['再聊一会', '说说近况', '听听你的想法'],
-        remember: town && last.startsWith(STRING_LINE) ? [STRING_NOTE, '再聊一会'] : [],
+        remember: town && last.startsWith(STRING_LINE) ? [STRING_SUMMARY, '再聊一会'] : [],
         mood: town ? 0 : Number(/^好感(-?\d)/.exec(last)?.[1] ?? 2), give: newParts, end: false,
       });
       handlers.onContent?.(content);

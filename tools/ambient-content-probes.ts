@@ -21,8 +21,9 @@ export async function ambientContentProbes(roster: Roster,
   ]) for (let repeat = 1; repeat <= 2; repeat++) {
     const standing = { hearts: probe.npc === 'krobus' ? 14 : 10, relation: probe.npc === 'krobus' ? 'roommate' as const : 'friend' as const,
       seenEvents: new Set(probe.seen) };
+    const probeWorld = probe.npc === 'krobus' ? { ...world, time: '20:30', weather: '晴', location: '农舍' } : world;
     const messages = buildMessages({ npcName: roster.get(probe.npc).name, card: roster.render(probe.npc, { ...standing, purpose: 'dialogue' }),
-      world, standing, memory: { memories: [] }, history: [], playerLine: probe.line });
+      world: probeWorld, standing, memory: { memories: [] }, history: [], playerLine: probe.line });
     const result = await call('dialogue', messages), parsed = parseOutput(result.content);
     samples.push({ label: probe.label, repeat, messages, raw: result.content, reply: parsed.reply, valid: parsed.ok, expected: probe.expected });
   }

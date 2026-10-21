@@ -22,7 +22,7 @@ internal sealed partial class ModEntry
     private const int AmbientNpcGapMinutes = 120;
     private const int AmbientCallGapMinutes = 30;
     private const int AmbientLineTicks = 180;
-    private const int AmbientReplyTicks = 600;
+    private const int AmbientReplyTicks = 60 * 60;
     private const int AmbientFaceMilliseconds = 3000;
 
     /// <summary>NPC name → game time it last went into a request.</summary>

@@ -70,7 +70,7 @@ test('a turn is recorded, then shows up as history and memory in the next prompt
     assert.deepEqual(fake.turns(1).map((m) => [m.role, m.content.replace(JSON_HINT, '')]), [
       ['user', '我最喜欢下雨天'], ['assistant', '{"reply":"下雨天最好了。"}'], ['user', '你记得我喜欢什么吗？'],
     ]);
-    assert.match(fake.system(1), /## 你记得的事\n- （今天）玩家说她最喜欢下雨天/);
+    assert.match(fake.system(1), /## 你记得的事\n- （今天）农场主说："我最喜欢下雨天"/);
     assert.equal(save.todayCount('abigail'), 2);
   } finally {
     await save.close();
@@ -88,7 +88,7 @@ test('after sleeping, yesterday is remembered but no longer part of the conversa
     await save.sleep();
     assert.equal(save.day, absoluteDay(START) + 1);
     await say('早上好');
-    assert.match(fake.system(1), /- （昨天）玩家答应带紫水晶来/);
+    assert.match(fake.system(1), /- （昨天）农场主说："明天我给你带紫水晶"/);
     assert.deepEqual(fake.turns(1).map((m) => m.role), ['user'], 'yesterday’s exchange is not replayed');
   } finally {
     await save.close();
@@ -113,7 +113,7 @@ test('rolling back discards today but keeps everything up to the last save', asy
     assert.equal(save.day, absoluteDay(START) + 1, 'reloads the day after the last save');
     assert.equal(save.todayCount('abigail'), 0);
     await say('早');
-    assert.match(fake.system(2), /玩家说喜欢青蛙/);
+    assert.match(fake.system(2), /农场主说："我喜欢青蛙"/);
     assert.doesNotMatch(fake.system(2), /搬去城里/);
   } finally {
     await save.close();
