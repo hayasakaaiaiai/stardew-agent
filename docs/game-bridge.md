@@ -40,7 +40,7 @@ Mod → 后端：
 | `save.saving` | 保存前 | 本次提交的 `commitId`、`parentId`、`dayEnded` |
 | `save.saved` | 确认游戏保存成功 | `commitId`、实际保存后的日期 |
 | `title.returned` | 不保存退出 / 回到标题 | 丢弃未保存工作区，保留已经准备或确认的数据库节点 |
-| `talk.open` | 选了“继续聊” | npc、心数、关系、看过的事件、世界状态 |
+| `talk.open` | 选了“继续聊” | npc、心数、关系、看过的事件、世界状态；可选布尔值 `inPersonGifts` 同步 Mod 当面赠礼开关，关闭时后端不提供物品、不记赠礼或冷却；省略保持原行为 |
 | `talk.say` | 玩家说一句 | npc、文本（选项原文或自己打的字）、当前日期时间 |
 | `talk.close` | 离开 | npc |
 | `gift.given` | 原版送礼之后 | npc、物品显示名、原版喜好、是否生日、日期；可靠消息，等 `ack`（见 `npc-gifts.md`） |

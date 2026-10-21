@@ -173,6 +173,8 @@ internal sealed partial class ModEntry
         }
         if (this.bridge.IsConnected && this.bridge.Generation == this.announcedGeneration)
             this.bridge.Send(fields);
+        if (type == "town.hour" && this.memoryTest is not null)
+            this.townTestPackets.Add(new { seq = this.seq, time = Game1.timeOfDay, groups = fields["groups"], nonce = this.loadNonce, day = this.currentDay });
         return this.seq;
     }
 

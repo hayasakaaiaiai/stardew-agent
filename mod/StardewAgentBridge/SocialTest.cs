@@ -72,6 +72,7 @@ internal sealed partial class ModEntry
     private void BeginSocialTest()
     {
         this.CheckMemoryTestSave();
+        if (this.townTestRunning) { this.ResumeTownTest(); return; }
         if (this.newsTestRunning) { this.ResumeNewsTest(); return; }
         if (this.newPartsRunning) { this.ResumeNewPartsTest(); return; }
         if (this.socialTestPhase == 0)

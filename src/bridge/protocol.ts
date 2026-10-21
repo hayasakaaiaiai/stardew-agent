@@ -75,6 +75,8 @@ export type ModMessage =
     hearts: number;
     relation: Relation;
     seenEvents: string[];
+    /** Mod setting; omitted by older protocol-3 clients, which keep the original enabled behavior. */
+    inPersonGifts?: boolean;
     world: WorldSnapshot;
   } & Envelope)
   | ({ type: 'talk.say'; npc: string; text: string; date: GameDate } & Envelope)
@@ -203,6 +205,7 @@ export function parseModMessage(raw: string): ModMessage {
       if ((data.hearts as number) < 0 || (data.hearts as number) > 14) fail('hearts is out of range');
       if (!RELATIONS.has(data.relation as Relation)) fail('relation is invalid');
       if (!Array.isArray(data.seenEvents) || data.seenEvents.some((e) => typeof e !== 'string')) fail('seenEvents must be strings');
+      if (data.inPersonGifts !== undefined && typeof data.inPersonGifts !== 'boolean') fail('inPersonGifts must be a boolean');
       world(data.world);
       break;
     }

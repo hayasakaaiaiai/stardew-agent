@@ -68,7 +68,9 @@ test('an automatic recovery leaves the failed batch unwritten and delivers nonem
   assert.ok(!wire.inbox.some(message => message.type === 'day.letters' && message.letters.length));
   const from = wire.inbox.length;
   gate.resolve();
-  const packet = await wire.until('day.letters', from);
+  // The initial empty day snapshot can still be in flight; success is the nonempty recovery delivery.
+  await until(() => wire.inbox.slice(from).some(message => message.type === 'day.letters' && message.letters.length > 0));
+  const packet = wire.inbox.slice(from).find(message => message.type === 'day.letters' && message.letters.length > 0)!;
   assert.equal(packet.type, 'day.letters');
   assert.equal(packet.type === 'day.letters' && packet.letters[0]?.text, '今天一起做风筝，可别忘啦。');
   assert.ok(database(h.directory, commit.commitId).fingerprint);

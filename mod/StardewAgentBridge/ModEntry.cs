@@ -207,6 +207,7 @@ internal sealed partial class ModEntry : Mod
             ["hearts"] = GameState.Hearts(npc),
             ["relation"] = GameState.Relation(npc),
             ["seenEvents"] = GameState.SeenEvents(),
+            ["inPersonGifts"] = this.config.InPersonGifts,
             ["world"] = GameState.World(),
         });
         this.BeginWaiting(this.talk);

@@ -104,7 +104,7 @@ internal sealed partial class ModEntry
         this.CheckMemoryTestSave(); this.memoryTestSleepDay = this.currentDay;
         FarmHouse home = Utility.getHomeOfFarmer(Game1.player); Point bed = home.getBedSpot();
         LocationRequest request = Game1.getLocationRequest(home.NameOrUniqueName);
-        request.OnWarp += () => { this.MemoryTestProgress(this.newsTestRunning ? "news" : "new-parts", "通过原版睡觉保存验收结果。"); Game1.currentLocation.answerDialogueAction("Sleep_Yes", Array.Empty<string>()); };
+        request.OnWarp += () => { this.MemoryTestProgress(this.townTestRunning ? "town" : this.newsTestRunning ? "news" : "new-parts", "通过原版睡觉保存验收结果。"); Game1.currentLocation.answerDialogueAction("Sleep_Yes", Array.Empty<string>()); };
         this.MemoryTestProgress("warping", "返回床边保存新增功能结果。");
         Game1.warpFarmer(request, bed.X, bed.Y, 2);
     }
