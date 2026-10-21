@@ -52,4 +52,4 @@ o200k 实测：等待、小动作过滤和原话来源核对固定输入增量 0
 
 15:42:32 已将正常后端从 PID 14908 备份后重载为 **14668**；备份在最终运行的 `normal-backup/`。安装 DLL 与 Release 产物 SHA256 都是 `9C9D9EFEF9CF72529FDE5345DB7717A7675D8EEDADADD6D6DFFCBAD6389B128D`。协议 3 握手、三种消息的无存档解析探测通过，没有额外付费调用；游戏已退出。
 
-当前修复和报告验证完成，按本轮授权推送 `codex/ambient-windows-tests`，`main` 不作合并或改写。随后检查本轮新发现的 `festival-memories`；它不是本报告已测试的功能，推送及新提交记录在核对后补充。
+修复提交 **09bc5db** 已按本轮授权推送 `codex/ambient-windows-tests`，包含上轮 `d55f960`；`main` 未合并或改写。随后拉到 `festival-memories / 0f23c0d` 和 `remember-source / 0dc8c8d`，已做静态检查及隔离 156/156 / 类型检查，未整合或进行节日真机验收，见 [新提交记录](2026-10-21-new-commits.md)。原话记忆的短答语境取舍也在该记录中保留。

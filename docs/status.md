@@ -18,7 +18,7 @@
 | 里程碑 | 状态 | 已完成 | 还没做 | 文档 |
 |---|---|---|---|---|
 | M1 存储与事务 | 完成 | 记忆内核；当天事务；存档与回滚；崩溃恢复；过期临时日志/检查点清理，失败新读档保护旧日志（2026-10-20 合入 `main`） | — | `README.md`、`design.md` §16 |
-| M2 Agent | 原有功能已合入；本轮兼容修复完整实测通过 | 慢回复、原话记忆、小动作完成动作过滤、科罗布斯未看事件修复；154/22 自动检查、166 固定和 176 真实原生检查通过 | 当前功能分支按授权推送，未合入 main；历史污染不回写，任意自由内容和自然日程仍需观察 | `dialogue-prototype.md`、`nightly-consolidation.md`、`next-day-plans.md`、`npc-bubbles.md`、`npc-mail.md`、`npc-chat.md`、`npc-gifts.md`、`npc-friendship.md`、`npc-in-person-gifts.md`、`world-public-facts.md`、`npc-news.md`、`offscreen-news.md`、`ambient-lines.md`、`legacy-cleanup.md` |
+| M2 Agent | 原有功能已合入；本轮兼容修复完整实测通过 | 慢回复、原话记忆、小动作完成动作过滤、科罗布斯未看事件修复；154/22 自动检查、166 固定和 176 真实原生检查通过 | 修复 09bc5db 已推送，未合入 main；历史污染不回写，任意自由内容和自然日程仍需观察 | `dialogue-prototype.md`、`nightly-consolidation.md`、`next-day-plans.md`、`npc-bubbles.md`、`npc-mail.md`、`npc-chat.md`、`npc-gifts.md`、`npc-friendship.md`、`npc-in-person-gifts.md`、`world-public-facts.md`、`npc-news.md`、`offscreen-news.md`、`ambient-lines.md`、`legacy-cleanup.md` |
 | M3 接入游戏 | 完成（Windows） | 游戏里"继续聊"；真实保存/退出、跨天记忆、回滚、后端进程重启与旧档分叉；拼音输入法、原版台词保留、取消三项手测通过 | — | `game-bridge.md`、`game-memory.md` |
 | M4 内容 | 角色卡已完成 | 34 张角色卡（已审阅），"看过事件之后"共 201 条（`group-events` 补群体 10 心和科罗布斯 14 心后 226 条） | 物品名到 ID 的对应、各动作的上限 | `design.md` §11 |
 
@@ -70,7 +70,7 @@ M2b 第八步“NPC 之间传话”在 `m2b-npc-news` 上实现：当晚和玩�
 
 2026-10-21 用户要求“推送之后看看新提交 继续测”，已先推送上一轮 `codex/offscreen-windows-tests / bda43f3`。本轮在 `codex/ambient-windows-tests` 纳入 `56b29e4` 同图小动作和 `89e572c` 群体事件补充，复现并修复重复招呼、菜单期间显示、最后一句覆盖三处问题，正常 token 增量 0。149/149 Node、22/22 C#、类型检查、构建与 Release 0 警告/错误通过；最终固定数据完整组合 160 项检查、226.08 秒、6 次保存/11 次读档通过；真实新功能定向 40/40、116.13 秒、22 次 high 调用通过，原档 6 文件哈希相同。**完整真实组合两轮没有全部通过**：同图 19.293 秒、旧碰面 14.062 秒回复分别超过原有 10 秒上限。事件内容 16 次中 14 次核心状态符合；科罗布斯未看事件两次回避而没明确否认，小动作仍添写细节。14:56:32 已备份并重载正常后端 PID 14908，DLL 哈希相同、三类消息解析探测通过。当前新分支仅本地提交、未推送、未合入 main；完整记录见 [本轮报告](test-results/2026-10-21-ambient-windows.md)。
 
-2026-10-21 按用户“修复问题后推送，看看新提交”，保留 high / 协议 3 / 现有 JSON，修复后台等待过短、remember 的玩家来源、小动作完成动作和科罗布斯未发生事件语义。154/154 Node、22/22 C#、类型检查、构建和 Mod Release 零警告/错误通过；固定完整 166 项、227.21 秒，最终真实完整 176 项、489.36 秒、62 次 high 调用、6 次保存/11 次读档通过，原档 6 文件哈希相同。真实模型再次添写“画得不怪”，后续 prompt 被原话约束正确拦下；首轮因测试 NPC 查找空值失败的记录保留，随后修正脚本并重跑完整通过。15:42:32 正常后端已备份后重载为 PID 14668，DLL 哈希及协议探测通过。科罗布斯未看时 +14 固定输入，其他修复 +0；召回原话的长度成本另计。修复按本轮授权推送当前功能分支，main 未合入。详见[修复报告](test-results/2026-10-21-reliability-windows.md)。
+2026-10-21 按用户“修复问题后推送，看看新提交”，保留 high / 协议 3 / 现有 JSON，修复后台等待过短、remember 的玩家来源、小动作完成动作和科罗布斯未发生事件语义。154/154 Node、22/22 C#、类型检查、构建和 Mod Release 零警告/错误通过；固定完整 166 项、227.21 秒，最终真实完整 176 项、489.36 秒、62 次 high 调用、6 次保存/11 次读档通过，原档 6 文件哈希相同。真实模型再次添写“画得不怪”，后续 prompt 被原话约束正确拦下；首轮因测试 NPC 查找空值失败的记录保留，随后修正脚本并重跑完整通过。15:42:32 正常后端已备份后重载为 PID 14668，DLL 哈希及协议探测通过。科罗布斯未看时 +14 固定输入，其他修复 +0；召回原话的长度成本另计。修复 09bc5db 已推送当前功能分支，main 未合入。详见[修复报告](test-results/2026-10-21-reliability-windows.md)。
 
 ## 3. 分支
 
@@ -102,8 +102,10 @@ GitHub 私有仓库：https://github.com/hayasakaaiaiai/stardew-agent
 | `less-fabrication` | 自由编造实测与 share 道谢过滤；已完成上一轮 Windows 验收 | 已提交 |
 | `codex/offscreen-windows-tests` | 上一轮组合验收与赠礼开关修复；`bda43f3` 已按用户要求推送，未合入 main | Windows 历史验收分支 |
 | `m2c-ambient-lines` | 同图小动作，`56b29e4` | 已推送 |
+| `festival-memories` | 节日结果观察记忆，远端 0f23c0d；已隔离自动检查，待整合与 Windows 节日场景验收 | 未合入当前分支 |
+| `remember-source` | 建在节日分支上的字段顺序调整，远端 0dc8c8d；保留模型概括，与当前原话策略有取舍 | 未合入当前分支 |
 | `group-events` | 群体 10 心两种结局、科罗布斯 14 心与疏远期限制，`89e572c` | 已推送 |
-| `codex/ambient-windows-tests` | 上轮三处修复 + 本轮慢回复/原话来源/完成动作过滤/事件语义修复；完整真实 176 项通过，按授权推送 | Windows 当前工作分支 |
+| `codex/ambient-windows-tests` | 上轮三处修复 + 本轮慢回复/原话来源/完成动作过滤/事件语义修复；完整真实 176 项通过；09bc5db 已推送 | Windows 当前工作分支 |
 
 Windows 当前分支 `codex/ambient-windows-tests` 保留已推送的 `bda43f3`，纳入 `group-events / 89e572c`（包括 `m2c-ambient-lines / 56b29e4`）；两条分支都以 `main / 35affae` 为祖先。此前所有本地验收分支均保留。
 
@@ -215,13 +217,14 @@ dotnet build mod/StardewAgentBridge   # 编译 Mod，编译完自动装进游戏
 6. **自主行动**：后台传话与[同图小动作](ambient-lines.md)已完成本轮修复和完整真实组合（176 项）。后台等待改为 60 秒、原话来源和完成动作过滤已测；自然游玩仍按清单观察，见[修复报告](test-results/2026-10-21-reliability-windows.md)。
 7. **已合入 `main`（2026-10-20）**：用户提交组合验收结果并要求合并后，`codex/new-parts-windows-tests` / `908e73b` 快进合入；Mac 上复核 125/125、类型检查、构建和 Release 编译。包含第四至七步、公开家庭信息、临时日志清理，以及 Windows 修的后端碰面冷却与失败读档保护。自然婚礼/电影等剧情、全部 NPC 自然游玩和模型事实可靠性仍按 [本轮报告](test-results/2026-10-20-new-parts-windows.md) 的覆盖边界观察。
 8. **好感分档与在场传话已合入 `main`（2026-10-21）**：`codex/news-windows-tests` / `7ff44ea` 的统一脚本 115 项真机检查通过，含两处修复；按用户要求快进合入，Mac 复核 132/132、类型检查、构建和 Release 编译。结果、失败保留与范围见 [10 月 21 日报告](test-results/2026-10-21-news-windows.md)。
-9. **本轮修复完成，按授权推送**：当前功能分支 154/154、22/22、固定完整 166 项、真实完整 176 项通过，已更新本机。推送后检查新发现的节日记忆提交；不把未集成的新功能计入本轮通过。历史污染和自由内容限制见[最新报告](test-results/2026-10-21-reliability-windows.md)。
+9. **本轮修复已推送**：当前功能分支 154/154、22/22、固定完整 166 项、真实完整 176 项通过，已更新本机。推送后已检查节日记忆和 remember 字段顺序分支，隔离快照 156/156 / 类型检查通过；新功能未合并、未做节日游戏验收。原话与概括的语境取舍见[新提交记录](test-results/2026-10-21-new-commits.md)。历史污染和自由内容限制见[最新报告](test-results/2026-10-21-reliability-windows.md)。
 
 ## 8. 文档索引
 
 | 文档 | 讲什么 |
 |---|---|
 | `docs/test-results/2026-10-21-ambient-windows.md` | 同图小动作、群体事件与原生疏远状态；三处修复、149/22 检查、真实定向内容和完整组合超时失败 |
+| `docs/test-results/2026-10-21-new-commits.md` | 修复推送之后的节日记忆、字段顺序分支检查，156 项隔离检查和来源策略取舍 |
 | `docs/reliability-fixes.md` | 慢回复、记忆原话、小动作完成过滤和科罗布斯事件语义的兼容修复及 token 实测 |
 | `docs/test-results/2026-10-21-reliability-windows.md` | 154/22 检查、固定 166/真实 176 项、污染实际拦截、原生边界和保留的脚本失败 |
 | `docs/test-results/2026-10-21-offscreen-windows.md` | 后台两手传播、遗留清理与 high 组合测试，赠礼开关修复和未选项记忆污染 |
