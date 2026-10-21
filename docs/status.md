@@ -108,8 +108,8 @@ GitHub 私有仓库：https://github.com/hayasakaaiaiai/stardew-agent
 | `less-fabrication` | 自由编造实测（不加规则）与 `share` 道谢过滤，建在 `scene-player-gender` 上 | 已提交 |
 | `m2c-ambient-lines` | 同图小动作，建在 `less-fabrication` 上；待 Windows 验收 | 已推送 |
 | `group-events` | 群体 10 心、科罗布斯 14 心的“看过事件之后”和疏远期处理，建在 `m2c-ambient-lines` 上 | 已推送 |
-| `festival-memories` | 节日记忆，建在 `group-events` 上，并摘入 Windows 的 `bda43f3`；待 Windows 验收 | 已推送节日记忆，摘入的提交未推送 |
-| `remember-source` | `remember` 先写、再出选项，建在 `festival-memories` 上，现在是最前端；待 Windows 验收 | `/Users/a11/Documents/ChatGPT/stardew-agent-gifts` |
+| `festival-memories` | 节日记忆，建在 `group-events` 上，并摘入 Windows 的 `bda43f3`；待 Windows 验收 | 已推送（`0f23c0d`） |
+| `remember-source` | `remember` 先写、再出选项，建在 `festival-memories` 上，现在是最前端；待 Windows 验收 | 已推送；`/Users/a11/Documents/ChatGPT/stardew-agent-gifts` |
 | `codex/offscreen-windows-tests` | `main / 35affae` + `less-fabrication / f98222c`，扩展统一脚本、赠礼开关修复及真实内容问题记录；已推送，修复已摘到 `festival-memories` | Windows：`E:\stardew-agent` |
 
 Windows 上的目录是 `E:\stardew-agent`，当前分支 `codex/offscreen-windows-tests` 以包含上一轮修复的新 `main / 35affae` 为祖先，纳入 `less-fabrication / f98222c` 的整条提交链。上一轮 `codex/news-windows-tests` 从 `908e73b` 建立，变基到 `ed9eb28` 后纳入 `dc6d1d2`，如今代码已由上游合入主线。此前所有本地验收分支及 `codex/next-day-plans` / `2260625` 均保留。
