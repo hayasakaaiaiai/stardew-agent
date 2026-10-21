@@ -1,5 +1,7 @@
 # 节日、后台聊天与行程的原版游戏脚本验收
 
+后续用户授权修复并推送，最终完整组合已 **231/231** 通过，见 [日程与聊天事实修复报告](2026-10-22-grounding-fixes.md)。以下保留首次脚本化时的中断、内容失败及分段证据。
+
 用户要求“手测部分写脚本测”，本轮将前一天报告中的游戏内清单改为可重复执行的 Windows 脚本。入口是 `tools/test-game-world.ps1`，设计和隔离约束见 [脚本设计](../scripted-world-acceptance.md)。基于 `ebde4c9`，仍在本地 `codex/scheduler-windows-tests`，没有推送或合入 main。
 
 ## 最终结果

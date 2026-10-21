@@ -95,6 +95,18 @@ async function fullRoster() {
   return roster;
 }
 
+test('missing recalled events are unknown, including when only unrelated memories or today\'s dialogue exist', () => {
+  for (const memory of [{ memories: [] }, { memories: [{ text: '玩家说过喜欢下雨' }] }]) {
+    const messages = buildMessages({ npcName: '哈维', card: { stable: '玛鲁是诊所助手。', gated: '' }, world,
+      standing: { hearts: 8, seenEvents: new Set(), relation: 'friend' }, memory,
+      history: [{ player: '你好', npc: '早上好。' }], playerLine: '刚才和玛鲁聊了什么？' });
+    assert.match(messages[0]!.content, /未记下的具体聊天只回答记不清；不能猜内容，也不能断言没见过对方/);
+    assert.equal(messages[0]!.content.includes('暂无可回忆的具体经历'), memory.memories.length === 0);
+    assert.equal(messages[2]!.content, '{"reply":"早上好。"}', 'today\'s actual dialogue remains available');
+    assert.doesNotMatch(messages[0]!.content, /排班|整理药品|回滚|读档/);
+  }
+});
+
 function fakeModel(outputs: string[][]) {
   const sent: ChatMessage[][] = [];
   const model = {

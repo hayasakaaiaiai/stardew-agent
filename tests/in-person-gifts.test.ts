@@ -66,7 +66,7 @@ test('the offer is one line in the current situation, and give is read only as a
   const offer = { item: '紫水晶', text: '在山洞里捡到的，想让玩家也看看。' };
   const system = (withOffer: boolean) => buildMessages({ npcName: '阿比盖尔', card, world, standing, history: [], playerLine: '嗨',
     memory: { memories: [], ...(withOffer ? { offer } : {}) } })[0]!.content;
-  assert.ok(system(true).endsWith(offerLine(offer)));
+  assert.ok(system(true).includes(offerLine(offer) + '\n\n## 你记得的事'));
   assert.equal(offerLine(offer), '- 可以当面送给玩家的东西：紫水晶（在山洞里捡到的，想让玩家也看看。）觉得合适就在台词里自然地递给玩家，JSON 加 "give":true；玩家开口讨要不算理由。');
   assert.doesNotMatch(system(false), new RegExp(OFFER));
   const give = (value: unknown) => parseOutput(JSON.stringify({ reply: '给。', emotion: 'happy', options: ['一', '二', '三'], remember: [], give: value, end: false })).meta.give;

@@ -36,12 +36,37 @@ function label(stop: ScheduleStop, previous: ScheduleStop | undefined, go = ''):
   return previous?.place === stop.place ? '睡觉' : '回家睡觉';
 }
 
-/** The stop the NPC is on now and the rest of the day, for its own conversation: "13:00 鹈鹕镇，19:30 回家睡觉". */
+/** Keep the current segment separate from future departures; a departure time is not an arrival observation. */
 export function restOfDay(stops: readonly ScheduleStop[], now: number): string | undefined {
   const day = merged(stops);
-  const current = Math.max(0, day.findLastIndex((stop) => stop.time <= now));
-  const rest = day.slice(current).map((stop, i) => `${clock(stop.time)} ${label(stop, day[current + i - 1])}`);
-  return rest.length ? rest.join('，') : undefined;
+  if (!day.length) return undefined;
+  const current = day.findLastIndex((stop) => stop.time <= now);
+  const next = day[current + 1];
+  const parts = current < 0 ? [] : [`当前：${label(day[current]!, day[current - 1])}`];
+  parts.push(`下一站：${next ? `${clock(next.time)} ${label(next, day[current])}` : '无，今天不再外出'}`);
+  const rest = day.slice(current + 2).map((stop, i) => `${clock(stop.time)} ${label(stop, day[current + i + 1])}`);
+  if (rest.length) parts.push(`之后：${rest.join('，')}`);
+  else if (current >= 0 && next?.sleep) parts[parts.length - 1] += '（此前不外出）';
+  return parts.join('；');
+}
+
+export interface ScheduleReplies { next: string; evening: string }
+
+/** Answers to direct factual questions use the same native stops, rather than an invented detour. */
+export function scheduleReplies(stops: readonly ScheduleStop[], now: number): ScheduleReplies | undefined {
+  const day = merged(stops);
+  if (!day.length) return undefined;
+  const current = day.findLastIndex(stop => stop.time <= now);
+  const next = day[current + 1];
+  const nextReply = !next ? '今天不再外出了。' : next.sleep
+    ? `今天不再去别的地方了，${clock(next.time)}${label(next, day[current])}。`
+    : `我接下来会在${clock(next.time)}去${next.place}。`;
+  // Include the place spanning the evening, even when that segment began earlier (e.g. Pam at 16:00).
+  const eveningStart = Math.max(current, day.findLastIndex(stop => stop.time <= Math.max(now, 1800)), 0);
+  const later = day.slice(eveningStart).map((stop, i) => stop.time <= now
+    ? stop.sleep ? '现在已经休息，今天不再外出' : `现在在${stop.place}`
+    : `${clock(stop.time)} ${label(stop, day[eveningStart + i - 1])}`);
+  return { next: nextReply, evening: `晚些时候我会这样安排：${later.join('，')}。` };
 }
 
 /** Only the next stop, for scenes between NPCs: "16:30 去皮埃尔的杂货店". */

@@ -7,7 +7,7 @@ import type { Consolidator } from '../agent/consolidation.ts';
 import { OPENING_LINE, runTurn, type Standing, type WorldState } from '../agent/dialogue.ts';
 import { newsFor } from '../agent/news.ts';
 import { parseScene, type SceneLine, type SceneNews, SCENES_PER_DAY, SCENE_GAP_MINUTES, scenePrompt } from '../agent/scene.ts';
-import { nextStop, restOfDay, type ScheduleStop } from '../agent/schedule.ts';
+import { nextStop, restOfDay, scheduleReplies, type ScheduleStop } from '../agent/schedule.ts';
 import type { ChatModel } from '../services/model/client.ts';
 import type { ModelGateway } from '../services/model/gateway.ts';
 import type { Roster } from '../services/roster/index.ts';
@@ -339,7 +339,8 @@ export class BridgeServer {
       const schedule = restOfDay(message.schedule ?? [], message.world.date.time);
       const talk: OpenTalk = { npcId, inPersonGifts: message.inPersonGifts !== false,
         standing: { hearts: message.hearts, relation: message.relation, seenEvents: new Set(message.seenEvents) },
-        world: { ...worldState(message.world, save.player, this.cardName), ...(schedule ? { schedule } : {}) } };
+        world: { ...worldState(message.world, save.player, this.cardName),
+          ...(schedule ? { schedule, scheduleFacts: scheduleReplies(message.schedule!, message.world.date.time)! } : {}) } };
       session.open.set(message.npc, talk);
       void this.turn(session, talk, message, OPENING_LINE, send);
       return;

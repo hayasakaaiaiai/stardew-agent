@@ -18,13 +18,22 @@ async function until(ready: () => boolean) {
 }
 
 test('the rest of the day starts at the stop the NPC is on, with walks around one place merged', () => {
-  assert.equal(restOfDay(HARVEY, 1400), '12:00 鹈鹕镇，17:30 诊所，18:40 哈维的房间，22:00 睡觉');
-  assert.equal(restOfDay(HARVEY, 600), '07:00 哈维的房间，08:30 诊所，12:00 鹈鹕镇，17:30 诊所，18:40 哈维的房间，22:00 睡觉',
+  assert.equal(restOfDay(HARVEY, 1400), '当前：鹈鹕镇；下一站：17:30 诊所；之后：18:40 哈维的房间，22:00 睡觉');
+  assert.equal(restOfDay(HARVEY, 600), '下一站：07:00 哈维的房间；之后：08:30 诊所，12:00 鹈鹕镇，17:30 诊所，18:40 哈维的房间，22:00 睡觉',
     'before the first stop, the whole day');
-  assert.equal(restOfDay(HARVEY, 2330), '22:00 睡觉');
-  assert.equal(restOfDay(SHANE, 1300), '07:00 Joja超市，17:00 星之果实餐吧，23:00 回家睡觉', 'sorted; bed elsewhere is going home');
+  assert.equal(restOfDay(HARVEY, 2330), '当前：睡觉；下一站：无，今天不再外出');
+  assert.equal(restOfDay(SHANE, 1300), '当前：Joja超市；下一站：17:00 星之果实餐吧；之后：23:00 回家睡觉', 'sorted; bed elsewhere is going home');
   assert.equal(restOfDay([], 1300), undefined);
   assert.equal(restOfDay(Array.from({ length: 25 }, (_, i) => stop(600 + i * 10, `地点${i}`)), 900), undefined, 'not a real schedule');
+});
+
+test('a rainy day staying home is not a new trip; midnight remains later than the evening', () => {
+  const rainy = [stop(900, '皮埃尔的杂货店'), stop(1300, '皮埃尔的杂货店'), stop(2200, '皮埃尔的杂货店', true)];
+  assert.equal(restOfDay(rainy, 1400), '当前：皮埃尔的杂货店；下一站：22:00 睡觉（此前不外出）');
+  assert.equal(restOfDay(HARVEY, 1730), '当前：诊所；下一站：18:40 哈维的房间；之后：22:00 睡觉');
+  const pam = [stop(1200, 'Joja超市'), stop(1600, '星之果实餐吧'), stop(2400, '潘姆家', true)];
+  assert.equal(restOfDay(pam, 2300), '当前：星之果实餐吧；下一站：00:00 回家睡觉（此前不外出）');
+  assert.equal(restOfDay(pam, 2400), '当前：回家睡觉；下一站：无，今天不再外出');
 });
 
 test('scenes get only the next stop', () => {
@@ -76,14 +85,14 @@ test('each call is told where its NPCs go next; an NPC without a schedule gets n
   let from = wire.inbox.length;
   wire.send({ ...openTalk(1, 'Harvey'), world: at(1400), schedule: HARVEY }); await wire.until('talk.reply', from);
   const system = () => h.fake.sent.at(-1)![0]!.content;
-  assert.match(system(), /- 地点：种子商店\n- 你今天接下来：12:00 鹈鹕镇，17:30 诊所，18:40 哈维的房间，22:00 睡觉\n/);
+  assert.match(system(), /- 地点：种子商店\n- 今日行程（覆盖平日习惯和先前台词，不另加去处）：当前：鹈鹕镇；下一站：17:30 诊所；之后：18:40 哈维的房间，22:00 睡觉\n/);
   from = wire.inbox.length;
   wire.send({ type: 'talk.say', npc: 'Harvey', text: '晚上去哪？' }); await wire.until('talk.reply', from);
-  assert.match(system(), /- 你今天接下来：12:00 鹈鹕镇/, 'the whole conversation keeps the line');
+  assert.match(system(), /- 今日行程.+当前：鹈鹕镇/, 'the whole conversation keeps the line');
   wire.send({ type: 'talk.close', npc: 'Harvey' });
   from = wire.inbox.length;
   wire.send({ ...openTalk(1, 'Abigail'), world: at(1400) }); await wire.until('talk.reply', from);
-  assert.doesNotMatch(system(), /你今天接下来/, 'no schedule, no line');
+  assert.doesNotMatch(system(), /今日行程/, 'no schedule, no line');
 
   from = wire.inbox.length;
   wire.send({ type: 'scene.request', npcs: ['Sebastian', 'Abigail'], world: at(1400), schedules: { Sebastian: SHANE } });

@@ -35,7 +35,8 @@ assert.equal(resolve(config.SaveDirectory), resolve(process.env.APPDATA!, 'Stard
 assert.ok(resolve(config.RunDirectory).startsWith(resolve(ROOT, '.runtime') + '\\'));
 const directory = config.RunDirectory;
 await mkdir(join(directory, 'sources'));
-for (const file of ['tools/test-game-world.ts', 'tools/prepare-world-fixture.ps1', 'mod/StardewAgentBridge/WorldTest.cs', 'mod/StardewAgentBridge/MemoryTest.cs', 'mod/StardewAgentBridge/Festivals.cs'])
+for (const file of ['tools/test-game-world.ts', 'tools/prepare-world-fixture.ps1', 'src/agent/schedule.ts', 'src/agent/dialogue.ts', 'src/agent/dialogue-facts.ts',
+  'src/bridge/server.ts', 'mod/StardewAgentBridge/WorldTest.cs', 'mod/StardewAgentBridge/MemoryTest.cs', 'mod/StardewAgentBridge/Festivals.cs'])
   await copyFile(join(ROOT, file), join(directory, 'sources', file.split('/').at(-1)!));
 const json = async (file: string, value: unknown) => { await writeFile(file + '.tmp', JSON.stringify(value, null, 2)); await rename(file + '.tmp', file); };
 const checks: { label: string; passed: boolean; detail?: unknown; scope: 'technical' | 'content' }[] = [];
@@ -69,7 +70,7 @@ function model(kind: Kind): ChatModel {
     if (real) result = await (kind === 'background' ? paidBackstage! : paid!).chat(messages, handlers, options);
     else {
       const text = messages.map(message => message.content).join('\n');
-      const schedule = /你今天接下来：([^\n]+)/.exec(text)?.[1] ?? '';
+      const schedule = /今日行程[^\n]*?）：([^\n]+)/.exec(text)?.[1] ?? '';
       const remembered = /- （(?:今天|昨天|\d+ 天前)）([^\n]+)/.exec(text)?.[1] ?? '';
       result = fixed(kind === 'background' ? { memories: { a: '格斯说汤的味道不错。', b: '潘姆说巴士站的风很大。', c: '我们聊了餐吧的天气。' } }
         : kind === 'nightly' ? { memories: [], retire: [], impression: '', plan: '', bubbles: [], letter: '', gift: false, share: '' }
@@ -207,13 +208,19 @@ async function schedules() {
       const reply = await say(id, '你待会儿要去哪儿？', `schedule-${id}-${rain}`);
       const open = modPackets('talk.open', before)[0]!;
       check(`schedule-${id}-${rain}-wire`, JSON.stringify(open.schedule) === JSON.stringify(npc.schedule), open.schedule);
-      check(`schedule-${id}-${rain}-prompt`, latestDialogue().messages[0]!.content.includes('你今天接下来：'), nextStop(npc.schedule!, 1400));
-      if (!config.Offline) {
-        const destination = npc.schedule!.find(stop => stop.time > 1400)?.place ?? '';
-        const expected = /诊所|医院/.test(destination) ? /诊所|医院/ : /餐吧|酒/.test(destination) ? /餐吧|酒吧|格斯/ : /杂货|皮埃尔/.test(destination) ? /店|杂货|皮埃尔/ : undefined;
-        if (expected) contentCheck(`schedule-${id}-${rain}-real-destination`, expected.test(reply.reply!.text), { destination, reply: reply.reply!.text });
-      }
-      await rpc('talk-say', { text: '晚上去哪能找到你？', label: `schedule-evening-${id}-${rain}` });
+      check(`schedule-${id}-${rain}-prompt`, latestDialogue().messages[0]!.content.includes('- 今日行程（'), nextStop(npc.schedule!, 1400));
+      const next = nextStop(npc.schedule!, 1400)!;
+      const destination = next.slice(6).replace(/^去/, '');
+      const text = reply.reply!.text;
+      contentCheck(`schedule-${id}-${rain}-destination-and-time`, text.includes(next.slice(0, 5)) && text.includes(destination)
+        && !/墓地|湖边|山洞/.test(text) && (!next.includes('睡觉') || /不再/.test(text)), { nativeNext: next, reply: text, raw: latestDialogue().content });
+      // A place reached earlier in the day must not become an extra trip before the next departure.
+      contentCheck(`schedule-${id}-${rain}-no-past-stop-as-future`, id === 'Pam' || id === 'Shane' ? !/Joja|超市/.test(text)
+        : id === 'Harvey' && !rain ? !/镇上|鹈鹕镇/.test(text) : true, { reply: text, nativeNext: next });
+      const evening = await rpc('talk-say', { text: '晚上去哪能找到你？', label: `schedule-evening-${id}-${rain}` });
+      const eveningPlace = id === 'Abigail' ? /皮埃尔|杂货|家|房间/ : id === 'Harvey' && !rain ? /HarveyRoom|公寓|房间/ : /酒吧|餐吧|格斯|星之果实/;
+      contentCheck(`schedule-${id}-${rain}-evening-place`, eveningPlace.test(evening.reply!.text) && !/墓地|湖边|山洞/.test(evening.reply!.text),
+        { reply: evening.reply!.text, schedule: npc.schedule, raw: latestDialogue().content });
       if (id === 'Harvey') await rpc('capture', { name: `schedule-${rain ? 'rain' : 'sun'}.png` });
       await close();
     }
@@ -223,7 +230,7 @@ async function schedules() {
   await rpc('ignore-schedule', { npc: 'Harvey', ignore: true });
   const before = packets.length; await say('Harvey', '你现在有安排吗？', 'schedule-ignored');
   check('schedule-story-override-omits-wire', !('schedule' in modPackets('talk.open', before)[0]!));
-  check('schedule-story-override-omits-prompt', !latestDialogue().messages[0]!.content.includes('你今天接下来：'));
+  check('schedule-story-override-omits-prompt', !latestDialogue().messages[0]!.content.includes('- 今日行程（'));
   await close();
 }
 async function backstage() {
@@ -262,7 +269,10 @@ async function backstage() {
   await rpc('clock', { time: 900 }); await say('Harvey', '刚才和玛鲁聊了什么？', 'backstage-before-rollback');
   check('backstage-unsaved-present', /在.+和玛鲁聊天：/.test(latestDialogue().messages[0]!.content)); await close();
   await rpc('title'); await rpc('load'); await say('Harvey', '刚才和玛鲁聊了什么？', 'backstage-after-rollback');
-  check('backstage-unsaved-rollback', !/在.+和玛鲁聊天：/.test(latestDialogue().messages[0]!.content)); await close();
+  check('backstage-unsaved-rollback', !/在.+和玛鲁聊天：/.test(latestDialogue().messages[0]!.content));
+  contentCheck('backstage-rollback-reply-is-unknown-without-inventing-a-meeting', /想不起来|记不清/.test(last!.worldCommand!.state.reply!.text)
+    && !/排班|药品|没见|没聊/.test(last!.worldCommand!.state.reply!.text), { reply: last!.worldCommand!.state.reply!.text, raw: latestDialogue().content });
+  await close();
   await rpc('isolate'); await rpc('config', { OffscreenNews: true, BackstageScenes: true });
   const pairs = [['Abigail', 'Sebastian'], ['Sam', 'Penny'], ['Leah', 'Elliott'], ['Haley', 'Alex'], ['Maru', 'Harvey'], ['Emily', 'Shane'], ['Pam', 'Gus']];
   const capStart = bgStarts();
