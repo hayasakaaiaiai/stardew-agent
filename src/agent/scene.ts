@@ -6,6 +6,7 @@ import { BUBBLE_EMOTES, type BubbleEmote, cleanBubbleText } from './bubbles.ts';
 import { SEASONS, type WorldState } from './dialogue.ts';
 import { type NewsItem, newsLine } from './news.ts';
 import { firstSentence } from './nightly.ts';
+import { nextStopsLine } from './schedule.ts';
 import type { ChatMessage, Thinking } from '../services/model/client.ts';
 import type { Roster } from '../services/roster/index.ts';
 
@@ -49,7 +50,9 @@ export interface SceneLine {
 /** What each of the two can tell the other, its own or heard first-hand (docs/npc-news.md, docs/offscreen-news.md). */
 export type SceneNews = Partial<Record<'a' | 'b', NewsItem>>;
 
-export function scenePrompt(roster: Roster, a: string, b: string, world: WorldState, news: SceneNews = {}): ChatMessage[] {
+/** `next` is each one's next stop today, from the game's schedule (docs/npc-schedules.md). */
+export function scenePrompt(roster: Roster, a: string, b: string, world: WorldState, news: SceneNews = {},
+  next: readonly (string | undefined)[] = []): ChatMessage[] {
   const [first, second] = [roster.get(a), roster.get(b)];
   const person = (label: string, card: typeof first) => `- ${label}：${card.name}。${firstSentence(card.identity)}说话：${firstSentence(card.style)}`;
   const relations = ([[first, b, second.name], [second, a, first.name]] as const).flatMap(([card, other, name]) => {
@@ -57,12 +60,14 @@ export function scenePrompt(roster: Roster, a: string, b: string, world: WorldSt
     return text ? [`- ${card.name}眼里的${name}：${text}`] : [];
   });
   const facts = Object.entries(world.facts).map(([key, value]) => `${key}：${value}`);
+  const going = nextStopsLine(next, ['a', 'b']);
   const told = (['a', 'b'] as const).flatMap(label => news[label]
     ? [`- ${label}（${(label === 'a' ? first : second).name}）：${newsLine(news[label]!, (id) => roster.get(id).name)}`] : []);
   const user = [
     `## 两个人\n${person('a', first)}\n${person('b', second)}`,
     ...(relations.length ? [`## 关系\n${relations.join('\n')}`] : []),
     [`## 现在`, `- 第 ${world.year} 年${SEASONS[world.season]} ${world.day} 日 ${world.time}，${world.weather}，${world.location}`,
+      ...(going ? [going] : []),
       ...(facts.length ? [`- 镇上的情况：${facts.join('；')}`] : []),
       // Only news brings the player up; without this the model guesses “他” (docs/npc-news.md §4).
       ...(told.length ? [`- 农场主：${world.player.name}（${world.player.gender === 'female' ? '女' : '男'}）`] : [])].join('\n'),

@@ -154,6 +154,7 @@ internal sealed partial class ModEntry
                 this.sceneRequestSeq = this.Send("scene.request", new()
                 {
                     ["npcs"] = new[] { near[i].Name, near[j].Name },
+                    ["schedules"] = GameState.Schedules(new[] { near[i], near[j] }),
                     ["world"] = GameState.World(),
                 });
                 return;

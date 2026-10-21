@@ -9,7 +9,7 @@ namespace StardewAgentBridge;
 /// Who spends each in-game hour together away from the player, so the backend can pass news between them in code
 /// (docs/offscreen-news.md). Indoors the whole location counts as together; outdoors, NPCs within a few tiles of
 /// each other. The player's own location is left to the scenes they can see (docs/npc-chat.md). With each group go its
-/// place, and for backstage scenes everyone's hearts and the weather (docs/scheduler.md §4.1).
+/// place, and for backstage scenes everyone's hearts, the weather and schedules (docs/scheduler.md §4.1, docs/npc-schedules.md).
 /// </summary>
 internal sealed partial class ModEntry
 {
@@ -78,6 +78,8 @@ internal sealed partial class ModEntry
             fields["hearts"] = this.townPending.SelectMany(group => group).Distinct()
                 .ToDictionary(name => name, name => Game1.player.getFriendshipHeartLevelForNPC(name));
             fields["weather"] = GameState.Weather();
+            fields["schedules"] = GameState.Schedules(this.townPending.SelectMany(group => group).Distinct()
+                .Select(name => Game1.getCharacterFromName(name)).OfType<NPC>());
         }
         this.Send("town.hour", fields);
         this.townPending = null;

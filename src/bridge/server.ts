@@ -7,13 +7,14 @@ import type { Consolidator } from '../agent/consolidation.ts';
 import { OPENING_LINE, runTurn, type Standing, type WorldState } from '../agent/dialogue.ts';
 import { newsFor } from '../agent/news.ts';
 import { parseScene, type SceneLine, type SceneNews, SCENES_PER_DAY, SCENE_GAP_MINUTES, scenePrompt } from '../agent/scene.ts';
+import { nextStop, restOfDay, type ScheduleStop } from '../agent/schedule.ts';
 import type { ChatModel } from '../services/model/client.ts';
 import type { ModelGateway } from '../services/model/gateway.ts';
 import type { Roster } from '../services/roster/index.ts';
 import { SOCIAL_NPCS } from '../types.ts';
 import { requireValue } from '../validation.ts';
 import { GameMemory, type GameSave } from './memory.ts';
-import { absoluteDay, type BackendMessage, type Envelope, gameMinutes, type ModMessage, parseModMessage, PROTOCOL_VERSION } from './protocol.ts';
+import { absoluteDay, type BackendMessage, type Envelope, gameMinutes, type ModMessage, parseModMessage, PROTOCOL_VERSION, type Schedules } from './protocol.ts';
 import { clock, WEATHER, worldState } from './world.ts';
 
 export interface BridgeOptions {
@@ -40,6 +41,11 @@ export interface BridgeOptions {
 }
 
 interface OpenTalk { npcId: string; standing: Standing; world: WorldState; inPersonGifts: boolean }
+
+/** An NPC's schedule from the Mod's map of game names (docs/npc-schedules.md); none when the Mod sent none. */
+function scheduleOf(schedules: Schedules | undefined, id: string): ScheduleStop[] {
+  return Object.entries(schedules ?? {}).find(([npc]) => npc.toLowerCase() === id)?.[1] ?? [];
+}
 class Session {
   hello = false;
   save: GameSave | undefined;
@@ -126,7 +132,8 @@ export class BridgeServer {
       const people = await save.gossip([a!, b!]);
       const [newsA, newsB] = [newsFor(people[a!], people[b!]), newsFor(people[b!], people[a!])];
       const news: SceneNews = { ...(newsA ? { a: newsA } : {}), ...(newsB ? { b: newsB } : {}) };
-      const completion = await sceneModel.chat(scenePrompt(roster, a!, b!, worldState(message.world, save.player, this.cardName), news),
+      const next = [a!, b!].map(id => nextStop(scheduleOf(message.schedules, id), time));
+      const completion = await sceneModel.chat(scenePrompt(roster, a!, b!, worldState(message.world, save.player, this.cardName), news, next),
         {}, { json: true });
       if (save.closed || save.day !== requestedDay) return;
       const { lines, told } = parseScene(completion.content, a!, b!, save.player.name, news);
@@ -152,9 +159,10 @@ export class BridgeServer {
     if (session.ambient.day !== save.day) session.ambient = { day: save.day, calls: 0, greeted: new Set() };
     const budget = session.ambient;
     const requestedDay = absoluteDay(message.world.date);
-    const people: AmbientPerson[] = message.npcs.map(({ npc, hearts, relation, greeted }) => {
+    const people: AmbientPerson[] = message.npcs.map(({ npc, hearts, relation, greeted, schedule }) => {
       const id = npc.toLowerCase();
-      return { id, hearts, relation, greeted: greeted || budget.greeted.has(id) };
+      const next = nextStop(schedule ?? [], message.world.date.time);
+      return { id, hearts, relation, greeted: greeted || budget.greeted.has(id), ...(next ? { next } : {}) };
     });
     if (!sceneModel || save.closed || requestedDay !== save.day || budget.calls >= AMBIENT_CALLS_PER_DAY
       || people.some(person => !roster.has(person.id)) || new Set(people.map(person => person.id)).size !== people.length) {
@@ -209,7 +217,10 @@ export class BridgeServer {
       budget.calls++;
       for (const id of pick.ids) budget.joined.add(id);
       const festivals = await save.festivalsFor(pick.ids, minute);
-      const people: BackstagePerson[] = pick.ids.map(id => ({ id, news: gossip[id]?.tellable ?? [], festivals: festivals[id] ?? [] }));
+      const people: BackstagePerson[] = pick.ids.map(id => {
+        const next = nextStop(scheduleOf(message.schedules, id), message.date.time);
+        return { id, news: gossip[id]?.tellable ?? [], festivals: festivals[id] ?? [], ...(next ? { next } : {}) };
+      });
       const world = { ...message.date, time: clock(message.date.time), weather: message.weather ? WEATHER[message.weather] : '',
         location: pick.place, player: save.player, facts: {} };
       const names = pick.ids.map(this.idName).join('、');
@@ -321,9 +332,10 @@ export class BridgeServer {
       if (session.pending) {
         send({ type: 'talk.error', ...envelope(message), npc: message.npc, message: '上一句还没回完' }); return;
       }
+      const schedule = restOfDay(message.schedule ?? [], message.world.date.time);
       const talk: OpenTalk = { npcId, inPersonGifts: message.inPersonGifts !== false,
         standing: { hearts: message.hearts, relation: message.relation, seenEvents: new Set(message.seenEvents) },
-        world: worldState(message.world, save.player, this.cardName) };
+        world: { ...worldState(message.world, save.player, this.cardName), ...(schedule ? { schedule } : {}) } };
       session.open.set(message.npc, talk);
       void this.turn(session, talk, message, OPENING_LINE, send);
       return;

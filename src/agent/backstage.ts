@@ -6,6 +6,7 @@ import { cleanBubbleText } from './bubbles.ts';
 import { SEASONS, type WorldState } from './dialogue.ts';
 import { firstSentence } from './nightly.ts';
 import { newsLine, type NewsItem } from './news.ts';
+import { nextStopsLine } from './schedule.ts';
 import type { ChatMessage, Thinking } from '../services/model/client.ts';
 import type { Roster } from '../services/roster/index.ts';
 import type { MemoryDraft } from '../types.ts';
@@ -60,6 +61,8 @@ export interface BackstagePerson {
   news: readonly NewsItem[];
   /** Its recent festival memories, newest first. */
   festivals: readonly string[];
+  /** Its next stop today, from the game's schedule (docs/npc-schedules.md). */
+  next?: string;
 }
 
 export interface BackstageNote { npcId: string; memory: MemoryDraft }
@@ -100,11 +103,13 @@ export function backstagePrompt(roster: Roster, people: readonly BackstagePerson
       .map(item => item.hand === 1 ? item.share : newsLine(item, name)),
     ...person.festivals,
   ].slice(0, KNOWN_PER_PERSON).map(text => `- ${cards[i]!.name}：${text}`));
+  const going = nextStopsLine(people.map(person => person.next), LETTERS);
   const user = [
     `## 在场的人\n${lines.join('\n')}`,
     ...(relations.length ? [`## 关系\n${relations.join('\n')}`] : []),
     `## 记得的农场主的事\n${known.length ? known.join('\n') : '（没有）'}`,
     [`## 现在`, `- 第 ${world.year} 年${SEASONS[world.season]} ${world.day} 日 ${world.time}，${world.weather ? `${world.weather}，` : ''}${place}`,
+      ...(going ? [going] : []),
       `- 农场主：${world.player.name}（${world.player.gender === 'female' ? '女' : '男'}），不在这里`].join('\n'),
     BACKSTAGE_HINT,
   ].join('\n\n');

@@ -5,6 +5,7 @@
 import { BUBBLE_EMOTES, type BubbleEmote, cleanBubbleText } from './bubbles.ts';
 import { RELATIONS, SEASONS, type WorldState } from './dialogue.ts';
 import { firstSentence } from './nightly.ts';
+import { nextStopsLine } from './schedule.ts';
 import type { ChatMessage } from '../services/model/client.ts';
 import type { Relation, Roster } from '../services/roster/index.ts';
 
@@ -42,6 +43,8 @@ export interface AmbientPerson {
   relation: Relation;
   /** Already greeted the farmer today. */
   greeted: boolean;
+  /** Its next stop today, from the game's schedule (docs/npc-schedules.md). */
+  next?: string;
 }
 
 export interface AmbientLine {
@@ -65,10 +68,12 @@ export function ambientPrompt(roster: Roster, people: readonly AmbientPerson[], 
     return text ? [`- ${card.name}眼里的${other.name}：${text}`] : [];
   }));
   const facts = Object.entries(world.facts).map(([key, value]) => `${key}：${value}`);
+  const going = nextStopsLine(people.map(person => person.next), LETTERS);
   const user = [
     `## 在场的人\n${lines.join('\n')}`,
     ...(relations.length ? [`## 关系\n${relations.join('\n')}`] : []),
     [`## 现在`, `- 第 ${world.year} 年${SEASONS[world.season]} ${world.day} 日 ${world.time}，${world.weather}，${world.location}`,
+      ...(going ? [going] : []),
       ...(facts.length ? [`- 镇上的情况：${facts.join('；')}`] : []),
       `- 农场主：${world.player.name}（${world.player.gender === 'female' ? '女' : '男'}），就在附近`].join('\n'),
     AMBIENT_HINT,

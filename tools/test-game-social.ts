@@ -361,6 +361,22 @@ try {
     assert.ok(reply, 'a disabled-gift opening must still receive its normal reply');
     assert.equal(reply.packet.gift, undefined, 'the disabled native setting must prevent a backend gift offer');
   }
+  // Schedules ride on four messages (docs/npc-schedules.md). The backend has already checked their shape; record every
+  // place so map names that the game shows untranslated can be reviewed.
+  type Stop = { time: number; place: string; sleep: boolean };
+  const schedules = mod.flatMap((packet): [string, string, Stop[]][] => {
+    if (packet.type === 'talk.open') return packet.schedule ? [['talk.open', packet.npc as string, packet.schedule as Stop[]]] : [];
+    if (packet.type === 'ambient.request') return (packet.npcs as { npc: string; schedule?: Stop[] }[])
+      .flatMap(npc => npc.schedule ? [['ambient.request', npc.npc, npc.schedule] as [string, string, Stop[]]] : []);
+    if (packet.type === 'scene.request' || packet.type === 'town.hour')
+      return Object.entries((packet.schedules ?? {}) as Record<string, Stop[]>).map(([npc, stops]) => [packet.type as string, npc, stops]);
+    return [];
+  });
+  const places = [...new Set(schedules.flatMap(([, , stops]) => stops.map(stop => stop.place)))].sort();
+  await json(join(directory, 'schedules.json'), { places, untranslated: places.filter(place => /^[\x20-\x7e]+$/.test(place)),
+    samples: schedules.slice(0, 40).map(([type, npc, stops]) => ({ type, npc, stops })) });
+  for (const [type, npc, stops] of schedules)
+    assert.ok(stops.every((stop, i) => i === 0 || stop.time >= stops[i - 1]!.time), `${type} ${npc}: the Mod sends stops in time order`);
   const gifts = mod.filter(packet => packet.type === 'gift.given');
   assert.equal(gifts.length, 2); assert.equal(gifts[0]!.taste, 'love'); assert.equal(gifts[0]!.item, '紫水晶'); assert.equal(gifts[1]!.item, '粘土');
   assert.equal(mod.filter(packet => packet.type === 'save.loaded').length, config.NewParts ? 11 : 3);
@@ -436,7 +452,7 @@ try {
       assert.equal((hour.places as string[]).length, (hour.groups as string[][]).length, 'every group names its place (docs/scheduler.md §4.1)');
       assert.ok((hour.places as string[]).every(place => place.length > 0), 'places are the game\'s display names');
       if (index === hours.length - 1) {
-        assert.ok(!('hearts' in hour) && !('weather' in hour), 'BackstageScenes off sends no hearts, so no backstage scene');
+        assert.ok(!('hearts' in hour) && !('weather' in hour) && !('schedules' in hour), 'BackstageScenes off sends no hearts, so no backstage scene');
         continue;
       }
       assert.deepEqual(Object.keys(hour.hearts as Record<string, number>).sort(), names, 'backstage hearts for exactly the NPCs in the groups');
