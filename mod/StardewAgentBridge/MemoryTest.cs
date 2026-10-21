@@ -70,6 +70,7 @@ internal sealed partial class ModEntry
         this.Helper.Events.GameLoop.Saved += (_, _) => this.RecordMemoryTestEvent("Saved");
         this.Helper.Events.GameLoop.SaveLoaded += (_, _) => this.RecordMemoryTestEvent("SaveLoaded");
         this.Helper.Events.GameLoop.ReturnedToTitle += (_, _) => this.RecordMemoryTestEvent("ReturnedToTitle");
+        this.Helper.Events.GameLoop.TimeChanged += (_, _) => { if (this.townTestRunning) this.townTestHours.Add(Game1.timeOfDay); };
         this.MemoryTestProgress("load-menu", "开始独立存档的真实游戏记忆验收。");
     }
 
@@ -174,7 +175,7 @@ internal sealed partial class ModEntry
                         throw new InvalidOperationException("阿比盖尔已离开目标地点。");
                     if (test.Social)
                     {
-                        this.MemoryTestProgress(this.newsTestRunning ? "news" : this.newPartsRunning ? "new-parts" : "social", "已到组合验收场地。");
+                        this.MemoryTestProgress(this.townTestRunning ? "town" : this.newsTestRunning ? "news" : this.newPartsRunning ? "new-parts" : "social", "已到组合验收场地。");
                         break;
                     }
                     if (test.BubblesOnly)
@@ -327,6 +328,9 @@ internal sealed partial class ModEntry
                     break;
                 case "news":
                     this.TickNewsTest();
+                    break;
+                case "town":
+                    this.TickTownTest();
                     break;
                 case "social-title":
                     if (Game1.activeClickableMenu is TitleMenu && !Context.IsWorldReady && this.lifecycle.Count == 0)
@@ -506,6 +510,7 @@ internal sealed partial class ModEntry
             socialSceneLines = this.socialTestSceneLines,
             newPartsChecks = this.newPartsChecks, presentDeliveries = this.newPartsDeliveries, householdSnapshots = this.newPartsWorlds,
             newsChecks = this.newsTestChecks, newsReports = this.newsTestReports,
+            townChecks = this.townTestChecks, townPackets = this.townTestPackets, townHours = this.townTestHours,
             worldReady = Context.IsWorldReady, saveProcessing = SaveGame.IsProcessing, newDay = Game1.newDay,
             events = this.memoryTestEvents, elapsedSeconds = Math.Round((DateTime.UtcNow - this.memoryTestStarted).TotalSeconds, 2) },
             new JsonSerializerOptions { WriteIndented = true });

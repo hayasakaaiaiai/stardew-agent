@@ -245,7 +245,7 @@ internal sealed partial class ModEntry
             case 84:
                 if (!this.NewsSceneFinished()) return;
                 this.NewsCheck(this.socialTestSceneLines.Count > this.newsTestLines, "news-third-day-ordinary-scene-shown");
-                this.MemoryTestProgress("return-finish", "分档、传话及此前所有功能的组合验收完成。"); break;
+                this.BeginTownTest(); break;
         }
     }
 }

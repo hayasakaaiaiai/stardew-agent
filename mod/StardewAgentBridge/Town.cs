@@ -22,7 +22,7 @@ internal sealed partial class ModEntry
     private void OnTimeChanged()
     {
         if (!this.config.OffscreenNews || !this.activeLoad || this.initialSave is null || Game1.timeOfDay % 100 != 0
-            || this.memoryTest is not null || this.abigailTestRequest is not null)
+            || (this.memoryTest is not null && !this.townTestRunning) || this.abigailTestRequest is not null)
             return;
         List<List<string>> groups = new();
         foreach (GameLocation location in Game1.locations)

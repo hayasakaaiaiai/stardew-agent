@@ -4,12 +4,40 @@ import { buildMessages, offerLine, parseOutput, type WorldState } from '../src/a
 import { GIVEN_TOPIC, givenMemory, handable, withGivenCooldown } from '../src/agent/in-person-gifts.ts';
 import { giftFor } from '../src/agent/letters.ts';
 import { nightlyConsolidator } from '../src/agent/nightly.ts';
-import type { BackendMessage } from '../src/bridge/protocol.ts';
+import { parseModMessage, type BackendMessage } from '../src/bridge/protocol.ts';
 import type { ChatMessage, Completion, ModelClient } from '../src/services/model/client.ts';
 import { connect, harness, initial, openTalk, sleep, WORLD } from './helpers/bridge.ts';
 
 type Reply = Extract<BackendMessage, { type: 'talk.reply' }>;
 const OFFER = '可以当面送给玩家的东西';
+
+test('the Mod gift switch removes the offer and cannot create a gift memory or consume its cooldown', async t => {
+  const h = await harness(t); h.fake.give(true);
+  const server = await h.start(); const wire = await connect(server);
+  wire.send({ ...openTalk(), inPersonGifts: false });
+  const disabled = await wire.until('talk.reply') as Reply;
+  assert.equal(disabled.gift, undefined, 'a model give=true cannot override the disabled Mod setting');
+  assert.doesNotMatch(h.fake.sent.at(-1)![0]!.content, new RegExp(OFFER));
+  let from = wire.inbox.length;
+  wire.send({ type: 'talk.say', npc: 'Abigail', text: '再聊聊吧。' });
+  assert.equal((await wire.until('talk.reply', from) as Reply).gift, undefined);
+  assert.ok(!h.logs.some(line => line.includes('当面送了')));
+  wire.send({ type: 'talk.close', npc: 'Abigail' }); await wire.until('ack');
+  const commit = await sleep(wire);
+  await wire.close(); await h.stop(server);
+  const reload = await connect(await h.start(), initial('reenabled', 2, commit));
+  from = reload.inbox.length;
+  reload.send({ ...openTalk(2), inPersonGifts: true });
+  assert.ok((await reload.until('talk.reply', from) as Reply).gift, 'reenabling next day has no false weekly cooldown');
+  assert.doesNotMatch(h.fake.sent.at(-1)![0]!.content, /我当面送了农场主/);
+  await reload.close();
+});
+
+test('the optional gift switch accepts booleans, preserves old clients and rejects malformed settings', () => {
+  const raw = { ...openTalk(), lineageId: 'farm', loadNonce: 'load', seq: 1 };
+  for (const inPersonGifts of [undefined, false, true]) assert.doesNotThrow(() => parseModMessage(JSON.stringify({ ...raw, inPersonGifts })));
+  for (const inPersonGifts of ['false', 0, null]) assert.throws(() => parseModMessage(JSON.stringify({ ...raw, inPersonGifts })));
+});
 
 test('only gifts that can be handed over are offered, and handing one over starts the weekly cooldown', () => {
   assert.equal(handable({ item: '紫水晶', text: '在山洞里捡到的。' }), true);

@@ -33,7 +33,7 @@ export interface BridgeOptions {
   log?: (line: string) => void;
 }
 
-interface OpenTalk { npcId: string; standing: Standing; world: WorldState }
+interface OpenTalk { npcId: string; standing: Standing; world: WorldState; inPersonGifts: boolean }
 class Session {
   hello = false;
   save: GameSave | undefined;
@@ -268,7 +268,7 @@ export class BridgeServer {
       if (session.pending) {
         send({ type: 'talk.error', ...envelope(message), npc: message.npc, message: '上一句还没回完' }); return;
       }
-      const talk: OpenTalk = { npcId,
+      const talk: OpenTalk = { npcId, inPersonGifts: message.inPersonGifts !== false,
         standing: { hearts: message.hearts, relation: message.relation, seenEvents: new Set(message.seenEvents) },
         world: worldState(message.world, save.player, this.cardName) };
       session.open.set(message.npc, talk);
@@ -334,7 +334,7 @@ export class BridgeServer {
     const active = () => !signal.aborted && session.open.get(message.npc) === talk;
     try {
       const lease = await session.save!.begin(message, message.type === 'talk.open' ? message.world.date : message.date, cancel.signal,
-        this.options.roster.get(talk.npcId).gifts);
+        talk.inPersonGifts ? this.options.roster.get(talk.npcId).gifts : []);
       if ('type' in lease) { if (active()) send(lease); return; }
       signal = lease.signal;
       const result = await runTurn({ roster: this.options.roster, model: this.options.model, memory: lease.memory },

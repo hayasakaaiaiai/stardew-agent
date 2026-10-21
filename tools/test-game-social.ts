@@ -14,6 +14,7 @@ import { ModelClient, modelConfigFromEnv, type ChatMessage, type Completion, typ
 import { Roster } from '../src/services/roster/index.ts';
 import { SOCIAL_NPCS } from '../src/types.ts';
 import { digest } from '../src/validation.ts';
+import { socialContentProbes } from './social-content-probes.ts';
 
 interface Config {
   RequestId: string; UniqueId: string; SaveFolder: string; SaveDirectory: string;
@@ -30,6 +31,7 @@ interface Report {
   replies: { label: string; line: string; nonce: string }[];
   newPartsChecks: Check[];
   newsChecks: Check[]; newsReports: number[];
+  townChecks: Check[]; townPackets: { seq: number; time: number; groups: string[][]; nonce: string; day: number }[]; townHours: number[];
   presentDeliveries: { npc: string; name: string; id: string; quality: number; stack: number; before: number; after: number; direct: boolean; nonce: string; day: number }[];
   householdSnapshots: { label: string; world: { flags: { partner: { npc: string; status: string } | null; children: number } } }[];
 }
@@ -47,11 +49,20 @@ if (!config.Offline) process.loadEnvFile(join(ROOT, '.env'));
 const paid = config.Offline ? undefined : new ModelClient(modelConfigFromEnv());
 const paidScene = paid ? new ModelClient({ ...paid.config, thinking: SCENE_THINKING }) : undefined;
 const paidNightly = paid ? new ModelClient({ ...paid.config, thinking: NIGHTLY_THINKING }) : undefined;
-const calls: { kind: string; real: boolean; thinking: Thinking | null; messages: ChatMessage[]; content: string; usage: Completion['usage']; timing: Completion['timing'] }[] = [];
+const calls: { kind: string; real: boolean; thinking: Thinking | null; messages: ChatMessage[]; content: string; usage: Completion['usage']; timing: Completion['timing']; probe?: boolean }[] = [];
 let real = false;
 let newParts = false;
 let news = false;
 let newsLive = false;
+let town = false;
+let newsSnapshot: Record<string, unknown>[] = [];
+let townQuietCalls = 0;
+const townGates = new Set<string>();
+const TOWN_PUBLIC = '我给自己的蓝色风筝取名云尾，你可以跟朋友们说。';
+const THANKS = '谢谢你上次帮我的忙。';
+const STRING_LINE = '我答应周末给文森特做蓝色风筝。';
+const STRING_NOTE = '记忆验收说周末会给文森特做蓝色风筝。';
+const HEARD_WIND = /(?:阿比盖尔跟我说|格斯跟我说，阿比盖尔说过)：["“][^\n]+云尾/;
 const PUBLIC_CAT = '我养的小猫叫星糖，你可以跟朋友们说。';
 const SECRET = '这是秘密，别告诉别人：我其实很怕黑。';
 const SHARE = '记忆验收养的小猫叫星糖。';
@@ -60,7 +71,9 @@ function model(kind: 'dialogue' | 'scene' | 'nightly'): ModelClient {
   return { async chat(messages: ChatMessage[], handlers: StreamHandlers = {}, options = {}): Promise<Completion> {
     const last = messages.at(-1)?.content ?? '';
     const text = messages.map(message => message.content).join('\n');
-    const actual = news ? newsLive && (kind === 'nightly' ? last.includes(PUBLIC_CAT) || last.includes(SECRET)
+    const actual = town ? !config.Offline && (kind === 'nightly' ? last.includes(TOWN_PUBLIC) || last.includes(THANKS)
+      : kind === 'dialogue' && (last.startsWith(TOWN_PUBLIC) || last.startsWith(THANKS) || HEARD_WIND.test(messages[0]!.content)))
+      : news ? newsLive && (kind === 'nightly' ? last.includes(PUBLIC_CAT) || last.includes(SECRET)
       : kind === 'scene' ? last.includes('## 想说的事') : last.startsWith(PUBLIC_CAT) || last.startsWith(SECRET) || HEARD.test(text))
       : real && kind !== 'nightly';
     let completion: Completion;
@@ -72,11 +85,15 @@ function model(kind: 'dialogue' | 'scene' | 'nightly'): ModelClient {
         ...(news && last.includes('## 想说的事') ? [{ speaker: 'a', text: '记忆验收的小猫叫星糖。', emote: 'happy' }] : []),
       ], told: news && last.includes('## 想说的事') ? ['a'] : [] } : kind === 'nightly' ? {
         memories: [], retire: [], impression: '相处自然。', plan: '', bubbles: [], letter: '', gift: false,
-        share: news && last.includes(PUBLIC_CAT) && last.includes('## 你是谁\n- 阿比盖尔') ? SHARE : '',
+        share: town ? last.includes(TOWN_PUBLIC) ? '记忆验收的蓝色风筝叫云尾。' : last.includes(THANKS) ? '记忆验收特地来谢我帮忙。' : ''
+          : news && last.includes(PUBLIC_CAT) && last.includes('## 你是谁\n- 阿比盖尔') ? SHARE : '',
       } : {
-        reply: news ? HEARD.test(text) ? '阿比盖尔跟我说，你的小猫叫星糖。' : '嗯，今天过得怎么样？'
+        reply: town ? HEARD_WIND.test(messages[0]!.content) ? '格斯跟我说，你的蓝色风筝叫云尾。'
+          : messages[0]!.content.includes(STRING_NOTE) ? '你答应给文森特做蓝色风筝。' : '我还没听说呢。'
+          : news ? HEARD.test(text) ? '阿比盖尔跟我说，你的小猫叫星糖。' : '嗯，今天过得怎么样？'
           : newParts ? '这个给你，今天过得怎么样？' : '嗯，我记得那块紫水晶。', emotion: 'happy', options: ['再聊一会', '说说近况', '听听你的想法'],
-        remember: [], mood: Number(/^好感(-?\d)/.exec(last)?.[1] ?? 2), give: newParts, end: false,
+        remember: town && last.startsWith(STRING_LINE) ? [STRING_NOTE, '再聊一会'] : [],
+        mood: town ? 0 : Number(/^好感(-?\d)/.exec(last)?.[1] ?? 2), give: newParts, end: false,
       });
       handlers.onContent?.(content);
       completion = { content, reasoning: '', finishReason: 'stop', usage: null, timing: { firstReasoningMs: null, firstContentMs: 0, totalMs: 0 } };
@@ -98,6 +115,7 @@ config.BackendUrl = `ws://127.0.0.1:${(relay.address() as { port: number }).port
 await json(configPath, config);
 let duplicateGift = false;
 const replayedScenes = new Set<string>();
+const replayedTown = new Set<string>();
 const upstreams = new Set<WebSocket>();
 relay.on('connection', client => {
   const upstream = new WebSocket(`ws://127.0.0.1:${server.port}`); upstreams.add(upstream);
@@ -117,6 +135,14 @@ relay.on('connection', client => {
         if (!replayedScenes.has(key)) {
           replayedScenes.add(key);
           packets.push({ direction: 'mod', packet: packet as unknown as Record<string, unknown>, injected: 'same-scene-shown-replay' });
+          if (upstream.readyState === WebSocket.OPEN) upstream.send(raw); else waiting.push(raw);
+        }
+      }
+      if (packet.type === 'town.hour') {
+        const key = `${packet.loadNonce}/${packet.seq}`;
+        if (!replayedTown.has(key)) {
+          replayedTown.add(key);
+          packets.push({ direction: 'mod', packet: packet as unknown as Record<string, unknown>, injected: 'same-town-hour-replay' });
           if (upstream.readyState === WebSocket.OPEN) upstream.send(raw); else waiting.push(raw);
         }
       }
@@ -146,7 +172,7 @@ const report = async () => {
   catch { /* The game may still be loading or replacing its report. */ }
 };
 try {
-  const deadline = Date.now() + 420000;
+  const deadline = Date.now() + 600000;
   let shown = '';
   while (Date.now() < deadline) {
     if (game.exitCode !== null) throw new Error('测试游戏提前退出');
@@ -187,6 +213,67 @@ try {
         }
       } finally { stateDb.close(); }
     }
+    if (last?.message === 'town-fixed-ready' && !town) {
+      const db = new DatabaseSync(join(directory, 'memory/memory.sqlite'), { readOnly: true });
+      try { newsSnapshot = db.prepare("SELECT npc_id, text, kind, visibility FROM memory WHERE kind='heard'").all(); }
+      finally { db.close(); }
+      await json(join(directory, 'news-before-town.json'), newsSnapshot);
+      town = true; newsLive = false;
+      await json(join(directory, 'control.json'), { requestId: config.RequestId, stage: 'town-fixed-ready' });
+    }
+    if (last?.message === 'town-night-ready' && last.pointer && !townGates.has(last.message)) {
+      const db = new DatabaseSync(join(directory, 'memory/memory.sqlite'), { readOnly: true });
+      try {
+        const commit = db.prepare('SELECT consolidation_fingerprint AS done FROM commit_node WHERE id=?').get(last.pointer.CommitId);
+        if (commit?.done) {
+          const rows = db.prepare("SELECT npc_id, state FROM npc_state WHERE commit_id=? AND phase='consolidated'").all(last.pointer.CommitId);
+          const state = (id: string) => JSON.parse(rows.find(row => row.npc_id === id)?.state as string ?? '{}') as { share?: string };
+          assert.match(state('abigail').share ?? '', /云尾/);
+          assert.equal(state('harvey').share ?? '', '', 'thanks alone are not news');
+          const note = db.prepare('SELECT importance FROM memory WHERE npc_id=? AND text=?').get('jodi', STRING_NOTE);
+          assert.equal(note?.importance, 3, 'a string memory must persist at importance 3');
+          assert.equal(db.prepare('SELECT COUNT(*) AS n FROM memory WHERE text=?').get('再聊一会')!.n, 0, 'unchosen string option is discarded');
+          await json(join(directory, 'town-night-states.json'), rows.map(row => ({ npc: row.npc_id, state: JSON.parse(row.state as string) })));
+          townQuietCalls = calls.length;
+          townGates.add(last.message);
+          await json(join(directory, 'control.json'), { requestId: config.RequestId, stage: last.message });
+        }
+      } finally { db.close(); }
+    }
+    if (last?.message === 'town-spread-ready' && !townGates.has(last.message)) {
+      assert.ok(calls.slice(townQuietCalls).every(call => !call.real), 'offscreen propagation makes no paid model calls');
+      assert.deepEqual(calls.slice(townQuietCalls).map(call => call.kind), ['dialogue', 'dialogue', 'dialogue'],
+        'only the intentional Jodi open/question and Maru open call the model; the four hours add none');
+      const scratch = join(directory, 'memory/scratch');
+      const files = (await readdir(scratch, { recursive: true })).filter(file => file.endsWith('.jsonl'));
+      const entries = (await Promise.all(files.map(file => readFile(join(scratch, file), 'utf8'))))
+        .flatMap(text => text.trim().split('\n').map(line => JSON.parse(line) as { changes?: { npcId: string; log?: { heard?: { origin: string; from: string; share: string; hand: number }[] } }[] }));
+      const transfers = entries.flatMap(entry => (entry.changes ?? []).flatMap(change => (change.log?.heard ?? [])
+        .filter(item => item.share.includes('云尾')).map(item => ({ listener: change.npcId, ...item }))));
+      assert.deepEqual(transfers.map(item => [item.listener, item.from, item.hand]).sort(),
+        [['gus', 'abigail', 1], ['leah', 'abigail', 1], ['pam', 'gus', 2], ['sam', 'gus', 2]],
+        'no third hand, no invisible or out-of-range listener, and the superseded Jodi hour writes nothing');
+      await json(join(directory, 'town-unsaved-transfers.json'), transfers);
+      await json(join(directory, 'town-spread-packets.json'), packets.filter(row => row.packet.type === 'town.hour'));
+      townGates.add(last.message);
+      await json(join(directory, 'control.json'), { requestId: config.RequestId, stage: last.message });
+    }
+    if (last?.message === 'town-final-ready' && !townGates.has(last.message)) {
+      if (!config.Offline) {
+        const samples = await socialContentProbes(roster, async (kind, messages) => {
+          const client = kind === 'dialogue' ? paid! : paidScene!;
+          const completion = await client.chat(messages, {}, { json: true });
+          const call = { kind, real: true, probe: true, thinking: client.config.thinking, messages,
+            content: completion.content, usage: completion.usage, timing: completion.timing };
+          calls.push(call); await appendFile(join(directory, 'model-calls.jsonl'), JSON.stringify({ ...call, probe: true }) + '\n');
+          return completion;
+        });
+        await json(join(directory, 'content-probes.json'), samples);
+        log(`额外内容样本：${samples.length} 次，格式有效 ${samples.filter(sample => sample.valid).length}；语义保留原文复核。`);
+      }
+      townGates.add(last.message);
+      await json(join(directory, 'control.json'), { requestId: config.RequestId, stage: last.message });
+    }
     if (last?.completed) break;
     await new Promise(resolve => setTimeout(resolve, 250));
   }
@@ -209,10 +296,18 @@ try {
   assert.ok((await stat(join(directory, 'social-scene-fixed.png'))).size > 100);
   if (!config.Offline) assert.ok((await stat(join(directory, 'social-scene-real.png'))).size > 100);
   const mod = packets.filter(row => row.direction === 'mod' && !row.injected).map(row => row.packet);
+  const disabledGifts = mod.filter(packet => packet.type === 'talk.open' && packet.inPersonGifts === false);
+  assert.ok(disabledGifts.length > 0);
+  for (const open of disabledGifts) {
+    const reply = packets.find(row => row.direction === 'backend' && row.packet.type === 'talk.reply'
+      && row.packet.seq === open.seq && row.packet.loadNonce === open.loadNonce);
+    assert.ok(reply, 'a disabled-gift opening must still receive its normal reply');
+    assert.equal(reply.packet.gift, undefined, 'the disabled native setting must prevent a backend gift offer');
+  }
   const gifts = mod.filter(packet => packet.type === 'gift.given');
   assert.equal(gifts.length, 2); assert.equal(gifts[0]!.taste, 'love'); assert.equal(gifts[0]!.item, '紫水晶'); assert.equal(gifts[1]!.item, '粘土');
-  assert.equal(mod.filter(packet => packet.type === 'save.loaded').length, config.NewParts ? 8 : 3);
-  assert.equal(mod.filter(packet => packet.type === 'save.saved').length, config.NewParts ? 4 : 1);
+  assert.equal(mod.filter(packet => packet.type === 'save.loaded').length, config.NewParts ? 10 : 3);
+  assert.equal(mod.filter(packet => packet.type === 'save.saved').length, config.NewParts ? 6 : 1);
   const note = '农场主送我紫水晶，我特别喜欢。';
   const prompt = (call: typeof calls[number]) => call.messages[0]!.content;
   assert.ok(calls.some(call => call.kind === 'dialogue' && prompt(call).includes(note)));
@@ -254,17 +349,50 @@ try {
     assert.doesNotMatch(questions[1]!.messages[0]!.content, /阿比盖尔跟我说/, 'an unsaved heard memory must roll back');
     assert.match(questions[2]!.messages[0]!.content, HEARD);
     assert.match(questions[3]!.messages[0]!.content, HEARD, 'heard words must survive a real save and reload');
-    const hearsDb = new DatabaseSync(join(directory, 'memory/memory.sqlite'), { readOnly: true });
-    try {
-      const heard = hearsDb.prepare("SELECT npc_id, text, kind, visibility FROM memory WHERE kind='heard'").all();
+    {
+      const heard = newsSnapshot;
       assert.equal(heard.length, 1, 'replayed scene.shown and rollback must leave exactly one saved heard memory');
       assert.equal(heard[0]!.npc_id, 'sebastian'); assert.equal(heard[0]!.visibility, 'normal');
       assert.match(heard[0]!.text as string, HEARD);
-    } finally { hearsDb.close(); }
-    const scenes = calls.filter(call => call.kind === 'scene' && call.messages[1]!.content.includes('## 想说的事'));
+    }
+    const scenes = calls.filter(call => call.kind === 'scene' && !call.probe && call.messages[1]!.content.includes('## 想说的事'));
     assert.equal(scenes.length, 4, 'public news is offered in two interrupted scenes and before/after rollback, never for the secret or on the third day');
     assert.ok(scenes.every(call => !call.messages[1]!.content.includes('怕黑')));
     for (const name of ['news-listener.png', 'news-scene.png']) assert.ok((await stat(join(directory, name))).size > 100);
+    const townLabels = ['town-zero-heart-native-recall', 'town-disabled', 'town-indoor-far-apart-native-event',
+      'town-outdoor-six-tiles-transitive-group', 'town-third-hand-hour-acknowledged', 'town-player-location-excluded',
+      'town-defers-during-native-talk', 'town-newest-pending-hour-replaces-older', 'town-sends-after-dialogue-close',
+      'town-second-hand-native-recall', 'town-reload-clears-pending', 'town-rollback-allows-news-again',
+      'town-new-day-clears-pending', 'town-second-hand-save-reload-native-recall', 'town-expired-hour-acknowledged'];
+    for (const label of townLabels) assert.ok(last.townChecks.some(check => check.label === label && check.passed), label);
+    assert.ok(last.townChecks.every(check => check.passed));
+    const hours = mod.filter(packet => packet.type === 'town.hour');
+    assert.equal(hours.length, 7, 'four unsaved hours, two repeated after rollback, and one expired hour');
+    assert.equal(last.townPackets.length, hours.length, 'every native town send reaches the relay exactly once');
+    const groups = (index: number) => hours[index]!.groups as string[][];
+    assert.deepEqual(groups(0), [['Abigail', 'Gus']]);
+    assert.deepEqual(groups(1), [['Gus', 'Pam', 'Sam']], 'six-tile links join transitively; invisible and seven-tile NPCs are absent');
+    assert.deepEqual(groups(2), [['Pam', 'Leah']]);
+    assert.deepEqual(groups(3), [['Abigail', 'Leah']], 'the latest pending hour replaces the earlier Jodi group');
+    const windQuestions = calls.filter(call => call.kind === 'dialogue' && call.messages.at(-1)?.content.startsWith('最近有人告诉你我给蓝色风筝'));
+    assert.equal(windQuestions.length, 3);
+    assert.match(windQuestions[0]!.messages[0]!.content, HEARD_WIND);
+    assert.doesNotMatch(windQuestions[1]!.messages[0]!.content, HEARD_WIND, 'unsaved offscreen news rolls back');
+    assert.match(windQuestions[2]!.messages[0]!.content, HEARD_WIND, 'second-hand news survives save and reload');
+    const zero = calls.find(call => call.kind === 'dialogue' && call.messages.at(-1)?.content.startsWith('你还记得我答应文森特'));
+    assert.ok(zero?.messages[0]!.content.includes(STRING_NOTE));
+    assert.ok(mod.some(packet => packet.type === 'talk.open' && packet.npc === 'Jodi' && packet.hearts === 0));
+    const finalDb = new DatabaseSync(join(directory, 'memory/memory.sqlite'), { readOnly: true });
+    try {
+      const wind = finalDb.prepare("SELECT npc_id, text, importance, visibility FROM memory WHERE kind='heard' AND text LIKE '%云尾%'").all();
+      assert.equal(wind.length, 2, 'rollback and duplicate town.hour leave one first-hand and one second-hand memory');
+      assert.deepEqual(wind.map(row => [row.npc_id, row.importance]).sort(), [['gus', 3], ['pam', 2]]);
+      assert.ok(wind.every(row => row.visibility === 'normal'));
+      assert.equal(finalDb.prepare("SELECT COUNT(*) AS n FROM memory WHERE npc_id='pam' AND text LIKE '我当面送了农场主%'").get()!.n, 0,
+        'the disabled gift setting must not create Pam’s phantom gift memory');
+      await json(join(directory, 'town-saved-memories.json'), wind);
+    } finally { finalDb.close(); }
+    assert.ok((await stat(join(directory, 'town-listener-pam.png'))).size > 100);
     const labels = ['present-native-delivery-on-opening', 'present-duplicate-reply-does-not-duplicate-item', 'present-disabled',
       'present-unknown-and-overprice-rejected', 'present-full-inventory-native-debris', 'present-no-second-opening-gift',
       'present-unsaved-item-rollback', 'present-rollback-allows-offer-again', 'present-real-save-reload-persists', 'present-next-day-weekly-cooldown',
@@ -310,7 +438,7 @@ finally {
   await json(join(directory, 'result.json'), { success, failure, protocol: PROTOCOL_VERSION, mode: 'native-social-combined', offline: config.Offline,
     requestId: config.RequestId, saveFolder: config.SaveFolder, modelCalls: calls.filter(call => call.real).length,
     realCalls: calls.filter(call => call.real).map(({ kind, thinking, usage, timing }) => ({ kind, thinking, usage, timing })),
-    fixedCalls: calls.filter(call => !call.real).length, checks: (last?.socialChecks.length ?? 0) + (last?.newPartsChecks?.length ?? 0) + (last?.newsChecks?.length ?? 0), errors, game: last });
+    fixedCalls: calls.filter(call => !call.real).length, checks: (last?.socialChecks.length ?? 0) + (last?.newPartsChecks?.length ?? 0) + (last?.newsChecks?.length ?? 0) + (last?.townChecks?.length ?? 0), errors, game: last });
 }
-console.log(JSON.stringify({ success, failure, directory, checks: (last?.socialChecks.length ?? 0) + (last?.newPartsChecks?.length ?? 0) + (last?.newsChecks?.length ?? 0), seconds: last?.elapsedSeconds }));
+console.log(JSON.stringify({ success, failure, directory, checks: (last?.socialChecks.length ?? 0) + (last?.newPartsChecks?.length ?? 0) + (last?.newsChecks?.length ?? 0) + (last?.townChecks?.length ?? 0), seconds: last?.elapsedSeconds }));
 if (!success) process.exitCode = 1;
