@@ -79,6 +79,21 @@ internal static class FestivalReadChecks
             Check((string?)Get(watch, "SantaRecipient") == "Penny" && (string?)Get(watch, "SantaGiver") == "Lewis", "The original draw replaced the giver actually present.");
         });
 
+        test("secret Santa only becomes a result after the native exchange returns to player control", () =>
+        {
+            var (mod, festival, watch) = Watch("winter25");
+            Set(festival, "secretSantaRecipient", Npc("Penny")); Read(mod, watch);
+            Set(festival, "secretSantaRecipient", null); Set(festival, "mySecretSanta", Npc("Lewis"));
+            Set(festival, "doingSecretSanta", true); Read(mod, watch);
+            Check(!(bool)watchType.GetProperty("HasResult")!.GetValue(watch)!, "Opening the receive scene counted as a completed gift exchange.");
+            var message = (Dictionary<string, object?>)watchType.GetMethod("Message")!.Invoke(watch, null)!;
+            Check(message["santa"] is null, "An interrupted exchange emitted a delivered-gift memory.");
+            Set(festival, "doingSecretSanta", false); Set(festival, "_playerControlSequence", true); Read(mod, watch);
+            Check((bool)watchType.GetProperty("HasResult")!.GetValue(watch)!, "A completed exchange was not retained.");
+            Set(festival, "_playerControlSequence", false); Read(mod, watch);
+            Check((bool)watchType.GetProperty("HasResult")!.GetValue(watch)!, "Leaving after a completed exchange forgot its result.");
+        });
+
         test("the governor reaction is read from the native parsed script for every level and year variant", () =>
         {
             FieldInfo year = gameType.GetField("year", BindingFlags.Static | BindingFlags.Public)!;

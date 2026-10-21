@@ -32,6 +32,7 @@ internal sealed partial class ModEntry
         public string? SantaRecipient;
         public bool SantaGiven;
         public string? SantaGiver;
+        public bool SantaReceived;
         public bool ContestRead;
         public string? Contest;
         public bool GrangeRead;
@@ -39,14 +40,14 @@ internal sealed partial class ModEntry
         public int? Soup;
         public string[]? SoupChecked;
 
-        public bool HasResult => this.Dance is not null || this.SantaGiven || this.Contest is not null || this.Grange is not null || this.Soup is not null;
+        public bool HasResult => this.Dance is not null || (this.SantaGiven && this.SantaReceived) || this.Contest is not null || this.Grange is not null || this.Soup is not null;
 
         public Dictionary<string, object?> Message() => new()
         {
             ["festival"] = this.Key,
             ["npcs"] = this.Npcs.ToList(),
             ["dance"] = this.Dance,
-            ["santa"] = this.SantaGiven && this.SantaRecipient is not null && this.SantaGiver is not null
+            ["santa"] = this.SantaGiven && this.SantaReceived && this.SantaRecipient is not null && this.SantaGiver is not null
                 ? new Dictionary<string, object?> { ["recipient"] = this.SantaRecipient, ["giver"] = this.SantaGiver }
                 : null,
             ["contest"] = this.Contest,
@@ -90,9 +91,6 @@ internal sealed partial class ModEntry
 
     private void EndFestival(FestivalWatch watch)
     {
-        // The secret gift scene can only be missed by leaving in the middle of it.
-        if (watch.SantaGiven && watch.SantaGiver is null)
-            watch.SantaGiver = watch.Festival.mySecretSanta?.Name;
         if (!watch.HasResult)
             return;
         this.festivalPending = watch.Message();
@@ -134,6 +132,9 @@ internal sealed partial class ModEntry
                 // Vanilla swaps in Lewis when the drawn giver is not at the festival, as it sets up this scene.
                 if (festival.doingSecretSanta && festival.mySecretSanta is NPC giver)
                     watch.SantaGiver = giver.Name;
+                // A scene can be interrupted before its item handover. Only a completed exchange supports both memories.
+                if (watch.SantaGiven && watch.SantaGiver is not null && !festival.doingSecretSanta && festival.playerControlSequence)
+                    watch.SantaReceived = true;
                 break;
             case "spring13":
             case "winter8":

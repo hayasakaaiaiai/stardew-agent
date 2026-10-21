@@ -9,12 +9,15 @@ param(
     [switch]$Social,
     [switch]$Offline,
     [switch]$AmbientOnly,
+    [switch]$World,
+    [string]$Section = 'all',
     [string]$RunDirectory = ''
 )
 
 $ErrorActionPreference = 'Stop'
 if ($Social -and ($Nightly -or $MorningPlans -or $BubblesOnly -or $MailOnly -or $NightlyRecovery)) { throw '组合验收不可与其他独立场景混用。' }
-if ($Offline -and -not $Social) { throw '-Offline 仅用于三功能组合验收。' }
+if ($World -and ($Social -or $Nightly -or $MorningPlans -or $BubblesOnly -or $MailOnly -or $NightlyRecovery)) { throw '-World 不可与其他场景混用。' }
+if ($Offline -and -not ($Social -or $World)) { throw '-Offline 仅用于组合或世界场景验收。' }
 if ($AmbientOnly -and -not $Social) { throw '-AmbientOnly 仅用于组合验收的新功能场景。' }
 if (($MailOnly -and ($BubblesOnly -or $Nightly -or $MorningPlans -or $NightlyRecovery)) -or ($BubblesOnly -and $NightlyRecovery)) { throw 'Native fixed-packet fixtures cannot be combined with the recovery scenario.' }
 $taskRoot = Split-Path -Parent $PSScriptRoot
@@ -74,6 +77,7 @@ $taskConfig = [pscustomobject]@{
     Nightly=[bool]($Nightly -or $MorningPlans -or $NightlyRecovery); MorningPlans=[bool]($MorningPlans -or $NightlyRecovery)
     BubblesOnly=[bool]$BubblesOnly; MailOnly=[bool]$MailOnly; NightlyRecovery=[bool]$NightlyRecovery
     Social=[bool]$Social; Offline=[bool]$Offline; NewParts=[bool]$Social; AmbientOnly=[bool]$AmbientOnly
+    World=[bool]$World; Section=$Section
 }
 $taskConfigPath = Join-Path $taskRun 'config.json'
 $taskConfig | ConvertTo-Json | Set-Content -LiteralPath $taskConfigPath -Encoding UTF8
@@ -81,8 +85,15 @@ Write-Output ('独立验收副本：' + $taskCopy)
 Write-Output ('备份和证据目录：' + $taskRun)
 $taskExitCode = 1
 try {
-    & (Join-Path $PSScriptRoot 'test-abigail.ps1') -GamePath $GamePath -PrepareOnly
-    $taskRunner = if ($Social) { 'test-game-social.ts' } elseif ($MailOnly) { 'test-game-mail.ts' } elseif ($BubblesOnly) { 'test-game-bubbles.ts' } else { 'test-game-memory.ts' }
+    if ($World) {
+        & dotnet build (Join-Path $taskRoot 'mod\StardewAgentBridge') -c Release ('-p:GamePath=' + $GamePath) -p:EnableModDeploy=false --nologo
+        if ($LASTEXITCODE -ne 0) { throw '世界验收 Mod 编译失败。' }
+        $taskWorldMod = Join-Path $taskRun 'mods\StardewAgentBridge'
+        New-Item -ItemType Directory -Path $taskWorldMod | Out-Null
+        Copy-Item -LiteralPath (Join-Path $taskRoot 'mod\StardewAgentBridge\bin\Release\net6.0\StardewAgentBridge.dll') -Destination $taskWorldMod
+        Copy-Item -LiteralPath (Join-Path $taskRoot 'mod\StardewAgentBridge\manifest.json') -Destination $taskWorldMod
+    } else { & (Join-Path $PSScriptRoot 'test-abigail.ps1') -GamePath $GamePath -PrepareOnly }
+    $taskRunner = if ($World) { 'test-game-world.ts' } elseif ($Social) { 'test-game-social.ts' } elseif ($MailOnly) { 'test-game-mail.ts' } elseif ($BubblesOnly) { 'test-game-bubbles.ts' } else { 'test-game-memory.ts' }
     & node.exe (Join-Path $PSScriptRoot $taskRunner) $taskConfigPath
     $taskExitCode = $LASTEXITCODE
 } finally {

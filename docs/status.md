@@ -1,6 +1,6 @@
 # 项目现状
 
-> 更新于 2026-10-21。每做完一步就更新这份文档。各部分的细节在各自的设计文档里，见 §8。
+> 更新于 2026-10-22。每做完一步就更新这份文档。各部分的细节在各自的设计文档里，见 §8。
 
 ## 1. 这个项目在做什么
 
@@ -90,6 +90,8 @@ NPC 知道自己今天的行程（`m2c-schedules`，建在 `m2c-scheduler` 上�
 
 2026-10-21 按用户“有新推送了 继续测”在 `codex/scheduler-windows-tests` 纳入模型网关 `e9b2067`、后台场景 `27d0fd6` 和当天行程 `9ae9da6`，保留上轮节日测试。原样上游 184/184 Node、23/23 C# 通过，补测复现并修复跨保存结果漏记 token / 失败次数、同次读档断线重连重复调用及突破后台 6 次限额；修复 prompt 成本 0。最终 **195/195 Node、32/32 C#**、类型检查、构建与 Release **0 警告、0 错误**。旧测试固定等 50 毫秒曾导致完整回归 194/195，改为有限等待实际结果后通过，失败记录保留。原版对象模拟检查通过，实际游戏流程仍由用户验收。真实模型调用 0，未部署 DLL、未重启正常后端、未改正常存档，未推送、未合入 main；固定行程样例分词与全部范围见 [最新报告](test-results/2026-10-21-scheduler-windows.md)。
 
+2026-10-22 用户要求“手测部分写脚本测”，新增 `tools/test-game-world.ps1`，使用独立 Mod、后端和存档，实际运行原版日程、整点后台、六种节日、保存重读与小游戏。复现并修复冬日星收礼场面刚开始就记“礼物送到了”，改为完整交换结束才记，新增 token 0。最终 **195/195 Node、33/33 C#**、类型检查、构建、Release 0 警告/错误。主组合 193 项技术断言通过、内容 4/5，旧小游戏退出 API 导致中断；改为原版 Esc 并等待淡入稳定后，局部收尾 **16/16** 通过。两段共 51 次真实调用、5 次保存、33 次读档，源档 6 文件哈希相同。**最新完整 all 未重新一进程跑完，真实模型行程及回滚后自由补写仍有问题**，不将分段结果报为全绿。正常安装与后端保持原状，未推送、未合入 main；见 [原版游戏报告](test-results/2026-10-22-world-windows.md)。
+
 ## 3. 分支
 
 GitHub 私有仓库：https://github.com/hayasakaaiaiai/stardew-agent
@@ -125,7 +127,7 @@ GitHub 私有仓库：https://github.com/hayasakaaiaiai/stardew-agent
 | `m2c-scheduler` | 调度器：模型网关和后台场景，建在 `remember-source` 上；两步都已实现，已推送，待 Windows 验收 | `/Users/a11/Documents/ChatGPT/stardew-agent-gifts`（已切到下一步） |
 | `m2c-schedules` | NPC 知道自己今天的行程，建在 `m2c-scheduler` 上；是代码的最前端，待 Windows 验收 | `/Users/a11/Documents/ChatGPT/stardew-agent-gifts` |
 | `codex/festival-windows-tests` | 上一轮 Windows 节日自动验收，169/169 Node、28/28 C#，本地提交 `4a51e7e`，未推送 | Windows 历史验收分支 |
-| `codex/scheduler-windows-tests` | 最新 `m2c-schedules / 9ae9da6` 与上轮节日测试，195/195 Node、32/32 C#；修复跨保存用量丢失与重连重置后台预算，未推送 | Windows：`E:\stardew-agent` |
+| `codex/scheduler-windows-tests` | `m2c-schedules / 9ae9da6` 与节日测试，195/195 Node、33/33 C#；用量/预算修复、原版游戏脚本及中断收礼修复；分段实测和内容失败见最新报告，未推送 | Windows：`E:\stardew-agent` |
 | `codex/offscreen-windows-tests` | `main / 35affae` + `less-fabrication / f98222c`，上一轮组合验收与赠礼开关修复；`bda43f3` 已推送，修复已摘到 `festival-memories`，未合入 main | Windows 历史验收分支 |
 | `codex/ambient-windows-tests` | 上轮三处修复 + 慢回复、原话来源、完成动作过滤、事件语义修复；完整真实 176 项通过；`5a1ef78` 已推送，已合并进 `remember-source` | Windows：`E:\stardew-agent` |
 
@@ -240,7 +242,7 @@ dotnet build mod/StardewAgentBridge   # 编译 Mod，编译完自动装进游戏
 7. **已合入 `main`（2026-10-20）**：用户提交组合验收结果并要求合并后，`codex/new-parts-windows-tests` / `908e73b` 快进合入；Mac 上复核 125/125、类型检查、构建和 Release 编译。包含第四至七步、公开家庭信息、临时日志清理，以及 Windows 修的后端碰面冷却与失败读档保护。自然婚礼/电影等剧情、全部 NPC 自然游玩和模型事实可靠性仍按 [本轮报告](test-results/2026-10-20-new-parts-windows.md) 的覆盖边界观察。
 8. **好感分档与在场传话已合入 `main`（2026-10-21）**：`codex/news-windows-tests` / `7ff44ea` 的统一脚本 115 项真机检查通过，含两处修复；按用户要求快进合入，Mac 复核 132/132、类型检查、构建和 Release 编译。结果、失败保留与范围见 [10 月 21 日报告](test-results/2026-10-21-news-windows.md)。
 9. **本轮修复已推送**：当前功能分支 154/154、22/22、固定完整 166 项、真实完整 176 项通过，已更新本机。推送后已检查节日记忆和 remember 字段顺序分支，隔离快照 156/156 / 类型检查通过；新功能未合并、未做节日游戏验收。原话与概括的语境取舍见[新提交记录](test-results/2026-10-21-new-commits.md)。历史污染和自由内容限制见[最新报告](test-results/2026-10-21-reliability-windows.md)。
-10. **调度器与行程自动检查通过，待游戏内验收**：本地 `codex/scheduler-windows-tests` 包含 `m2c-schedules / 9ae9da6`、上轮节日测试和本轮两处修复，195/195 Node、32/32 C#、类型检查、构建及 Release 0 警告/错误通过。尚未部署、推送或合入 main。用户游戏内清单见 `festival-memories.md` §9、`scheduler.md` §5、`npc-schedules.md` §8 及[最新报告](test-results/2026-10-21-scheduler-windows.md) §6。
+10. **游戏清单已脚本化，模型内容仍需处理**：本地 `codex/scheduler-windows-tests` 保留前述修复，新增原版游戏入口 `tools/test-game-world.ps1` 和冬日星中断修复；195/195 Node、33/33 C#、类型检查、构建及 Release 0 警告/错误通过。实际场景分段执行，收尾 16/16；主组合的模型日程内容有失败，最新完整 all 未重跑，不宣称全绿。真人小游戏和真实多人联机仍不在自动覆盖范围。尚未部署、推送或合入 main；详见[最新报告](test-results/2026-10-22-world-windows.md)。
 
 ## 8. 文档索引
 
@@ -250,6 +252,8 @@ dotnet build mod/StardewAgentBridge   # 编译 Mod，编译完自动装进游戏
 | `docs/test-results/2026-10-21-new-commits.md` | 修复推送之后的节日记忆、字段顺序分支检查，156 项隔离检查和来源策略取舍 |
 | `docs/test-results/2026-10-21-festival-windows.md` | 最新合并与原话策略检查、169/28 自动验收、节日进程恢复和原版字段模拟、用户游戏内清单及保留的夹具失败 |
 | `docs/test-results/2026-10-21-scheduler-windows.md` | 调度器和行程 195/32 自动验收、跨保存统计及重连限额修复、固定分词、原版对象读取、保留失败与用户游戏清单 |
+| `docs/test-results/2026-10-22-world-windows.md` | 手测脚本化、原版事件与保存重读、51 次真实调用、中断收礼修复、小游戏退出修正、分段结果和模型内容失败 |
+| `docs/scripted-world-acceptance.md` | 原版游戏脚本的副本隔离、章节、模型、证据与中断完成条件 |
 | `docs/reliability-fixes.md` | 慢回复、记忆原话、小动作完成过滤和科罗布斯事件语义的兼容修复及 token 实测 |
 | `docs/test-results/2026-10-21-reliability-windows.md` | 154/22 检查、固定 166/真实 176 项、污染实际拦截、原生边界和保留的脚本失败 |
 | `docs/test-results/2026-10-21-offscreen-windows.md` | 后台两手传播、遗留清理与 high 组合测试，赠礼开关修复和未选项记忆污染 |

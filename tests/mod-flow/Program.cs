@@ -439,7 +439,7 @@ Test("a festival's results are packed once it ends, wait for the conversation to
     ((List<string>)Get(watch, "Npcs")!).AddRange(new[] { "Penny", "Lewis" });
     Set(watch, "SantaRecipient", "Penny");
     Check(!(bool)watchType.GetProperty("HasResult")!.GetValue(watch)!, "A drawn name counted as a gift handed over.");
-    Set(watch, "SantaGiven", true); Set(watch, "SantaGiver", "Lewis");
+    Set(watch, "SantaGiven", true); Set(watch, "SantaGiver", "Lewis"); Set(watch, "SantaReceived", true);
     Check((bool)watchType.GetProperty("HasResult")!.GetValue(watch)!, "A handed-over gift was not a result.");
     var fields = (Dictionary<string, object?>)Invoke(watch, "Message")!;
     using (JsonDocument packed = JsonDocument.Parse(JsonSerializer.Serialize(fields)))

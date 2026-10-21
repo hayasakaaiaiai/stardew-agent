@@ -26,6 +26,7 @@ internal sealed class MemoryTestConfig
     public bool Offline { get; set; }
     public bool NewParts { get; set; }
     public bool AmbientOnly { get; set; }
+    public bool World { get; set; }
 }
 
 internal sealed partial class ModEntry
@@ -93,7 +94,7 @@ internal sealed partial class ModEntry
             bool matched = control is not null && control.RootElement.GetProperty("requestId").GetString() == test.RequestId;
             if (matched && control!.RootElement.TryGetProperty("abort", out JsonElement reason))
                 throw new InvalidOperationException(reason.GetString());
-            if ((DateTime.UtcNow - this.memoryTestStarted).TotalSeconds > 960)
+            if ((DateTime.UtcNow - this.memoryTestStarted).TotalSeconds > (test.World ? 3600 : 960))
                 throw new TimeoutException("记忆真机验收超时。");
             if (this.syncFailed)
                 throw new InvalidOperationException("记忆同步失败，请查看后端日志。");
@@ -131,9 +132,20 @@ internal sealed partial class ModEntry
                 case "loaded-first":
                 case "loaded-rollback":
                 case "loaded-fork":
+                    if (test.World && this.memoryTestTicks % 60 == 0)
+                    {
+                        this.worldTestResult = new { id = this.worldTestCommand, operation = this.worldTestOperation, completed = false, success = false, state = this.WorldSnapshot() };
+                        this.MemoryTestProgress(this.memoryTestStage, "等待原版读档状态就绪。");
+                    }
                     if (!Context.IsWorldReady || !this.CanChat || Game1.activeClickableMenu is not null)
                         return;
+                    if (test.World && (Game1.eventUp || Game1.isFestival())) return;
                     this.CheckMemoryTestSave();
+                    if (test.World)
+                    {
+                        this.BeginWorldTest();
+                        break;
+                    }
                     // This is a disposable save; high hearts avoid the documented low-heart recall filter.
                     if (!test.Social) Game1.player.friendshipData["Abigail"] = new Friendship(2000);
                     if (test.Social)
@@ -336,6 +348,9 @@ internal sealed partial class ModEntry
                 case "ambient":
                     this.TickAmbientTest();
                     break;
+                case "world":
+                    this.TickWorldTest();
+                    break;
                 case "social-title":
                     if (Game1.activeClickableMenu is TitleMenu && !Context.IsWorldReady && this.lifecycle.Count == 0)
                         this.MemoryTestProgress("reload-menu", "重新加载组合验收副本。");
@@ -517,6 +532,7 @@ internal sealed partial class ModEntry
             townChecks = this.townTestChecks, townPackets = this.townTestPackets, townHours = this.townTestHours,
             ambientChecks = this.ambientTestChecks, ambientShown = this.ambientTestShown, ambientPackets = this.ambientTestPackets,
             eventAssets = this.ambientEventAssets,
+            worldCommand = this.worldTestResult,
             worldReady = Context.IsWorldReady, saveProcessing = SaveGame.IsProcessing, newDay = Game1.newDay,
             events = this.memoryTestEvents, elapsedSeconds = Math.Round((DateTime.UtcNow - this.memoryTestStarted).TotalSeconds, 2) },
             new JsonSerializerOptions { WriteIndented = true });
