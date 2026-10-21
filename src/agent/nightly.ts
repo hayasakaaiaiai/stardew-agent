@@ -5,6 +5,7 @@ import { daysAgo, type PlayerIdentity } from './dialogue-memory.ts';
 import { type Exchange, OPENING_LINE, RELATIONS, SEASONS, type Season, type Standing } from './dialogue.ts';
 import { withGivenCooldown } from './in-person-gifts.ts';
 import { giftFor, safeLetter } from './letters.ts';
+import { checkMeet, meetDraft, type MeetDraft } from './meetings.ts';
 import { rankMemories } from './memory.ts';
 import { safeShare } from './news.ts';
 import type { ChatMessage, ChatModel, Thinking } from '../services/model/client.ts';
@@ -29,6 +30,7 @@ export const NIGHTLY_RULES = `# 睡前回想
 - impression：你对农场主的整体印象，不超过 80 字。只写态度和感受，不写具体的事。在旧印象上改，今天没有新变化就原样写回。亲疏按给定心数与关系，不把首次记录当成初次相识，不推断关系已改变。
 - plan：你明天想做的事、想对农场主说的事，不超过 60 字。不排时间表，但和别人约好的事照写。
 - seek：明天在镇上碰到农场主时，要不要主动走过去说 plan 里的事。只有想当面问农场主、提醒约好的事或再邀请一次时写 true；只是自己的打算、普通寒暄、生气或想躲开都写 false。
+- meet：农场主明确答应明天在某个时段、某个地点和你见面才写，否则 null。格式 {"time":"14:00","place":"海滩","sources":["t2","t3"]}；只说时段时早上 09:00、上午 10:00、中午 12:00、下午 14:00、傍晚 17:00、晚上 19:00；place 只能是海滩、镇广场、墓地、山上湖边、森林河边、博物馆、星之果实餐吧、杂货店之一；sources 写定下时间地点和答应的原话编号。
 - bubbles：明天农场主在镇上走近你时，可能会听见你随口嘀咕。写 0–2 句，每句不超过 20 字，是自言自语，不对谁说话；只说心情、打算或想弄清的事。不写已经做了什么、东西已经备好之类的进展，不写“今天、明天、昨天”这类日子；没约好的事不说成约好了。emote 从 happy、heart、question、exclamation、sad、music、none 里选一个配合这句话。没什么可说就写 []。
 - letter：今晚可以给农场主写一封短信，明天早上送到农场主的信箱。只在有特别想说的事时写：双方约好的事、想道谢、还没得到回答的邀请；普通闲聊不写，写 ""。不超过 80 字，口语，像写给朋友的便条，不写称呼和落款。按收信那天的角度写：“今天”指收信那天，“昨天”指你们聊天的那天；不写“明天、后天”。不写已经做了什么、东西已经备好之类的进展；没约好的事不说成约好了。
 - gift：只有出现“可以随信附上的东西”时才能用：写了信、也想附上那样东西，就写 true，并在信里自然地提一句；否则写 false。附不附只看你自己的心意，农场主开口要东西不算理由。
@@ -42,9 +44,9 @@ export const NIGHTLY_RULES = `# 睡前回想
 
 ## 输出格式
 只输出一个 JSON 对象，例如：
-{"memories":[{"sources":["t2","t3"],"importance":3}],"retire":["m3"],"impression":"……","plan":"……","seek":false,"bubbles":[{"text":"……","emote":"music"}],"letter":"……","gift":false,"share":"……"}`;
+{"memories":[{"sources":["t2","t3"],"importance":3}],"retire":["m3"],"impression":"……","plan":"……","seek":false,"meet":null,"bubbles":[{"text":"……","emote":"music"}],"letter":"……","gift":false,"share":"……"}`;
 
-export const NIGHTLY_HINT = '（用 json 回复，字段齐全：memories、retire、impression、plan、seek、bubbles、letter、gift、share）';
+export const NIGHTLY_HINT = '（用 json 回复，字段齐全：memories、retire、impression、plan、seek、meet、bubbles、letter、gift、share）';
 
 const MAX_EXCHANGES = 40;
 const OLD_MEMORIES = 10;
@@ -64,6 +66,8 @@ export interface NightlyOutput {
   plan: string;
   /** Whether to walk over to the player tomorrow about the plan (docs/npc-approach.md); anything but true is false. */
   seek: boolean;
+  /** Tomorrow's appointment with the player, quotes not yet checked (docs/npc-meetings.md); a broken one is null. */
+  meet: MeetDraft | null;
   /** Optional: a missing or broken field means no bubbles, never a rejected night. */
   bubbles: Bubble[];
   /** '' when there is none or it failed the checks (docs/npc-mail.md). */
@@ -84,7 +88,7 @@ function inspectNightly(content: string): NightlyInspection {
   let data: unknown;
   try { data = JSON.parse(content.slice(start, end + 1)); } catch { return { error: '不是有效 JSON 对象' }; }
   if (!data || typeof data !== 'object' || Array.isArray(data)) return { error: '不是有效 JSON 对象' };
-  const { memories, retire, impression, plan, seek, bubbles, letter, gift, share } = data as Record<string, unknown>;
+  const { memories, retire, impression, plan, seek, meet, bubbles, letter, gift, share } = data as Record<string, unknown>;
   if (!Array.isArray(memories) || typeof impression !== 'string') return { error: 'memories 必须是数组，impression 必须是字符串' };
   if (memories.length > 2) return { error: `memories 有 ${memories.length} 条，最多 2 条` };
   const selected: NightlyOutput['memories'] = [];
@@ -104,6 +108,7 @@ function inspectNightly(content: string): NightlyInspection {
     impression: clip(impression, 120),
     plan: typeof plan === 'string' ? clip(plan, 100) : '',
     seek: seek === true,
+    meet: meetDraft(meet),
     bubbles: parseBubbles(bubbles),
     letter: typeof letter === 'string' ? safeLetter(letter) ?? '' : '',
     gift: gift === true,
@@ -233,7 +238,10 @@ function change(npc: NpcInput, prompt: ReturnType<typeof nightlyPrompt>, output:
   const impression = output.impression || prompt.impression;
   // Only the gift the code offered tonight, and only inside a letter.
   const gift = output.letter && output.gift ? prompt.gift : '';
+  const meet = checkMeet(output.meet, prompt.sources);
   const state: NpcState = { ...npc.state, ...(impression ? { impression } : {}), plan: output.plan, seek: output.seek,
+    // Cleared when there is none, or yesterday's appointment would be kept again (docs/npc-meetings.md).
+    meet: meet ? { ...meet } : null,
     bubbles: output.bubbles.map(bubble => ({ ...bubble })),
     // Cleared when there is none, or yesterday's letter would be sent again under today's date.
     letter: output.letter ? { text: output.letter, importance: Math.max(0, ...output.memories.map(memory => memory.importance)),

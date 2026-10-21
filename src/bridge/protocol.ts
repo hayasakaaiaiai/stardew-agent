@@ -89,6 +89,8 @@ export type ModMessage =
     inPersonGifts?: boolean;
     /** Its schedule today, if it follows one (docs/npc-schedules.md). */
     schedule?: ScheduleStop[];
+    /** It is at the place it agreed to meet the player, at the agreed time (docs/npc-meetings.md). */
+    atMeeting?: boolean;
     world: WorldSnapshot;
   } & Envelope)
   | ({ type: 'talk.say'; npc: string; text: string; date: GameDate } & Envelope)
@@ -104,7 +106,9 @@ export type ModMessage =
   /** NPCs near the player, each to say at most one line (docs/ambient-lines.md); game names. */
   | ({ type: 'ambient.request'; npcs: AmbientNpc[]; world: WorldSnapshot } & Envelope)
   /** What happened at a festival the player just left (docs/festival-memories.md); game names. Reliable, acknowledged. */
-  | ({ type: 'festival.ended' } & FestivalEnded & Envelope);
+  | ({ type: 'festival.ended' } & FestivalEnded & Envelope)
+  /** An appointment the NPC went to is over (docs/npc-meetings.md); `left` is HHMM. Reliable, acknowledged. */
+  | ({ type: 'meet.ended'; npc: string; place: string; time: number; left: number; met: boolean; date: GameDate } & Envelope);
 
 export interface FestivalEnded {
   festival: Festival;
@@ -138,6 +142,8 @@ export type BackendMessage =
   | ({ type: 'day.bubbles'; npcs: Record<string, Bubble[]> } & Envelope)
   /** NPCs who walk over to the player today, by id, with the fewest hearts each needs (docs/npc-approach.md); seq is 0. */
   | ({ type: 'day.approach'; npcs: Record<string, number> } & Envelope)
+  /** Today's appointments with the player, by NPC id; HHMM and a place the Mod knows (docs/npc-meetings.md); seq is 0. */
+  | ({ type: 'day.meetings'; meetings: { npc: string; time: number; place: string }[] } & Envelope)
   /** At most one letter for the mailbox this morning (docs/npc-mail.md); seq is 0. */
   | ({ type: 'day.letters'; letters: DeliveredLetter[] } & Envelope)
   | ({ type: 'talk.delta'; npc: string; text: string } & Envelope)
@@ -260,7 +266,20 @@ export function parseModMessage(raw: string): ModMessage {
       if (!Array.isArray(data.seenEvents) || data.seenEvents.some((e) => typeof e !== 'string')) fail('seenEvents must be strings');
       if (data.inPersonGifts !== undefined && typeof data.inPersonGifts !== 'boolean') fail('inPersonGifts must be a boolean');
       if (data.schedule !== undefined && !isSchedule(data.schedule)) fail('schedule must be a list of stops');
+      if (data.atMeeting !== undefined && typeof data.atMeeting !== 'boolean') fail('atMeeting must be a boolean');
       world(data.world);
+      break;
+    }
+    case 'meet.ended': {
+      envelope();
+      text('npc', 50);
+      text('place', 20);
+      for (const key of ['time', 'left']) {
+        const time = int(data[key], key);
+        if (time < 0 || time > 2600 || time % 100 > 59) fail(`${key} is invalid`);
+      }
+      if (typeof data.met !== 'boolean') fail('met must be a boolean');
+      date(data.date);
       break;
     }
     case 'talk.say':

@@ -146,6 +146,8 @@ internal sealed partial class ModEntry : Mod
         this.TickScenes(e);
         this.TickAmbient(e);
         this.TickApproach(e);
+        if (e.IsMultipleOf(30))
+            this.TickMeetings();
         this.TickGifts();
         this.TickTown();
         this.TickFestival();
@@ -230,6 +232,8 @@ internal sealed partial class ModEntry : Mod
             ["world"] = GameState.World(),
         };
         GameState.AddSchedule(fields, npc);
+        if (this.MeetingTalk(npc))
+            fields["atMeeting"] = true;
         this.talk.RequestSeq = this.Send("talk.open", fields);
         this.BeginWaiting(this.talk);
     }
@@ -372,7 +376,8 @@ internal sealed partial class ModEntry : Mod
     {
         string type = message.TryGetProperty("type", out JsonElement typeValue) ? typeValue.GetString() ?? "" : "";
         if (this.HandleSync(type, message) || this.HandleBubbles(type, message) || this.HandleLetters(type, message)
-            || this.HandleScenes(type, message) || this.HandleAmbient(type, message) || this.HandleApproach(type, message))
+            || this.HandleScenes(type, message) || this.HandleAmbient(type, message) || this.HandleApproach(type, message)
+            || this.HandleMeetings(type, message))
             return;
         string npc = message.TryGetProperty("npc", out JsonElement npcValue) ? npcValue.GetString() ?? "" : "";
         if (this.talk is not { Waiting: true } t || t.Npc.Name != npc || !this.IsCurrentReply(message, t.RequestSeq))

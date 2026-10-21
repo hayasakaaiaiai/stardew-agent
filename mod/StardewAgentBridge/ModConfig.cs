@@ -43,4 +43,7 @@ internal sealed class ModConfig
 
     /// <summary>Whether an NPC with something to tell the player walks over when it sees them (docs/npc-approach.md).</summary>
     public bool NpcApproach { get; set; } = true;
+
+    /// <summary>Whether an NPC goes where it agreed to meet the player yesterday, changing today's schedule (docs/npc-meetings.md).</summary>
+    public bool NpcMeetings { get; set; } = true;
 }

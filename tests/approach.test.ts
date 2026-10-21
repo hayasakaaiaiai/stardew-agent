@@ -21,7 +21,7 @@ function context(change: { state?: NpcState; memories?: Partial<RecallResult>[];
 test('the nightly rules ask for seek, and only a literal true counts', () => {
   assert.match(NIGHTLY_RULES, /- seek：明天在镇上碰到农场主时/);
   assert.match(NIGHTLY_RULES, /"plan":"……","seek":false,/);
-  assert.match(NIGHTLY_HINT, /plan、seek、bubbles/);
+  assert.match(NIGHTLY_HINT, /plan、seek、/);
   const seek = (value: unknown) => parseNightly(JSON.stringify({ memories: [], impression: '好', plan: '想问风筝', ...(value === undefined ? {} : { seek: value }) }))!.seek;
   assert.equal(seek(true), true);
   for (const value of [false, undefined, 'true', 1, null]) assert.equal(seek(value), false, JSON.stringify(value));

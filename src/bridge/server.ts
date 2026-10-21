@@ -5,6 +5,7 @@ import { BACKSTAGE_PER_DAY, BACKSTAGE_TOPIC, type BackstagePerson, backstageHour
 import { AMBIENT_CALLS_PER_DAY, type AmbientLine, type AmbientPerson, ambientPrompt, parseAmbient } from '../agent/ambient.ts';
 import type { Consolidator } from '../agent/consolidation.ts';
 import { OPENING_LINE, runTurn, type Standing, type WorldState } from '../agent/dialogue.ts';
+import { meetingLine } from '../agent/meetings.ts';
 import { newsFor } from '../agent/news.ts';
 import { parseScene, type SceneLine, type SceneNews, SCENES_PER_DAY, SCENE_GAP_MINUTES, scenePrompt } from '../agent/scene.ts';
 import { nextStop, restOfDay, type ScheduleStop } from '../agent/schedule.ts';
@@ -245,17 +246,19 @@ export class BridgeServer {
     if (!save || save.closed) return;
     const head = save.head, day = save.day;
     try {
-      const { bubbles, letters, approach } = await save.today();
+      const { bubbles, letters, approach, meetings } = await save.today();
       if (session.save !== save || save.closed || session.todayRevision !== revision || save.head !== head || save.day !== day) return;
       const envelope = { lineageId: save.initial.lineageId, loadNonce: save.loadNonce, seq: 0 };
       session.send({ type: 'day.bubbles', ...envelope, npcs: bubbles });
       session.send({ type: 'day.letters', ...envelope, letters });
       session.send({ type: 'day.approach', ...envelope, npcs: approach });
+      session.send({ type: 'day.meetings', ...envelope, meetings });
       const names = Object.keys(bubbles);
       if (names.length) this.log(`今天的气泡：${names.join('、')}`);
       if (letters.length) this.log(`今天的信：${letters.map(letter => letter.npc).join('、')}`);
       const seekers = Object.entries(approach);
       if (seekers.length) this.log(`今天想主动找农场主的：${seekers.map(([npc, hearts]) => `${npc}（${hearts} 心起）`).join('、')}`);
+      if (meetings.length) this.log(`今天的约定：${meetings.map(item => `${item.npc} ${clock(item.time)} ${item.place}`).join('、')}`);
     } catch (error) {
       this.log(`读取今天的气泡、信和主动找农场主的失败：${error instanceof Error ? error.message : String(error)}`);
     }
@@ -337,9 +340,10 @@ export class BridgeServer {
         send({ type: 'talk.error', ...envelope(message), npc: message.npc, message: '上一句还没回完' }); return;
       }
       const schedule = restOfDay(message.schedule ?? [], message.world.date.time);
+      const meeting = meetingLine(await save.meeting(npcId), message.world.date.time, message.atMeeting === true);
       const talk: OpenTalk = { npcId, inPersonGifts: message.inPersonGifts !== false,
         standing: { hearts: message.hearts, relation: message.relation, seenEvents: new Set(message.seenEvents) },
-        world: { ...worldState(message.world, save.player, this.cardName), ...(schedule ? { schedule } : {}) } };
+        world: { ...worldState(message.world, save.player, this.cardName), ...(schedule ? { schedule } : {}), ...(meeting ? { meeting } : {}) } };
       session.open.set(message.npc, talk);
       void this.turn(session, talk, message, OPENING_LINE, send);
       return;
@@ -355,6 +359,12 @@ export class BridgeServer {
     }
     if (message.type === 'gift.given') {
       const note = await save.gift(message);
+      send({ type: 'ack', ...envelope(message) });
+      if (note) this.log(`${this.cardName(message.npc)}记下了：${note}`);
+      return;
+    }
+    if (message.type === 'meet.ended') {
+      const note = await save.meetEnded(message);
       send({ type: 'ack', ...envelope(message) });
       if (note) this.log(`${this.cardName(message.npc)}记下了：${note}`);
       return;

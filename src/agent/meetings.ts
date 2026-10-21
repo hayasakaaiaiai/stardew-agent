@@ -1,0 +1,89 @@
+/**
+ * Appointments with the player: agreed one day, written down that night, kept the next day (docs/npc-meetings.md).
+ * The model only names the time, the place and the quoted lines; code checks the quotes and the Mod walks the NPC there.
+ */
+import { clock } from './schedule.ts';
+import type { MemoryDraft, NpcState } from '../types.ts';
+
+/** The places the Mod has a standing tile for (Meetings.cs), with how people say them. */
+export const MEET_PLACES: Readonly<Record<string, RegExp>> = {
+  海滩: /海滩|海边|沙滩|码头/,
+  镇广场: /广场|镇中心/,
+  墓地: /墓地|墓园/,
+  山上湖边: /山上|湖/,
+  森林河边: /森林|河边|树林/,
+  博物馆: /博物馆|图书馆|图书室/,
+  星之果实餐吧: /星之果实|餐吧|酒吧|酒馆/,
+  杂货店: /杂货店|皮埃尔的店|皮埃尔那/,
+};
+
+const TOMORROW = /明天|明早|明晚|明儿|明日/;
+const TIME_WORDS = /早上|早晨|上午|中午|下午|傍晚|晚上|明晚|明早|点|\d{1,2}[:：]\d{2}/;
+const EARLIEST = 800;
+const LATEST = 2100;
+/** How long the NPC waits from the agreed time, and the latest it stays. */
+export const MEET_MINUTES = 90;
+const MEET_END = 2200;
+
+export interface Meeting {
+  /** HHMM, a multiple of ten minutes. */
+  time: number;
+  place: string;
+}
+
+/** What the nightly model wrote, before its quotes are checked. */
+export interface MeetDraft { time: string; place: string; sources: string[] }
+
+/** The JSON shape only; anything else means no appointment, never a rejected night. */
+export function meetDraft(value: unknown): MeetDraft | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const { time, place, sources } = value as Record<string, unknown>;
+  if (typeof time !== 'string' || typeof place !== 'string' || !Array.isArray(sources) || !sources.length || sources.length > 4
+    || sources.some(id => typeof id !== 'string')) return null;
+  return { time, place, sources: [...new Set(sources as string[])] };
+}
+
+/**
+ * Kept only if the quoted lines exist, the player said one of them, and together they name tomorrow, a time of day and
+ * the place; the time must fall between 8:00 and 21:00.
+ */
+export function checkMeet(draft: MeetDraft | null, sources: readonly { id: string; speaker: '玩家' | 'NPC'; text: string }[]): Meeting | null {
+  const words = draft && MEET_PLACES[draft.place];
+  const match = draft && /^(\d{1,2})[:：](\d{2})$/.exec(draft.time.trim());
+  if (!draft || !words || !match || Number(match[2]) > 59) return null;
+  const quoted = draft.sources.map(id => sources.find(source => source.id === id));
+  if (quoted.some(source => !source) || !quoted.some(source => source!.speaker === '玩家')) return null;
+  const text = quoted.map(source => source!.text).join('\n');
+  if (!TOMORROW.test(text) || !TIME_WORDS.test(text) || !words.test(text)) return null;
+  const time = Number(match[1]) * 100 + Math.floor(Number(match[2]) / 10) * 10;
+  return time >= EARLIEST && time <= LATEST ? { time, place: draft.place } : null;
+}
+
+/** Today's appointment, written the night before; a stored one is checked again, like bubbles. */
+export function meetingFor(state: NpcState, today: number): Meeting | undefined {
+  const meet = state.meet as Record<string, unknown> | null | undefined;
+  if (state.day !== today - 1 || !meet || typeof meet !== 'object' || typeof meet.place !== 'string' || !(meet.place in MEET_PLACES)
+    || !Number.isSafeInteger(meet.time) || (meet.time as number) < EARLIEST || (meet.time as number) > LATEST
+    || (meet.time as number) % 10 !== 0 || (meet.time as number) % 100 > 59) return undefined;
+  return { time: meet.time as number, place: meet.place };
+}
+
+/** HHMM when the NPC leaves the place: ninety minutes after the agreed time, at 22:00 at the latest. */
+export function meetingLeave(time: number): number {
+  const minutes = Math.floor(time / 100) * 60 + time % 100 + MEET_MINUTES;
+  return Math.min(Math.floor(minutes / 60) * 100 + minutes % 60, MEET_END);
+}
+
+/** For the NPC's own conversation that day; nothing once it has left the place. */
+export function meetingLine(meeting: Meeting | undefined, now: number, here: boolean): string | undefined {
+  if (!meeting || now > meetingLeave(meeting.time)) return undefined;
+  return `今天 ${clock(meeting.time)} 在${meeting.place}见面${here ? '，现在就在这里碰面了' : ''}`;
+}
+
+/** What the NPC remembers once the appointment is over. */
+export function meetingMemory(meeting: Meeting & { met: boolean; left: number }): MemoryDraft {
+  const agreed = `约好 ${clock(meeting.time)} 在${meeting.place}见面`;
+  return meeting.met
+    ? { text: `${agreed}，农场主来了。`, importance: 2, kind: 'observation', subjects: ['player'], visibility: 'private' }
+    : { text: `${agreed}，我等到 ${clock(meeting.left)}，农场主没来。`, importance: 3, kind: 'observation', subjects: ['player'], visibility: 'private' };
+}

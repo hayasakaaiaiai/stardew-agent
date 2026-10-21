@@ -18,6 +18,8 @@ export interface WorldState {
   location: string;
   /** The rest of the NPC's day from the game's schedule, for its own conversation (docs/npc-schedules.md). */
   schedule?: string;
+  /** Today's appointment with the player, while it is still on (docs/npc-meetings.md). */
+  meeting?: string;
   player: { name: string; gender: 'male' | 'female'; farm: string };
   /** Facts the cards' natural-language conditions depend on, e.g. 肯特 → 还在前线. */
   facts: Record<string, string>;
@@ -160,6 +162,7 @@ function situation({ npcName, world, standing, memory }: PromptInput): string {
     `- 时间：第 ${world.year} 年${SEASONS[world.season]} ${world.day} 日（${weekday(world.day)}）${world.time}，${world.weather}`,
     `- 地点：${world.location}`,
     ...(world.schedule ? [`- 你今天接下来：${world.schedule}`] : []),
+    ...(world.meeting ? [`- 和农场主的约定：${world.meeting}`] : []),
     `- 玩家：${player.name}（${player.gender === 'female' ? '女' : '男'}），经营${player.farm}农场`,
     `- 你对玩家的好感：${standing.hearts} 心；关系：${RELATIONS[standing.relation]}`,
     ...(facts.length ? ['- 世界事实：', ...facts] : []),
