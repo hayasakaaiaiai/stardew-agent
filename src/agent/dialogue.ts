@@ -1,4 +1,4 @@
-import type { ChatMessage, Completion, ModelClient, StreamHandlers, Usage } from '../services/model/client.ts';
+import type { ChatMessage, ChatModel, Completion, StreamHandlers, Usage } from '../services/model/client.ts';
 import type { Relation, RenderedCard, Roster } from '../services/roster/index.ts';
 import { sourceRemembered } from './turn-facts.ts';
 
@@ -305,7 +305,7 @@ export interface TurnHandlers {
 }
 
 export async function runTurn(
-  deps: { roster: Roster; model: ModelClient; memory?: DialogueMemory },
+  deps: { roster: Roster; model: ChatModel; memory?: DialogueMemory },
   input: TurnInput,
   handlers: TurnHandlers = {},
 ): Promise<TurnResult> {

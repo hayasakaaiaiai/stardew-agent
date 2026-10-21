@@ -8,6 +8,7 @@ import { NIGHTLY_THINKING, nightlyConsolidator } from '../src/agent/nightly.ts';
 import { SCENE_THINKING } from '../src/agent/scene.ts';
 import { BridgeServer } from '../src/bridge/server.ts';
 import { ModelClient, modelConfigFromEnv } from '../src/services/model/client.ts';
+import { ModelGateway } from '../src/services/model/gateway.ts';
 import { Roster } from '../src/services/roster/index.ts';
 import { SOCIAL_NPCS } from '../src/types.ts';
 
@@ -21,12 +22,14 @@ const model = new ModelClient(modelConfigFromEnv());
 const stamp = () => new Date().toLocaleTimeString('zh-CN', { hour12: false });
 const log = (line: string) => console.log(`[${stamp()}] ${line}`);
 const nightlyModel = new ModelClient({ ...model.config, thinking: NIGHTLY_THINKING });
+// Every call goes through one queue: dialogue first, at most 3 others at once (docs/scheduler.md §3).
+const gateway = new ModelGateway();
 
 const server = await BridgeServer.start({
-  roster, model,
+  roster, model: gateway.lane('dialogue', model), gateway,
   memoryDirectory: join(ROOT, '.runtime', 'game'),
-  consolidator: nightlyConsolidator({ roster, model: nightlyModel, log }),
-  sceneModel: new ModelClient({ ...model.config, thinking: SCENE_THINKING }),
+  consolidator: nightlyConsolidator({ roster, model: gateway.lane('nightly', nightlyModel), log }),
+  sceneModel: gateway.lane('nearby', new ModelClient({ ...model.config, thinking: SCENE_THINKING })),
   port: Number(process.env.NPC_BRIDGE_PORT ?? 47711),
   log,
 });

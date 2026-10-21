@@ -1,6 +1,6 @@
 # 调度器：模型网关和后台场景
 
-> 状态：设计稿，等用户确认后再写代码（2026-10-21）。分支 `m2c-scheduler`，建在 `remember-source` 上（已合并 Windows 的 `codex/ambient-windows-tests / 5a1ef78`），目录 `/Users/a11/Documents/ChatGPT/stardew-agent-gifts`。对应 `design.md` §7.2–7.4（分级、快路径、合并调用）、§9.1（网关）、§13 第 8 条（调度测试）。
+> 状态：用户 2026-10-21 说“你继续推进度，后续有需要决定的地方你自行定夺”，按设计实现。第一步网关已实现（§3.4），第二步后台场景见 §4。分支 `m2c-scheduler`，建在 `remember-source` 上（已合并 Windows 的 `codex/ambient-windows-tests / 5a1ef78`），目录 `/Users/a11/Documents/ChatGPT/stardew-agent-gifts`。对应 `design.md` §7.2–7.4（分级、快路径、合并调用）、§9.1（网关）、§13 第 8 条（调度测试）。
 
 ## 1. 现状
 
@@ -59,6 +59,16 @@
 ### 3.3 测试（假模型）
 
 先后顺序（对话插到后台前面）；对话以外最多 3 个并发，对话不被堵；等待超时丢弃；排队中取消；用量按级别累加、报告后清零；模型报错照常抛给调用方。
+
+### 3.4 实现结果（2026-10-21）
+
+- `src/services/model/gateway.ts`：`ModelGateway.lane(级别, 客户端)` 给调用方一个同样有 `chat` 的对象，各自的客户端（推理强度）不变，只共用队列。`client.ts` 抽出 `ChatModel` 接口，`runTurn`、夜间整合和 `BridgeServer` 改成依赖它，原来传 `ModelClient` 的地方不用改。
+- `tools/bridge.ts` 和 Windows 的统一脚本 `tools/test-game-social.ts` 都经过网关：对话 `dialogue`、碰面和同图 `nearby`、夜间整合 `nightly`。`tools/chat.ts` 等命令行工具一次只发一个请求，不经过网关。
+- 用量报告在后端处理完一次新的 `save.saved` 之后写；重复的保存通知不再写。夜间整合在保存之后才跑，所以一行里的“夜间”是前一晚的，日志里写作“夜间（前一晚）”。自行决定，没有另做按游戏日归属：夜间结果本来就跨在两天之间。
+- 发出后失败的请求（包括调用方取消）记“失败”，也算一次调用；排队中取消的不算调用也不算失败。
+- prompt 一个字没改，固定 token 0，调用次数不变。
+
+测试：`tests/gateway.test.ts` 8 项，覆盖 §3.3 全部，外加总并发上限也管对话、后端只在新的保存后写一行用量。完整 171/171、类型检查、构建通过。
 
 ## 4. 第二步：后台场景
 

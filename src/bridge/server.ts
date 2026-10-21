@@ -6,7 +6,8 @@ import type { Consolidator } from '../agent/consolidation.ts';
 import { OPENING_LINE, runTurn, type Standing, type WorldState } from '../agent/dialogue.ts';
 import { newsFor } from '../agent/news.ts';
 import { parseScene, type SceneLine, type SceneNews, SCENES_PER_DAY, SCENE_GAP_MINUTES, scenePrompt } from '../agent/scene.ts';
-import type { ModelClient } from '../services/model/client.ts';
+import type { ChatModel } from '../services/model/client.ts';
+import type { ModelGateway } from '../services/model/gateway.ts';
 import type { Roster } from '../services/roster/index.ts';
 import { SOCIAL_NPCS } from '../types.ts';
 import { requireValue } from '../validation.ts';
@@ -16,7 +17,7 @@ import { clock, worldState } from './world.ts';
 
 export interface BridgeOptions {
   roster: Roster;
-  model: ModelClient;
+  model: ChatModel;
   memoryDirectory: string;
   /** Consolidates each confirmed save in the background (docs/nightly-consolidation.md). */
   consolidator?: Consolidator;
@@ -26,7 +27,9 @@ export interface BridgeOptions {
    * Small talk between NPCs the player can overhear (docs/npc-chat.md) and lines near the player
    * (docs/ambient-lines.md); without it requests get no lines.
    */
-  sceneModel?: ModelClient;
+  sceneModel?: ChatModel;
+  /** Logs the model usage since the last save after each new save (docs/scheduler.md §3.2). */
+  gateway?: ModelGateway;
   /** 0 picks a free port (tests). */
   port: number;
   host?: string;
@@ -318,6 +321,7 @@ export class BridgeServer {
       void this.ambient(session, message, send);
       return;
     }
+    const head = save.head, day = save.day;
     await save.control(message, () => {
       if (message.type === 'talk.close') session.open.delete(message.npc);
       else session.open.clear();
@@ -325,6 +329,7 @@ export class BridgeServer {
       session.pending = undefined;
     });
     send({ type: 'ack', ...envelope(message) });
+    if (message.type === 'save.saved' && save.head !== head && this.options.gateway) this.log(this.options.gateway.report(day));
     if (message.type === 'day.started') void this.sendToday(session);
   }
 

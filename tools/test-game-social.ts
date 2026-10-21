@@ -11,6 +11,7 @@ import { parseModMessage, PROTOCOL_VERSION } from '../src/bridge/protocol.ts';
 import { NIGHTLY_THINKING, nightlyConsolidator } from '../src/agent/nightly.ts';
 import { SCENE_THINKING } from '../src/agent/scene.ts';
 import { ModelClient, modelConfigFromEnv, type ChatMessage, type Completion, type StreamHandlers, type Thinking } from '../src/services/model/client.ts';
+import { ModelGateway } from '../src/services/model/gateway.ts';
 import { Roster } from '../src/services/roster/index.ts';
 import { SOCIAL_NPCS } from '../src/types.ts';
 import { digest } from '../src/validation.ts';
@@ -115,8 +116,9 @@ function model(kind: 'dialogue' | 'scene' | 'nightly'): ModelClient {
 }
 const roster = new Roster({ directory: join(ROOT, 'data/npcs'), npcIds: SOCIAL_NPCS });
 assert.equal((await roster.load()).errors.length, 0);
-const server = await BridgeServer.start({ roster, model: model('dialogue'), sceneModel: model('scene'),
-  consolidator: nightlyConsolidator({ roster, model: model('nightly'), log }), memoryDirectory: join(directory, 'memory'), port: 0, log });
+const gateway = new ModelGateway();
+const server = await BridgeServer.start({ roster, model: gateway.lane('dialogue', model('dialogue')), sceneModel: gateway.lane('nearby', model('scene')), gateway,
+  consolidator: nightlyConsolidator({ roster, model: gateway.lane('nightly', model('nightly')), log }), memoryDirectory: join(directory, 'memory'), port: 0, log });
 const packets: { direction: string; packet: Record<string, unknown>; injected?: string }[] = [];
 const errors: string[] = [];
 const relay = new WebSocketServer({ host: '127.0.0.1', port: 0 });
