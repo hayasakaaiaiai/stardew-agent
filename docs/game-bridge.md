@@ -47,6 +47,7 @@ Mod → 后端：
 | `scene.request` | 两个 NPC 站在一起、玩家在旁边 | 两人的游戏内名字、世界状态（见 `npc-chat.md`） |
 | `scene.shown` | 一段碰面聊天的最后一句显示后，且不在“继续聊”中 | 对应的 `scene.request` 序号、日期；可靠消息，等 `ack`（见 `npc-news.md`） |
 | `town.hour` | 每个游戏整点，有 NPC 在玩家看不到的地方待在一起时；不在“继续聊”中 | 几组游戏内名字、日期；可靠消息，等 `ack`（见 `offscreen-news.md`） |
+| `festival.ended` | 离开节日会场，且节日里有结果时；不在“继续聊”中 | 节日、在场的人、舞伴/秘密礼物/比赛/展台/汤的结果、日期；可靠消息，等 `ack`（见 `festival-memories.md`） |
 
 后端 → Mod：
 

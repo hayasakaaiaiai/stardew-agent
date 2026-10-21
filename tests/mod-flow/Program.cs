@@ -414,6 +414,44 @@ Test("disabled friendship does not change the per-NPC daily total", () =>
     Invoke(mod, "ClearFriendshipToday");
     Check(((Dictionary<string, int>)Get(mod, "friendshipToday")!).Count == 0, "Reset retained friendship points.");
 });
+Test("a festival's results are packed once it ends, wait for the conversation to close, and reset with the day", () =>
+{
+    Type watchType = modType.GetNestedType("FestivalWatch", BindingFlags.NonPublic)!;
+    object festival = RuntimeHelpers.GetUninitializedObject(gameAssembly.GetType("StardewValley.Event")!);
+    object watch = Activator.CreateInstance(watchType, Fields, binder: null, args: new object?[] { festival, "winter25" }, culture: null)!;
+    ((List<string>)Get(watch, "Npcs")!).AddRange(new[] { "Penny", "Lewis" });
+    Set(watch, "SantaRecipient", "Penny");
+    Check(!(bool)watchType.GetProperty("HasResult")!.GetValue(watch)!, "A drawn name counted as a gift handed over.");
+    Set(watch, "SantaGiven", true); Set(watch, "SantaGiver", "Lewis");
+    Check((bool)watchType.GetProperty("HasResult")!.GetValue(watch)!, "A handed-over gift was not a result.");
+    var fields = (Dictionary<string, object?>)Invoke(watch, "Message")!;
+    using (JsonDocument packed = JsonDocument.Parse(JsonSerializer.Serialize(fields)))
+    {
+        JsonElement root = packed.RootElement;
+        Check(root.GetProperty("festival").GetString() == "winter25" && root.GetProperty("npcs").GetArrayLength() == 2
+            && root.GetProperty("santa").GetProperty("recipient").GetString() == "Penny" && root.GetProperty("santa").GetProperty("giver").GetString() == "Lewis",
+            "The gift exchange was packed wrong.");
+        foreach (string empty in new[] { "dance", "contest", "grange", "soup" })
+            Check(root.GetProperty(empty).ValueKind == JsonValueKind.Null, $"{empty} was not sent as null.");
+    }
+
+    object mod = BubbleMod();
+    Set(mod, "lifecycle", NewOutbox());
+    Set(mod, "bridge", Activator.CreateInstance(modType.GetField("bridge", Fields)!.FieldType, new Uri("ws://127.0.0.1:9"), null, "test")!);
+    Set(mod, "festivalPending", fields);
+    Set(mod, "talk", RuntimeHelpers.GetUninitializedObject(talkType));
+    Invoke(mod, "FlushFestival");
+    Check(Count(Get(mod, "lifecycle")!) == 0 && Get(mod, "festivalPending") is not null, "A festival result was sent during a conversation.");
+    Set(mod, "talk", null);
+    Invoke(mod, "FlushFestival");
+    JsonElement[] queued = Pending(Get(mod, "lifecycle")!);
+    Check(queued.Length == 1 && queued[0].GetProperty("type").GetString() == "festival.ended" && Get(mod, "festivalPending") is null,
+        "A festival result was not queued as a reliable message.");
+    Set(mod, "festivalWatch", watch); Set(mod, "festivalDone", festival); Set(mod, "festivalPending", fields);
+    Invoke(mod, "ClearFestival");
+    Check(Get(mod, "festivalWatch") is null && Get(mod, "festivalDone") is null && Get(mod, "festivalPending") is null,
+        "A new load/day kept an old festival.");
+});
 
 Console.WriteLine($"Mod flow checks: {checks - failures}/{checks} passed.");
 return failures == 0 ? 0 : 1;

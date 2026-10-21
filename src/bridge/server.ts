@@ -302,6 +302,12 @@ export class BridgeServer {
       for (const item of heard) this.log(`镇上传话：${this.idName(item.npcId)}记下了：${item.memory.text}`);
       return;
     }
+    if (message.type === 'festival.ended') {
+      const notes = await save.festival(message, this.idName);
+      send({ type: 'ack', ...envelope(message) });
+      for (const item of notes) this.log(`节日：${this.idName(item.npcId)}记下了：${item.memory.text}`);
+      return;
+    }
     if (message.type === 'scene.request') {
       void this.scene(session, message, send);
       return;

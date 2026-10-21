@@ -5,6 +5,7 @@ import type { Consolidator } from '../agent/consolidation.ts';
 import { type Bubble, bubblesFor } from '../agent/bubbles.ts';
 import { AgentMemory, turnLog } from '../agent/dialogue-memory.ts';
 import type { DialogueMemory, Exchange, Remembered, Standing, TurnResult } from '../agent/dialogue.ts';
+import { festivalMemories } from '../agent/festivals.ts';
 import { friendshipPoints, friendshipSoFar } from '../agent/friendship.ts';
 import { giftItemName, giftMemory } from '../agent/gifts.ts';
 import { GIVEN_TOPIC, givenMemory, withInPersonGift } from '../agent/in-person-gifts.ts';
@@ -24,6 +25,7 @@ type TalkRequest = Extract<Event, { type: 'talk.open' | 'talk.say' }>;
 type GiftGiven = Extract<Event, { type: 'gift.given' }>;
 type SceneShown = Extract<Event, { type: 'scene.shown' }>;
 type TownHour = Extract<Event, { type: 'town.hour' }>;
+type FestivalEnded = Extract<Event, { type: 'festival.ended' }>;
 /** Who learned what, for the log. */
 export interface Heard { npcId: string; memory: MemoryDraft }
 interface Receipt { seq: number; hash: string; reply?: TalkReply }
@@ -429,6 +431,44 @@ export class GameSave {
       this.addReceipt(receipt);
       await this.persist();
       return heard;
+    });
+  }
+
+  /**
+   * Writes what happened at a festival into the day of each NPC who remembers it, as one event, so it is saved or
+   * rolled back with the day (docs/festival-memories.md). Names outside the cards are ignored; a message that no
+   * longer fits the open day is acknowledged without effect.
+   */
+  festival(message: FestivalEnded, name: (id: string) => string): Promise<Heard[]> {
+    return this.enqueue(async () => {
+      if (this.check(message)) return [];
+      const receipt: Receipt = { seq: message.seq, hash: digest(canonical(message)) };
+      const known = (npc: string | undefined) => {
+        const id = npc?.toLowerCase();
+        return id !== undefined && (SOCIAL_NPCS as readonly string[]).includes(id) ? id : null;
+      };
+      const santa = message.santa && known(message.santa.recipient) && known(message.santa.giver)
+        ? { recipient: known(message.santa.recipient)!, giver: known(message.santa.giver)! } : null;
+      // Only the result that belongs to this festival; the others stay null.
+      const notes = this.state.phase === 'open' && absoluteDay(message.date) === this.day ? festivalMemories({
+        festival: message.festival,
+        present: message.npcs.flatMap(npc => known(npc) ?? []),
+        dance: message.festival === 'spring24' ? known(message.dance ?? undefined) : null,
+        santa: message.festival === 'winter25' ? santa : null,
+        contest: message.festival === 'spring13' || message.festival === 'winter8' ? message.contest : null,
+        grange: message.festival === 'fall16' ? message.grange : null,
+        soup: message.festival === 'summer11' ? message.soup : null,
+      }, name) : [];
+      if (notes.length) {
+        const npcIds = [...new Set(notes.map(note => note.npcId))];
+        await this.scope!.record({ seq: message.seq, gameTime: gameMinutes(message.date), changes: npcIds.map((npcId, index) => ({
+          npcId, memories: notes.filter(note => note.npcId === npcId).map(note => note.memory),
+          log: { festival: message.festival, ...(index === 0 ? { bridgeReceipt: JSON.parse(canonical(receipt)) } : {}) },
+        })) });
+      }
+      this.addReceipt(receipt);
+      await this.persist();
+      return notes;
     });
   }
 

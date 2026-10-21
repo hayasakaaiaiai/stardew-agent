@@ -147,6 +147,7 @@ internal sealed partial class ModEntry : Mod
         this.TickAmbient(e);
         this.TickGifts();
         this.TickTown();
+        this.TickFestival();
 
         this.TickAbigailTest();
         this.TickMemoryTest();

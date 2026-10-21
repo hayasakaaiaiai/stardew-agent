@@ -2,6 +2,7 @@
 import type { AmbientLine } from '../agent/ambient.ts';
 import type { Bubble } from '../agent/bubbles.ts';
 import type { Emotion, Season } from '../agent/dialogue.ts';
+import { type Festival, FESTIVALS, type GrangeResult, SOUP_LEVELS } from '../agent/festivals.ts';
 import { GIFT_TASTES, type GiftTaste } from '../agent/gifts.ts';
 import type { DeliveredLetter } from '../agent/letters.ts';
 import type { SceneLine } from '../agent/scene.ts';
@@ -89,7 +90,21 @@ export type ModMessage =
   /** Social NPCs who spent this hour together away from the player, by game name (docs/offscreen-news.md); reliable, acknowledged. */
   | ({ type: 'town.hour'; groups: string[][]; date: GameDate } & Envelope)
   /** NPCs near the player, each to say at most one line (docs/ambient-lines.md); game names. */
-  | ({ type: 'ambient.request'; npcs: AmbientNpc[]; world: WorldSnapshot } & Envelope);
+  | ({ type: 'ambient.request'; npcs: AmbientNpc[]; world: WorldSnapshot } & Envelope)
+  /** What happened at a festival the player just left (docs/festival-memories.md); game names. Reliable, acknowledged. */
+  | ({ type: 'festival.ended' } & FestivalEnded & Envelope);
+
+export interface FestivalEnded {
+  festival: Festival;
+  /** Social NPCs seen at the festival. */
+  npcs: string[];
+  dance: string | null;
+  santa: { recipient: string; giver: string } | null;
+  contest: 'player' | 'npc' | null;
+  grange: GrangeResult | null;
+  soup: number | null;
+  date: GameDate;
+}
 
 export interface AmbientNpc {
   /** The game's internal name, e.g. "Pierre". */
@@ -172,6 +187,7 @@ export function parseModMessage(raw: string): ModMessage {
     if (int(p!.dayEnded, 'commit.dayEnded') < 1) fail('commit.dayEnded is invalid');
   };
   const weather = (value: unknown) => { if (!WEATHERS.has(value as Weather)) fail('weather is invalid'); };
+  const isName = (value: unknown) => typeof value === 'string' && value.length > 0 && value.length <= 50 && !/[\u0000-\u001f]/u.test(value);
   const world = (value: unknown) => {
     const w = value as Record<string, unknown> | null;
     if (!w || typeof w.location !== 'string' || !w.flags || typeof w.flags !== 'object') fail('world is invalid');
@@ -244,6 +260,19 @@ export function parseModMessage(raw: string): ModMessage {
       const groups = data.groups;
       if (!Array.isArray(groups) || groups.length > 34 || groups.some((group) => !Array.isArray(group) || group.length < 2 || group.length > 34
         || group.some((npc) => typeof npc !== 'string' || !npc || npc.length > 50 || /[\u0000-\u001f]/u.test(npc)))) fail('groups must be lists of names');
+      break;
+    }
+    case 'festival.ended': {
+      envelope();
+      date(data.date);
+      if (!FESTIVALS.includes(data.festival as Festival)) fail('festival is invalid');
+      if (!Array.isArray(data.npcs) || data.npcs.length > 64 || !data.npcs.every(isName)) fail('npcs must be a list of names');
+      if (data.dance !== null && !isName(data.dance)) fail('dance must be a name or null');
+      const santa = data.santa as Record<string, unknown> | null;
+      if (santa !== null && (typeof santa !== 'object' || !isName(santa.recipient) || !isName(santa.giver))) fail('santa is invalid');
+      if (data.contest !== null && data.contest !== 'player' && data.contest !== 'npc') fail('contest is invalid');
+      if (data.grange !== null && data.grange !== 'shorts' && ![1, 2, 3, 4].includes(data.grange as number)) fail('grange is invalid');
+      if (data.soup !== null && (!Number.isSafeInteger(data.soup) || (data.soup as number) < 0 || (data.soup as number) >= SOUP_LEVELS)) fail('soup is invalid');
       break;
     }
     case 'scene.shown':

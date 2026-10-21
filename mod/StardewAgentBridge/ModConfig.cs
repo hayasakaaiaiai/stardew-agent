@@ -31,4 +31,7 @@ internal sealed class ModConfig
 
     /// <summary>Whether NPCs near the player say a line over their heads or greet the player (docs/ambient-lines.md).</summary>
     public bool AmbientLines { get; set; } = true;
+
+    /// <summary>Whether the NPCs at a festival remember what happened there (docs/festival-memories.md).</summary>
+    public bool FestivalMemories { get; set; } = true;
 }
