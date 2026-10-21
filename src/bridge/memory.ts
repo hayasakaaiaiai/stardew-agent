@@ -1,6 +1,7 @@
 /** Game save coordination around the unchanged M1 memory kernel (docs/game-memory.md). */
 import { mkdir, open, readdir, readFile, rename, rm } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
+import { approachHearts } from '../agent/approach.ts';
 import { type BackstageNote, FESTIVAL_DAYS } from '../agent/backstage.ts';
 import type { Consolidator } from '../agent/consolidation.ts';
 import { type Bubble, bubblesFor } from '../agent/bubbles.ts';
@@ -507,14 +508,16 @@ export class GameSave {
   discard(): Promise<void> { return this.enqueue(() => this.discardNow()); }
 
   /**
-   * What last night's consolidation left for today: every NPC's bubbles (docs/npc-bubbles.md), and the one letter
-   * from the NPC whose night mattered most (docs/npc-mail.md).
+   * What last night's consolidation left for today: every NPC's bubbles (docs/npc-bubbles.md), the one letter
+   * from the NPC whose night mattered most (docs/npc-mail.md), and who walks over to the player with the fewest
+   * hearts it needs (docs/npc-approach.md).
    */
-  async today(): Promise<{ bubbles: Record<string, Bubble[]>; letters: DeliveredLetter[] }> {
+  async today(): Promise<{ bubbles: Record<string, Bubble[]>; letters: DeliveredLetter[]; approach: Record<string, number> }> {
     const { lineageId } = this.initial;
     const headCommitId = this.state.head;
     const day = this.state.day;
     const bubbles: Record<string, Bubble[]> = {};
+    const approach: Record<string, number> = {};
     let best: { npcId: string; letter: Letter } | undefined;
     for (const npcId of SOCIAL_NPCS) {
       const state = await this.runtime.ctx.store.call('state', { lineageId, headCommitId, npcId });
@@ -522,9 +525,14 @@ export class GameSave {
       if (lines.length) bubbles[npcId] = lines;
       const letter = letterFor(state, day);
       if (letter && (!best || letter.importance > best.letter.importance)) best = { npcId, letter };
+      // Only the few who chose to last night need their memories and today's part of the day.
+      if (state.seek === true && this.scope && !this.closed) {
+        const hearts = approachHearts(await this.scope.agent(npcId).context({ nowGameTime: day * 1440, limit: 10, maxChars: 4000 }), day);
+        if (hearts !== undefined) approach[npcId] = hearts;
+      }
     }
     const letters = best ? [{ key: letterKey(lineageId, headCommitId, best.npcId), npc: best.npcId, text: best.letter.text,
       ...(best.letter.item ? { item: best.letter.item } : {}) }] : [];
-    return { bubbles, letters };
+    return { bubbles, letters, approach };
   }
 }

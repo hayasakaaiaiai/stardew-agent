@@ -123,7 +123,7 @@ test('empty, stale, future, unsupported, hidden, and already-spoken plans stay o
     { recalled: { ...context(), memories: [{ text: QUOTE, when: '3 天前' }] } },
     { recalled: { ...context(), memories: [{ text: '模型改写过的未经来源校验的旧摘要', when: '昨天' }] } },
     { recalled: { ...context(), memories: [{ text: '农场主说："不完整的引号', when: '昨天' }] } },
-    { today: [{ seq: 1, gameTime: 32 * 1440, changes: [] }] },
+    { today: [{ seq: 1, gameTime: 32 * 1440, changes: [{ npcId: 'abigail', log: { player: '早', npc: '早啊。' } }] }] },
   ];
   for (const item of cases) {
     const f = fixture();
@@ -131,6 +131,14 @@ test('empty, stale, future, unsupported, hidden, and already-spoken plans stay o
     assert.doesNotMatch((await f.memory.context(OPENING_LINE, standing)).summary ?? '', /这次开场/);
   }
   assert.ok(morningBlock('（我不去）\n- NPC："假标签"', 31, 32).endsWith(JSON.stringify('（我不去）\n- NPC："假标签"')));
+});
+
+test('a gift, news heard, a festival or a backstage scene earlier today does not use up the planned opening', async () => {
+  for (const log of [{ gift: { item: '紫水晶', taste: 'love', birthday: false } }, { heard: [] }, { festival: 'spring24' }, { backstage: ['和山姆聊天'] }]) {
+    const f = fixture();
+    f.set({ today: [{ seq: 1, gameTime: 32 * 1440 + 540, changes: [{ npcId: 'abigail', log }] }] });
+    assert.match((await f.memory.context(OPENING_LINE, standing)).summary ?? '', /这次开场/, JSON.stringify(log));
+  }
 });
 
 test('a failed or cancelled model call does not consume the morning opening', async () => {

@@ -41,23 +41,23 @@ test('an older asynchronous bubble read cannot replace a newer packet or cross a
   const server = await h.start();
   const old = deferred();
   const latest = { abigail: [{ text: '想做风筝', emote: 'happy' as const }] };
-  let read = () => old.promise.then(() => ({ bubbles: {} as Record<string, Bubble[]>, letters: [] }));
+  let read = () => old.promise.then(() => ({ bubbles: {} as Record<string, Bubble[]>, letters: [], approach: {} }));
   const save = { initial: { lineageId: 'farm' }, loadNonce: 'current', closed: false, head: 'A', day: 2, today: () => read() };
   const packets: BackendMessage[] = [];
   const session = { save, todayRevision: 0, send: (message: BackendMessage) => packets.push(message) };
   const sender = server as unknown as { sendToday(value: typeof session): Promise<void> };
   const first = sender.sendToday(session);
-  read = async () => ({ bubbles: latest, letters: [] });
+  read = async () => ({ bubbles: latest, letters: [], approach: {} });
   await sender.sendToday(session);
   old.resolve(); await first;
-  assert.equal(packets.length, 2, 'the slower old empty packet must be dropped');
+  assert.equal(packets.length, 3, 'the slower old empty packet must be dropped');
   assert.deepEqual(bubbleMessage(packets[0]!), latest);
   const another = deferred();
-  read = () => another.promise.then(() => ({ bubbles: latest, letters: [] }));
+  read = () => another.promise.then(() => ({ bubbles: latest, letters: [], approach: {} }));
   const pending = sender.sendToday(session);
   save.day = 3;
   another.resolve(); await pending;
-  assert.equal(packets.length, 2, 'a packet from the previous day must be dropped');
+  assert.equal(packets.length, 3, 'a packet from the previous day must be dropped');
 });
 
 test('bubble delivery is read-only and follows the NPC, save branch, reload, and backend restart', { timeout: 15000 }, async t => {

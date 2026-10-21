@@ -121,7 +121,7 @@ test('only the result of this festival counts; unknown names, absent NPCs and ot
 test('the night keeps festival notes as they are', { timeout: 10000 }, async t => {
   const h = await harness(t);
   const nightly: ChatMessage[][] = [];
-  const output: NightlyOutput = { memories: [{ sources: ['t2'], importance: 4 }], retire: [], impression: '会跳舞', plan: '',
+  const output: NightlyOutput = { memories: [{ sources: ['t2'], importance: 4 }], retire: [], impression: '会跳舞', plan: '', seek: false,
     bubbles: [], letter: '', gift: false, share: '' };
   const model = { async chat(messages: ChatMessage[]): Promise<Completion> {
     nightly.push(messages);

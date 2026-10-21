@@ -40,4 +40,7 @@ internal sealed class ModConfig
 
     /// <summary>Whether the NPCs at a festival remember what happened there (docs/festival-memories.md).</summary>
     public bool FestivalMemories { get; set; } = true;
+
+    /// <summary>Whether an NPC with something to tell the player walks over when it sees them (docs/npc-approach.md).</summary>
+    public bool NpcApproach { get; set; } = true;
 }

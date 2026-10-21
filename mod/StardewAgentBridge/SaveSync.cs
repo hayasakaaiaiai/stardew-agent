@@ -63,6 +63,7 @@ internal sealed partial class ModEntry
         this.ClearAmbient();
         this.ClearTown();
         this.ClearFestival();
+        this.ClearApproach();
         this.ResetGifts();
         this.ClearFriendshipToday();
         this.ClearPresentsToday();
@@ -100,6 +101,7 @@ internal sealed partial class ModEntry
         this.ClearAmbient();
         this.ClearTown();
         this.ClearFestival();
+        this.ClearApproach();
         this.ResetGifts();
         this.ClearFriendshipToday();
         this.ClearPresentsToday();
@@ -144,6 +146,7 @@ internal sealed partial class ModEntry
         this.ClearAmbient();
         this.ClearTown();
         this.ClearFestival();
+        this.ClearApproach();
         this.letters = new();
         this.talk = null; this.offerFor = null; this.startFor = null;
         this.activeLoad = false; this.memoryReady = false;

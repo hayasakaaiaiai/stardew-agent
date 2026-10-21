@@ -235,8 +235,9 @@ export class BridgeServer {
   }
 
   /**
-   * Replaces the Mod's bubbles for the day and offers this morning's letter; sent again when a late consolidation
-   * finishes (docs/npc-bubbles.md, docs/npc-mail.md). The Mod ignores a letter it already has.
+   * Replaces the Mod's bubbles and the NPCs who walk over for the day, and offers this morning's letter; sent again
+   * when a late consolidation finishes (docs/npc-bubbles.md, docs/npc-approach.md, docs/npc-mail.md). The Mod ignores a
+   * letter it already has.
    */
   private async sendToday(session: Session): Promise<void> {
     const save = session.save;
@@ -244,16 +245,19 @@ export class BridgeServer {
     if (!save || save.closed) return;
     const head = save.head, day = save.day;
     try {
-      const { bubbles, letters } = await save.today();
+      const { bubbles, letters, approach } = await save.today();
       if (session.save !== save || save.closed || session.todayRevision !== revision || save.head !== head || save.day !== day) return;
       const envelope = { lineageId: save.initial.lineageId, loadNonce: save.loadNonce, seq: 0 };
       session.send({ type: 'day.bubbles', ...envelope, npcs: bubbles });
       session.send({ type: 'day.letters', ...envelope, letters });
+      session.send({ type: 'day.approach', ...envelope, npcs: approach });
       const names = Object.keys(bubbles);
       if (names.length) this.log(`今天的气泡：${names.join('、')}`);
       if (letters.length) this.log(`今天的信：${letters.map(letter => letter.npc).join('、')}`);
+      const seekers = Object.entries(approach);
+      if (seekers.length) this.log(`今天想主动找农场主的：${seekers.map(([npc, hearts]) => `${npc}（${hearts} 心起）`).join('、')}`);
     } catch (error) {
-      this.log(`读取今天的气泡和信失败：${error instanceof Error ? error.message : String(error)}`);
+      this.log(`读取今天的气泡、信和主动找农场主的失败：${error instanceof Error ? error.message : String(error)}`);
     }
   }
 

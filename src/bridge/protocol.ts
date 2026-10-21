@@ -136,6 +136,8 @@ export type BackendMessage =
   | ({ type: 'sync.error'; message: string } & Partial<Envelope>)
   /** Today's lines to mutter when the player is near, by NPC id (docs/npc-bubbles.md); seq is 0. */
   | ({ type: 'day.bubbles'; npcs: Record<string, Bubble[]> } & Envelope)
+  /** NPCs who walk over to the player today, by id, with the fewest hearts each needs (docs/npc-approach.md); seq is 0. */
+  | ({ type: 'day.approach'; npcs: Record<string, number> } & Envelope)
   /** At most one letter for the mailbox this morning (docs/npc-mail.md); seq is 0. */
   | ({ type: 'day.letters'; letters: DeliveredLetter[] } & Envelope)
   | ({ type: 'talk.delta'; npc: string; text: string } & Envelope)

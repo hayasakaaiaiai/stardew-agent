@@ -145,6 +145,7 @@ internal sealed partial class ModEntry : Mod
             this.TickBubbles();
         this.TickScenes(e);
         this.TickAmbient(e);
+        this.TickApproach(e);
         this.TickGifts();
         this.TickTown();
         this.TickFestival();
@@ -371,7 +372,7 @@ internal sealed partial class ModEntry : Mod
     {
         string type = message.TryGetProperty("type", out JsonElement typeValue) ? typeValue.GetString() ?? "" : "";
         if (this.HandleSync(type, message) || this.HandleBubbles(type, message) || this.HandleLetters(type, message)
-            || this.HandleScenes(type, message) || this.HandleAmbient(type, message))
+            || this.HandleScenes(type, message) || this.HandleAmbient(type, message) || this.HandleApproach(type, message))
             return;
         string npc = message.TryGetProperty("npc", out JsonElement npcValue) ? npcValue.GetString() ?? "" : "";
         if (this.talk is not { Waiting: true } t || t.Npc.Name != npc || !this.IsCurrentReply(message, t.RequestSeq))

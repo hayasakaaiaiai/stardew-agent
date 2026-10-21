@@ -470,5 +470,43 @@ Test("a festival's results are packed once it ends, wait for the conversation to
         "A new load/day kept an old festival.");
 });
 
+Test("who walks over today comes from the current load only, skips bad values, and resets with the day", () =>
+{
+    object mod = BubbleMod();
+    foreach (string field in new[] { "approachHearts", "approached" })
+        Set(mod, field, Activator.CreateInstance(modType.GetField(field, Fields)!.FieldType, StringComparer.OrdinalIgnoreCase)!);
+    var hearts = (Dictionary<string, int>)Get(mod, "approachHearts")!;
+    foreach (string nonce in new[] { "old", "current" })
+    {
+        using JsonDocument packet = JsonDocument.Parse(JsonSerializer.Serialize(new { type = "day.approach", lineageId = "farm", loadNonce = nonce, seq = 0,
+            npcs = new Dictionary<string, object?> { ["abigail"] = 0, ["sam"] = 5, ["penny"] = "5", ["haley"] = -1, ["leah"] = 15, ["emily"] = 1.5, ["maru"] = null } }));
+        Check((bool)Invoke(mod, "HandleApproach", "day.approach", packet.RootElement)!, "The packet was not recognized.");
+        Check(hearts.Count == (nonce == "current" ? 2 : 0), "An old load's list was used, or bad values were kept.");
+    }
+    Check(hearts["Abigail"] == 0 && hearts["Sam"] == 5, "Ids from the backend did not match game names.");
+    ((HashSet<string>)Get(mod, "approached")!).Add("Abigail");
+    Set(mod, "lastApproachAt", 1000);
+    Invoke(mod, "ClearApproach");
+    Check(hearts.Count == 0 && ((HashSet<string>)Get(mod, "approached")!).Count == 0 && (int)Get(mod, "lastApproachAt")! == -1 && Get(mod, "approach") is null,
+        "A new load/day kept who walks over, who came, or the gap.");
+});
+Test("walking over holds the NPC until released, so its schedule only queues meanwhile", () =>
+{
+    Type pointType = Type.GetType("Microsoft.Xna.Framework.Point, MonoGame.Framework", throwOnError: true)!;
+    Type timeType = Type.GetType("Microsoft.Xna.Framework.GameTime, MonoGame.Framework", throwOnError: true)!;
+    object path = Activator.CreateInstance(typeof(Stack<>).MakeGenericType(pointType))!;
+    path.GetType().GetMethod("Push")!.Invoke(path, new[] { Activator.CreateInstance(pointType, 3, 4) });
+    Type controllerType = modType.GetNestedType("ApproachController", BindingFlags.NonPublic)!;
+    object controller = Activator.CreateInstance(controllerType, Fields, binder: null, args: new object?[] { path, null, null, 2 }, culture: null)!;
+    Check((int)Get(controller, "finalFacingDirection")! == 2 && !(bool)Get(controller, "NPCSchedule")!, "The controller does not face back or looks like a schedule path.");
+    path.GetType().GetMethod("Clear")!.Invoke(path, null);
+    object time = Activator.CreateInstance(timeType)!;
+    bool Update() => (bool)controllerType.GetMethod("update")!.Invoke(controller, new[] { time })!;
+    Set(controller, "Hold", true);
+    Check(!Update(), "A held NPC was handed back with its path done.");
+    Set(controller, "Hold", false);
+    Check(Update(), "A released NPC was not handed back once its path was done.");
+});
+
 Console.WriteLine($"Mod flow checks: {checks - failures}/{checks} passed.");
 return failures == 0 ? 0 : 1;
