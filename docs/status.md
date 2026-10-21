@@ -82,6 +82,8 @@ M2b 第八步“NPC 之间传话”在 `m2b-npc-news` 上实现：当晚和玩�
 
 调度器（`m2c-scheduler`，建在 `remember-source` 上）设计稿，等用户确认：分两步，先做模型网关（一条队列、对话优先、对话以外最多 3 个并发、等太久丢弃、保存时记一行当天用量，prompt 不变），再加后台场景：玩家不在的地方，整点挑一组有 5 心以上熟人的 NPC（最多 3 人）合并调用一次，各记一条“在哪和谁聊天：……”，只复述能往下传的新鲜事和节日，不互相约定，一天最多 6 次，不推理。实测不推理每次输入约 644、输出 76 token、2 秒（`high` 输出约 1500、8–13 秒），一天最多约 3.9k 输入、0.5k 输出。见 [scheduler.md](scheduler.md)。
 
+2026-10-21 按用户“看一下新提交 做测试”拉取并检查 `ab61e37`、`965933e`、`ca8b592`；Windows 的慢回复、原话来源和显示修复保留，调度器尚只有设计稿。原样隔离快照 163/163 Node、23/23 C# 通过，在本地 `codex/festival-windows-tests` 增加 6 项节日恢复及分叉检查、5 项原版对象读取检查后，完整 **169/169 Node、28/28 C#**、类型检查、构建与 Mod Release **0 警告、0 错误**。强制结束独立后端、检查点落后、重发冲突、保存期间迟到、旧档分叉、七档汤评价和两年脚本变体均通过；未发现需要改产品代码的问题。汤用例首轮因测试夹具未初始化演员列表失败，补齐后通过，失败记录保留。真实模型调用 0，本机未部署新 DLL、未重启正常后端、未操作游戏存档；未推送、未合入 main。游戏内节日仍按用户清单验收，见 [本轮报告](test-results/2026-10-21-festival-windows.md)。
+
 ## 3. 分支
 
 GitHub 私有仓库：https://github.com/hayasakaaiaiai/stardew-agent
@@ -115,6 +117,7 @@ GitHub 私有仓库：https://github.com/hayasakaaiaiai/stardew-agent
 | `festival-memories` | 节日记忆，建在 `group-events` 上，并摘入 Windows 的 `bda43f3`；待 Windows 验收 | 已推送（`0f23c0d`） |
 | `remember-source` | 建在 `festival-memories` 上；合并了 `codex/ambient-windows-tests / 5a1ef78`，按用户决定撤回“先写 remember”、用 Windows 的原话正文；是代码的最前端，待 Windows 验收节日记忆 | 已推送 |
 | `m2c-scheduler` | 调度器：模型网关和后台场景，建在 `remember-source` 上；设计稿待确认 | `/Users/a11/Documents/ChatGPT/stardew-agent-gifts` |
+| `codex/festival-windows-tests` | 基于 `m2c-scheduler / ca8b592` 的 Windows 自动验收：169/169 Node、28/28 C#，新增节日进程恢复、分叉和原版字段读取检查；游戏内待用户验收，未推送 | Windows：`E:\stardew-agent` |
 | `codex/offscreen-windows-tests` | `main / 35affae` + `less-fabrication / f98222c`，上一轮组合验收与赠礼开关修复；`bda43f3` 已推送，修复已摘到 `festival-memories`，未合入 main | Windows 历史验收分支 |
 | `codex/ambient-windows-tests` | 上轮三处修复 + 慢回复、原话来源、完成动作过滤、事件语义修复；完整真实 176 项通过；`5a1ef78` 已推送，已合并进 `remember-source` | Windows：`E:\stardew-agent` |
 
@@ -229,7 +232,7 @@ dotnet build mod/StardewAgentBridge   # 编译 Mod，编译完自动装进游戏
 7. **已合入 `main`（2026-10-20）**：用户提交组合验收结果并要求合并后，`codex/new-parts-windows-tests` / `908e73b` 快进合入；Mac 上复核 125/125、类型检查、构建和 Release 编译。包含第四至七步、公开家庭信息、临时日志清理，以及 Windows 修的后端碰面冷却与失败读档保护。自然婚礼/电影等剧情、全部 NPC 自然游玩和模型事实可靠性仍按 [本轮报告](test-results/2026-10-20-new-parts-windows.md) 的覆盖边界观察。
 8. **好感分档与在场传话已合入 `main`（2026-10-21）**：`codex/news-windows-tests` / `7ff44ea` 的统一脚本 115 项真机检查通过，含两处修复；按用户要求快进合入，Mac 复核 132/132、类型检查、构建和 Release 编译。结果、失败保留与范围见 [10 月 21 日报告](test-results/2026-10-21-news-windows.md)。
 9. **本轮修复已推送**：当前功能分支 154/154、22/22、固定完整 166 项、真实完整 176 项通过，已更新本机。推送后已检查节日记忆和 remember 字段顺序分支，隔离快照 156/156 / 类型检查通过；新功能未合并、未做节日游戏验收。原话与概括的语境取舍见[新提交记录](test-results/2026-10-21-new-commits.md)。历史污染和自由内容限制见[最新报告](test-results/2026-10-21-reliability-windows.md)。
-10. **待验收**：节日记忆在最前端 `remember-source`，它已合并 `codex/ambient-windows-tests / 5a1ef78`（记忆正文按用户决定用 Windows 的原话），切到它测，清单见 `festival-memories.md` §9。
+10. **节日自动检查通过，待游戏内验收**：本地 `codex/festival-windows-tests` 已包含远端 `ca8b592` 及 Windows 原话等修复，169/169 Node、28/28 C#、类型检查、构建和 Release 0 警告/错误；没有部署新版本或重启正常后端。用户的游戏内清单见 `festival-memories.md` §9 和[本轮报告](test-results/2026-10-21-festival-windows.md) §5。调度器仍是待确认设计；本地测试和文档尚未推送、未合入 main。
 
 ## 8. 文档索引
 
@@ -237,6 +240,7 @@ dotnet build mod/StardewAgentBridge   # 编译 Mod，编译完自动装进游戏
 |---|---|
 | `docs/test-results/2026-10-21-ambient-windows.md` | 同图小动作、群体事件与原生疏远状态；三处修复、149/22 检查、真实定向内容和完整组合超时失败 |
 | `docs/test-results/2026-10-21-new-commits.md` | 修复推送之后的节日记忆、字段顺序分支检查，156 项隔离检查和来源策略取舍 |
+| `docs/test-results/2026-10-21-festival-windows.md` | 最新合并与原话策略检查、169/28 自动验收、节日进程恢复和原版字段模拟、用户游戏内清单及保留的夹具失败 |
 | `docs/reliability-fixes.md` | 慢回复、记忆原话、小动作完成过滤和科罗布斯事件语义的兼容修复及 token 实测 |
 | `docs/test-results/2026-10-21-reliability-windows.md` | 154/22 检查、固定 166/真实 176 项、污染实际拦截、原生边界和保留的脚本失败 |
 | `docs/test-results/2026-10-21-offscreen-windows.md` | 后台两手传播、遗留清理与 high 组合测试，赠礼开关修复和未选项记忆污染 |

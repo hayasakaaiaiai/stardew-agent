@@ -84,7 +84,7 @@ void Test(string name, Action body)
     catch (Exception error)
     {
         failures++;
-        Console.WriteLine("FAIL " + name + ": " + error.Message);
+        Console.WriteLine("FAIL " + name + ": " + error.GetBaseException());
     }
 }
 
@@ -469,6 +469,8 @@ Test("a festival's results are packed once it ends, wait for the conversation to
     Check(Get(mod, "festivalWatch") is null && Get(mod, "festivalDone") is null && Get(mod, "festivalPending") is null,
         "A new load/day kept an old festival.");
 });
+
+FestivalReadChecks.Run(modAssembly, gameAssembly, Test);
 
 Console.WriteLine($"Mod flow checks: {checks - failures}/{checks} passed.");
 return failures == 0 ? 0 : 1;
