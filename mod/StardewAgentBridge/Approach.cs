@@ -47,6 +47,7 @@ internal sealed partial class ModEntry
             this.Origin = npc.Position;
             this.OriginTile = npc.TilePoint;
             this.Facing = npc.FacingDirection;
+            this.Destroys = npc.willDestroyObjectsUnderfoot;
         }
 
         public NPC Npc { get; }
@@ -54,6 +55,8 @@ internal sealed partial class ModEntry
         public Vector2 Origin { get; }
         public Point OriginTile { get; }
         public int Facing { get; }
+        /// <summary>The vanilla object-breaking walk, switched off meanwhile.</summary>
+        public bool Destroys { get; }
         public ApproachPhase Phase;
         public ApproachController? Controller;
         public int WaitFrom;
@@ -167,6 +170,8 @@ internal sealed partial class ModEntry
     private void StartApproach(NPC npc, GameLocation location)
     {
         Approach a = new(npc, location);
+        // Vanilla NPCs walk through objects and break them; only on their own routes, not on the way to the player.
+        npc.willDestroyObjectsUnderfoot = false;
         Stack<Point>? path = PathFindController.findPath(npc.TilePoint, Game1.player.TilePoint, NextToPlayer, location, npc, ApproachPathLimit);
         // Behind a counter or too far round: call out from where it stands.
         if (path is null || path.Count - 1 > ApproachMaxSteps)
@@ -267,17 +272,12 @@ internal sealed partial class ModEntry
         NPC npc = a.Npc;
         if (npc.temporaryController == a.Controller)
             npc.temporaryController = null;
+        npc.willDestroyObjectsUnderfoot = a.Destroys;
         if (!restore || npc.currentLocation != a.Location)
             return;
         npc.Halt();
         npc.Position = a.Origin;
         npc.faceDirection(a.Facing);
-        // A stop that came due meanwhile was only queued; set off now, as vanilla does when its own temporary controller ends.
-        if (npc.queuedSchedulePaths.Count > 0 && npc.controller is null)
-        {
-            npc.currentScheduleDelay = -1f;
-            npc.checkSchedule(Game1.timeOfDay);
-            npc.currentScheduleDelay = 0f;
-        }
+        ResumeSchedule(npc);
     }
 }

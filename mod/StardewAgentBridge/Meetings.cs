@@ -38,6 +38,8 @@ internal sealed partial class ModEntry
         ["博物馆"] = new[] { ("ArchaeologyHouse", 11, 9, 0), ("ArchaeologyHouse", 16, 9, 0) },
         ["星之果实餐吧"] = new[] { ("Saloon", 20, 19, 3), ("Saloon", 16, 20, 0) },
         ["杂货店"] = new[] { ("SeedShop", 13, 20, 0), ("SeedShop", 10, 20, 0) },
+        // Worked out when needed: the schedule only reaches the bus stop by the farm gate (FarmVisits.cs).
+        [FarmPlace] = Array.Empty<(string, int, int, int)>(),
     };
 
     private sealed class Meeting
@@ -63,12 +65,29 @@ internal sealed partial class ModEntry
         public bool Arrived;
         public bool Met;
         public bool Reported;
+        public bool Farm => this.Place == FarmPlace;
+        /// <summary>Lives on the farm already, so its schedule is left alone (FarmVisits.cs).</summary>
+        public bool Spouse;
+        /// <summary>Close enough to do the farm chores.</summary>
+        public bool Helps;
+        public FarmHelp.Done? Helped;
+        /// <summary>A farm visit: 0 on the way, 1 on the farm, 2 walking out, 3 gone.</summary>
+        public int Stage;
+        /// <summary>Which of the place's spots, counting others meeting there today.</summary>
+        public int Slot;
+        /// <summary>The vanilla object-breaking walk, switched off on the farm; null when not changed.</summary>
+        public bool? Destroys;
+        public ApproachController? Hold;
     }
 
     /// <summary>Game name → today's appointment.</summary>
     private readonly Dictionary<string, Meeting> meetings = new(StringComparer.OrdinalIgnoreCase);
 
-    private void ClearMeetings() => this.meetings.Clear();
+    private void ClearMeetings()
+    {
+        this.ReleaseFarmVisitors();
+        this.meetings.Clear();
+    }
 
     /// <summary>HHMM ninety minutes after the agreed time, at 22:00 at the latest.</summary>
     private static int MeetingLeave(int time) => Math.Min(Utility.ModifyTime(time, MeetMinutes), MeetEnd);
@@ -122,18 +141,32 @@ internal sealed partial class ModEntry
     private void ApplyMeeting(Meeting m)
     {
         NPC? npc = Game1.getCharacterFromName(m.Npc);
-        string? why = npc is null || npc.Schedule is null || npc.ignoreScheduleToday || npc.IsInvisible ? "今天没有原版日程"
-            : GameState.Relation(npc) is "married" or "roommate" ? "配偶和室友的日程不改"
+        string relation = npc is null ? "stranger" : GameState.Relation(npc);
+        bool spouse = relation is "married" or "roommate";
+        string? why = npc is null || npc.IsInvisible ? "今天不在"
+            : spouse && !m.Farm ? "配偶和室友的日程不改"
+            : !spouse && (npc.Schedule is null || npc.ignoreScheduleToday) ? "今天没有原版日程"
             : Utility.ModifyTime(Game1.timeOfDay, MeetEarlyMinutes) >= m.Time ? "收到时已经来不及"
             : null;
         int taken = this.meetings.Values.Count(other => other != m && other.Applied && other.Place == m.Place);
-        if (why is null && taken >= MeetPlaces[m.Place].Length)
+        if (why is null && !m.Farm && taken >= MeetPlaces[m.Place].Length)
             why = "这个地点的位置都有人约了";
         if (why is null)
         {
-            m.Spot = MeetPlaces[m.Place][taken];
-            try { why = this.PlanMeeting(npc!, m); }
-            catch (Exception ex) { why = "算不出路线：" + ex.Message; }
+            m.Slot = taken;
+            m.Helps = m.Farm && (spouse || relation is "dating" or "engaged" || GameState.Hearts(npc!) >= FarmHelpHearts);
+            m.Spouse = spouse;
+            if (spouse)
+                m.Depart = m.Time;
+            else
+            {
+                try
+                {
+                    m.Spot = m.Farm ? ("BusStop", FarmGates().BusArrival.X, FarmGates().BusArrival.Y, 3) : MeetPlaces[m.Place][taken];
+                    why = this.PlanMeeting(npc!, m);
+                }
+                catch (Exception ex) { why = "算不出路线：" + ex.Message; }
+            }
         }
         if (why is not null)
         {
@@ -166,14 +199,15 @@ internal sealed partial class ModEntry
             => npc.pathfindToNextScheduleLocation(key, from.Map, from.Tile.X, from.Tile.Y, spot.Map, spot.X, spot.Y, spot.Facing, null, null);
 
         // Setting off earlier can mean setting off from an earlier stop; settle in at most two more rounds.
+        int farmSteps = m.Farm ? FarmWalkSteps() : 0;
         var from = StopBefore(m.Time, inclusive: false);
         SchedulePathDescription go = Go(from);
-        int depart = MeetingDeparture(m.Time, TravelMinutes(go.route), now);
+        int depart = MeetingDeparture(m.Time, TravelMinutes(go.route, farmSteps), now);
         for (int round = 0; round < 2 && StopBefore(depart, inclusive: false) != from; round++)
         {
             from = StopBefore(depart, inclusive: false);
             go = Go(from);
-            depart = MeetingDeparture(m.Time, TravelMinutes(go.route), now);
+            depart = MeetingDeparture(m.Time, TravelMinutes(go.route, farmSteps), now);
         }
         if (StopBefore(depart, inclusive: false) != from)
             return "出发的位置算不准";
@@ -196,9 +230,9 @@ internal sealed partial class ModEntry
     }
 
     /// <summary>The same estimate as vanilla's arrival-time schedules (NPC.parseMasterScheduleImpl): two pixels a tick.</summary>
-    private static int TravelMinutes(Stack<Point>? route)
+    private static int TravelMinutes(Stack<Point>? route, int extraSteps = 0)
     {
-        int steps = 0;
+        int steps = extraSteps;
         Point? previous = null;
         foreach (Point point in route ?? new Stack<Point>())
         {
@@ -214,7 +248,11 @@ internal sealed partial class ModEntry
     private bool AtMeeting(NPC npc)
     {
         if (!this.meetings.TryGetValue(npc.Name, out Meeting? m) || !m.Applied || m.Reported || Game1.timeOfDay < m.Depart
-            || Game1.timeOfDay > m.Leave || npc.currentLocation?.Name != m.Spot.Map)
+            || Game1.timeOfDay > m.Leave)
+            return false;
+        if (m.Farm)
+            return m.Stage == 1 && (npc.currentLocation is Farm || (m.Spouse && npc.currentLocation is StardewValley.Locations.FarmHouse));
+        if (npc.currentLocation?.Name != m.Spot.Map)
             return false;
         return Math.Abs(npc.TilePoint.X - m.Spot.X) + Math.Abs(npc.TilePoint.Y - m.Spot.Y) <= 2;
     }
@@ -223,19 +261,33 @@ internal sealed partial class ModEntry
     {
         if (Game1.getCharacterFromName(m.Npc) is not NPC npc)
             return;
+        if (m.Farm)
+        {
+            this.WatchFarm(m, npc);
+            return;
+        }
         if (!m.Arrived && npc.controller is null && !npc.isMoving() && this.AtMeeting(npc))
             m.Arrived = true;
-        if (m.Arrived && !m.Met && this.AtMeeting(npc) && Game1.currentLocation == npc.currentLocation && Context.IsPlayerFree
-            && Vector2.Distance(npc.Tile, Game1.player.Tile) <= MeetGreetRange)
-        {
-            m.Met = true;
-            npc.faceGeneralDirection(Game1.player.getStandingPosition());
-            npc.doEmote(Character.happyEmote);
-            npc.showTextAboveHead(VanillaDialogue.Escape(Game1.player.Name) + "！");
-        }
+        this.GreetAtMeeting(m, npc);
         if (Game1.timeOfDay >= m.Leave)
             this.ReportMeeting(m, m.Leave);
     }
+
+    /// <summary>Once, when the player comes within a few tiles of the NPC waiting there.</summary>
+    private void GreetAtMeeting(Meeting m, NPC npc)
+    {
+        if (!m.Arrived || m.Met || !this.AtMeeting(npc) || Game1.currentLocation != npc.currentLocation || !Context.IsPlayerFree
+            || Vector2.Distance(npc.Tile, Game1.player.Tile) > MeetGreetRange)
+            return;
+        m.Met = true;
+        npc.faceGeneralDirection(Game1.player.getStandingPosition());
+        npc.doEmote(Character.happyEmote);
+        npc.showTextAboveHead(VanillaDialogue.Escape(Game1.player.Name) + "！");
+    }
+
+    /// <summary>The chores this NPC did on the farm today, for its talk there.</summary>
+    private Dictionary<string, object?>? MeetingHelped(NPC npc)
+        => this.meetings.TryGetValue(npc.Name, out Meeting? m) && m.Helped is FarmHelp.Done done ? HelpedFields(done) : null;
 
     /// <summary>Talking to the NPC at the place counts as coming; the backend is told so the talk knows too.</summary>
     private bool MeetingTalk(NPC npc)
@@ -262,9 +314,12 @@ internal sealed partial class ModEntry
             this.Monitor.Log($"{m.Npc} 没走到{m.Place}，不记这次约定。", LogLevel.Info);
             return;
         }
-        this.Send("meet.ended", new()
+        Dictionary<string, object?> fields = new()
         {
             ["npc"] = m.Npc, ["place"] = m.Place, ["time"] = m.Time, ["left"] = left, ["met"] = m.Met, ["date"] = GameState.Date(),
-        });
+        };
+        if (m.Helped is FarmHelp.Done done)
+            fields["helped"] = HelpedFields(done);
+        this.Send("meet.ended", fields);
     }
 }

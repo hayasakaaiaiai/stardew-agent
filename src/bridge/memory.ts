@@ -378,9 +378,10 @@ export class GameSave {
       const npcId = message.npc.toLowerCase();
       const fits = this.state.phase === 'open' && absoluteDay(message.date) === this.day
         && (SOCIAL_NPCS as readonly string[]).includes(npcId) && message.place in MEET_PLACES;
-      const note = fits ? meetingMemory({ time: message.time, place: message.place, met: message.met, left: message.left }) : undefined;
+      const note = fits ? meetingMemory({ time: message.time, place: message.place, met: message.met, left: message.left,
+        ...(message.helped ? { helped: message.helped } : {}) }) : undefined;
       if (note) await this.scope!.agent(npcId).record({ seq: message.seq, gameTime: gameMinutes(message.date),
-        log: { meeting: { place: message.place, time: message.time, left: message.left, met: message.met }, bridgeReceipt: JSON.parse(canonical(receipt)) },
+        log: { meeting: { place: message.place, time: message.time, left: message.left, met: message.met, ...(message.helped ? { helped: { ...message.helped } } : {}) }, bridgeReceipt: JSON.parse(canonical(receipt)) },
         memories: [note] });
       this.addReceipt(receipt);
       await this.persist();

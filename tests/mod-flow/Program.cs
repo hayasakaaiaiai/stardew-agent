@@ -543,5 +543,21 @@ Test("appointments leave ninety minutes later but by 22:00, and set off early en
     Check(Depart(1400, 120, 1235) == 1240 && Depart(1400, 120, 1240) == 1250, "Set off in the past or at a tick already checked.");
 });
 
+Test("farm chores are worded like the backend, and the farm is a place an appointment can be at", () =>
+{
+    Type doneType = modAssembly.GetType("StardewAgentBridge.FarmHelp+Done", throwOnError: true)!;
+    string Text(int watered, int harvested, int fed, int ponds) => (string)modType.GetMethod("FarmHelpText", BindingFlags.Static | BindingFlags.NonPublic)!
+        .Invoke(null, new[] { Activator.CreateInstance(doneType, watered, harvested, fed, ponds) })!;
+    Check(Text(120, 35, 8, 2) == "浇了 120 格水、收了 35 个作物放进农舍门口的箱子、给动物添了 8 份干草、收了 2 个鱼塘的产物放进箱子"
+        && Text(0, 4, 0, 0) == "收了 4 个作物放进农舍门口的箱子" && Text(0, 0, 0, 0) == "农场里没什么要干的活",
+        "The game's message differs from what the NPC is told it did (src/agent/meetings.ts helpedText).");
+    object mod = BubbleMod();
+    Set(mod, "meetings", Activator.CreateInstance(modType.GetField("meetings", Fields)!.FieldType, StringComparer.OrdinalIgnoreCase)!);
+    using JsonDocument packet = JsonDocument.Parse(JsonSerializer.Serialize(new { type = "day.meetings", lineageId = "farm", loadNonce = "current", seq = 0,
+        meetings = new[] { new { npc = "abigail", time = 1000, place = "农场" } } }));
+    Invoke(mod, "HandleMeetings", "day.meetings", packet.RootElement);
+    Check(((System.Collections.IDictionary)Get(mod, "meetings")!).Contains("Abigail"), "A farm appointment was dropped.");
+});
+
 Console.WriteLine($"Mod flow checks: {checks - failures}/{checks} passed.");
 return failures == 0 ? 0 : 1;

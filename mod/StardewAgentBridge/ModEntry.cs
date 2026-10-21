@@ -233,7 +233,11 @@ internal sealed partial class ModEntry : Mod
         };
         GameState.AddSchedule(fields, npc);
         if (this.MeetingTalk(npc))
+        {
             fields["atMeeting"] = true;
+            if (this.MeetingHelped(npc) is { } helped)
+                fields["helped"] = helped;
+        }
         this.talk.RequestSeq = this.Send("talk.open", fields);
         this.BeginWaiting(this.talk);
     }

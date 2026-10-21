@@ -6,6 +6,7 @@ import { type Festival, FESTIVALS, type GrangeResult, SOUP_LEVELS } from '../age
 import { GIFT_TASTES, type GiftTaste } from '../agent/gifts.ts';
 import { MAX_STOPS, type ScheduleStop } from '../agent/schedule.ts';
 import type { DeliveredLetter } from '../agent/letters.ts';
+import type { Helped } from '../agent/meetings.ts';
 import type { SceneLine } from '../agent/scene.ts';
 import type { Relation } from '../services/roster/index.ts';
 
@@ -91,6 +92,8 @@ export type ModMessage =
     schedule?: ScheduleStop[];
     /** It is at the place it agreed to meet the player, at the agreed time (docs/npc-meetings.md). */
     atMeeting?: boolean;
+    /** Farm chores it did there today (docs/npc-farm-help.md). */
+    helped?: Helped;
     world: WorldSnapshot;
   } & Envelope)
   | ({ type: 'talk.say'; npc: string; text: string; date: GameDate } & Envelope)
@@ -108,7 +111,7 @@ export type ModMessage =
   /** What happened at a festival the player just left (docs/festival-memories.md); game names. Reliable, acknowledged. */
   | ({ type: 'festival.ended' } & FestivalEnded & Envelope)
   /** An appointment the NPC went to is over (docs/npc-meetings.md); `left` is HHMM. Reliable, acknowledged. */
-  | ({ type: 'meet.ended'; npc: string; place: string; time: number; left: number; met: boolean; date: GameDate } & Envelope);
+  | ({ type: 'meet.ended'; npc: string; place: string; time: number; left: number; met: boolean; helped?: Helped; date: GameDate } & Envelope);
 
 export interface FestivalEnded {
   festival: Festival;
@@ -209,6 +212,11 @@ export function parseModMessage(raw: string): ModMessage {
     if (int(p!.dayEnded, 'commit.dayEnded') < 1) fail('commit.dayEnded is invalid');
   };
   const weather = (value: unknown) => { if (!WEATHERS.has(value as Weather)) fail('weather is invalid'); };
+  const helped = (value: unknown) => {
+    const h = value as Record<string, unknown> | null | undefined;
+    if (h !== undefined && (!h || typeof h !== 'object' || Array.isArray(h)
+      || ['watered', 'harvested', 'fed', 'ponds'].some(key => !Number.isSafeInteger(h[key]) || (h[key] as number) < 0 || (h[key] as number) > 100000))) fail('helped is invalid');
+  };
   const isName = (value: unknown) => typeof value === 'string' && value.length > 0 && value.length <= 50 && !/[\u0000-\u001f]/u.test(value);
   const isSchedule = (value: unknown) => Array.isArray(value) && value.length <= MAX_STOPS && value.every((item) => {
     const stop = item as Record<string, unknown> | null;
@@ -267,6 +275,7 @@ export function parseModMessage(raw: string): ModMessage {
       if (data.inPersonGifts !== undefined && typeof data.inPersonGifts !== 'boolean') fail('inPersonGifts must be a boolean');
       if (data.schedule !== undefined && !isSchedule(data.schedule)) fail('schedule must be a list of stops');
       if (data.atMeeting !== undefined && typeof data.atMeeting !== 'boolean') fail('atMeeting must be a boolean');
+      helped(data.helped);
       world(data.world);
       break;
     }
@@ -279,6 +288,7 @@ export function parseModMessage(raw: string): ModMessage {
         if (time < 0 || time > 2600 || time % 100 > 59) fail(`${key} is invalid`);
       }
       if (typeof data.met !== 'boolean') fail('met must be a boolean');
+      helped(data.helped);
       date(data.date);
       break;
     }
