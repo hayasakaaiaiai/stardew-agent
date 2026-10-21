@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json;
 using Microsoft.Xna.Framework;
 using StardewModdingAPI;
@@ -68,6 +69,10 @@ internal sealed partial class ModEntry
         this.RecordBubbleTestPacket();
         return true;
     }
+
+    /// <summary>Whether last night's lines for this NPC are still waiting to be shown today.</summary>
+    private bool HasBubblesLeft(string name) => this.config.ShowBubbles && this.bubbles.TryGetValue(name, out List<(string Text, string Emote)>? lines)
+        && lines.Any(line => !this.bubblesShown.Contains(name + "\n" + line.Text));
 
     /// <summary>At most one line per call, for the first NPC nearby that has one due.</summary>
     private void TickBubbles()

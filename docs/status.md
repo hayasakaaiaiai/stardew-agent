@@ -18,7 +18,7 @@
 | 里程碑 | 状态 | 已完成 | 还没做 | 文档 |
 |---|---|---|---|---|
 | M1 存储与事务 | 完成 | 记忆内核；当天事务；存档与回滚；崩溃恢复；过期临时日志/检查点清理，失败新读档保护旧日志（2026-10-20 合入 `main`） | — | `README.md`、`design.md` §16 |
-| M2 Agent | 第一至八步、公开家庭信息、好感分档已合入 | 对话、夜间整合、次日计划、气泡、寄信、恢复；碰面、送礼、好感（按熟悉程度分档）、当面赠礼、家庭信息、在场传话（2026-10-21 Windows 验收后合入 `main`） | 不在场传话（`m2c-offscreen-news`）与遗留清理/全部改用 high（`legacy-cleanup`）待验收；观察正常游玩和自由生成内容 | `dialogue-prototype.md`、`nightly-consolidation.md`、`next-day-plans.md`、`npc-bubbles.md`、`npc-mail.md`、`npc-chat.md`、`npc-gifts.md`、`npc-friendship.md`、`npc-in-person-gifts.md`、`world-public-facts.md`、`npc-news.md`、`offscreen-news.md`、`legacy-cleanup.md` |
+| M2 Agent | 第一至八步、公开家庭信息、好感分档已合入 | 对话、夜间整合、次日计划、气泡、寄信、恢复；碰面、送礼、好感（按熟悉程度分档）、当面赠礼、家庭信息、在场传话（2026-10-21 Windows 验收后合入 `main`） | 不在场传话（`m2c-offscreen-news`）、遗留清理/全部改用 high（`legacy-cleanup`）和同图小动作（`m2c-ambient-lines`）待验收；观察正常游玩和自由生成内容 | `dialogue-prototype.md`、`nightly-consolidation.md`、`next-day-plans.md`、`npc-bubbles.md`、`npc-mail.md`、`npc-chat.md`、`npc-gifts.md`、`npc-friendship.md`、`npc-in-person-gifts.md`、`world-public-facts.md`、`npc-news.md`、`offscreen-news.md`、`legacy-cleanup.md`、`ambient-lines.md` |
 | M3 接入游戏 | 完成（Windows） | 游戏里"继续聊"；真实保存/退出、跨天记忆、回滚、后端进程重启与旧档分叉；拼音输入法、原版台词保留、取消三项手测通过 | — | `game-bridge.md`、`game-memory.md` |
 | M4 内容 | 角色卡已完成 | 34 张角色卡（已审阅），"看过事件之后"共 201 条 | 物品名到 ID 的对应、各动作的上限 | `design.md` §11 |
 
@@ -66,7 +66,7 @@ M2b 第八步“NPC 之间传话”在 `m2b-npc-news` 上实现：当晚和玩�
 
 压低自由编造（`less-fabrication`，建在 `scene-player-gender` 上）：8 道诱导补写的题实测 24 次里 7 次有没依据的小细节（紫水晶摆在哪、镇上谁夸了你），两种规则（35–50 token）都没有减少，不加；夜间 `share` 把普通道谢当新鲜事（4 次 3 次），改为代码过滤“谢”（谢恩除外），复测 4/4 拦下、真新鲜事照传，0 token。见 [legacy-cleanup.md](legacy-cleanup.md) §5。
 
-同图小动作（`m2c-ambient-lines`，建在 `less-fabrication` 上）设计稿，等用户确认：玩家附近最多 4 位 NPC 合并调用一次，每人最多冒一句、可以每天跟农场主打一次招呼；每位 NPC 两个游戏小时最多一次、两次调用隔 30 游戏分钟、一天最多 12 次；只显示，不写记忆。真实模型 21 次平均输入 799、输出 248 token、2.9 秒，一天最多约 9.6k 输入、3.0k 输出。见 [ambient-lines.md](ambient-lines.md)。
+同图小动作（`m2c-ambient-lines`，建在 `less-fabrication` 上）用户确认设计后已实现，等 Windows 验收：玩家附近最多 4 位 NPC 合并调用一次，每人最多冒一句、可以每天跟农场主打一次招呼；每位 NPC 两个游戏小时最多一次、两次调用隔 30 游戏分钟、一天最多 12 次；只显示，不写记忆。真实模型 21 次平均输入 799、输出 248 token、2.9 秒，一天最多约 9.6k 输入、3.0k 输出。最终代码真实模型 12 次平均 785 / 220 token、2.4 秒，过滤后每次 2.6 句。141/141、类型检查、构建和 Release 编译通过，新增的 C# 流程检查要在 Windows 跑。见 [ambient-lines.md](ambient-lines.md)。
 
 ## 3. 分支
 
@@ -96,7 +96,7 @@ GitHub 私有仓库：https://github.com/hayasakaaiaiai/stardew-agent
 | `m2c-offscreen-news`、`legacy-cleanup` | 不在场传话；遗留清理与全部改用 high。已变基到新 `main`，待独立验收 | 已提交 |
 | `scene-player-gender` | 碰面聊天补上玩家性别，建在 `legacy-cleanup` 上 | 已提交 |
 | `less-fabrication` | 自由编造实测（不加规则）与 `share` 道谢过滤，建在 `scene-player-gender` 上 | 已提交 |
-| `m2c-ambient-lines` | 同图小动作，建在 `less-fabrication` 上；设计稿待确认 | `/Users/a11/Documents/ChatGPT/stardew-agent-gifts` |
+| `m2c-ambient-lines` | 同图小动作，建在 `less-fabrication` 上，现在是最前端；待 Windows 验收 | `/Users/a11/Documents/ChatGPT/stardew-agent-gifts` |
 
 Windows 上的目录是 `E:\stardew-agent`。当前 `codex/news-windows-tests` 从上一轮 `908e73b` 建立，测试期间发现主线更新后先备份改动、变基到 `origin/main / ed9eb28`，再纳入最新 `m2b-npc-news / dc6d1d2`，保留上游新加的动态好感预期与本轮真机夹具。此前所有本地验收分支及 `codex/next-day-plans` / `2260625` 均保留。
 
@@ -206,10 +206,10 @@ dotnet build mod/StardewAgentBridge   # 编译 Mod，编译完自动装进游戏
 3. **M2b 第四步：NPC 碰面聊天**：Windows 组合验收通过，后端 60 分钟冷却/日期修复在 `codex/social-windows-tests`；继续观察镇上自然碰面，见 [npc-chat.md](npc-chat.md) §8。
 4. **M2b 第五步：送礼记忆**：原版赠送、保存、回滚和真实回忆的组合验收通过；生日、任务与节日场景的覆盖边界见 [npc-gifts.md](npc-gifts.md) §7。Mod 与后端均已更新到协议 3。
 5. **M2b 第六步：聊天影响好感**：增减、上限、重复消息、保存与回滚通过，见 [npc-friendship.md](npc-friendship.md) §8；已合入 `main`。按熟悉程度分档在 `m2b-friendship-by-hearts`。
-6. **自主行动**：第一步不在场传话待验收；第二步[同图小动作](ambient-lines.md)设计稿等用户确认。
+6. **自主行动**：第一步不在场传话待验收；第二步[同图小动作](ambient-lines.md)已实现，待 Windows 验收（清单见该文档 §8）。
 7. **已合入 `main`（2026-10-20）**：用户提交组合验收结果并要求合并后，`codex/new-parts-windows-tests` / `908e73b` 快进合入；Mac 上复核 125/125、类型检查、构建和 Release 编译。包含第四至七步、公开家庭信息、临时日志清理，以及 Windows 修的后端碰面冷却与失败读档保护。自然婚礼/电影等剧情、全部 NPC 自然游玩和模型事实可靠性仍按 [本轮报告](test-results/2026-10-20-new-parts-windows.md) 的覆盖边界观察。
 8. **好感分档与在场传话已合入 `main`（2026-10-21）**：`codex/news-windows-tests` / `7ff44ea` 的统一脚本 115 项真机检查通过，含两处修复；按用户要求快进合入，Mac 复核 132/132、类型检查、构建和 Release 编译。结果、失败保留与范围见 [10 月 21 日报告](test-results/2026-10-21-news-windows.md)。
-9. **待验收**：`m2c-offscreen-news`（不在场传话）和 `legacy-cleanup`（字符串记忆、气泡过滤、没发生过的事件、0 心门槛、全部改用 high）已变基到新 `main`，切到最前端的 `less-fabrication` 一起测；不能将 `dc6d1d2` 的 low/disabled 数据当作它们已通过。
+9. **待验收**：`m2c-offscreen-news`（不在场传话）和 `legacy-cleanup`（字符串记忆、气泡过滤、没发生过的事件、0 心门槛、全部改用 high）已变基到新 `main`，切到最前端的 `m2c-ambient-lines`（含性别修正、压低编造和同图小动作）一起测；不能将 `dc6d1d2` 的 low/disabled 数据当作它们已通过。
 
 ## 8. 文档索引
 

@@ -60,6 +60,7 @@ internal sealed partial class ModEntry
     {
         this.ClearBubbles();
         this.ClearScenes();
+        this.ClearAmbient();
         this.ClearTown();
         this.ResetGifts();
         this.ClearFriendshipToday();
@@ -95,6 +96,7 @@ internal sealed partial class ModEntry
     {
         this.ClearBubbles();
         this.ClearScenes();
+        this.ClearAmbient();
         this.ClearTown();
         this.ResetGifts();
         this.ClearFriendshipToday();
@@ -137,6 +139,7 @@ internal sealed partial class ModEntry
     {
         this.ClearBubbles();
         this.ClearScenes();
+        this.ClearAmbient();
         this.ClearTown();
         this.letters = new();
         this.talk = null; this.offerFor = null; this.startFor = null;

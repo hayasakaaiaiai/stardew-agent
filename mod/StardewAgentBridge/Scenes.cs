@@ -120,6 +120,7 @@ internal sealed partial class ModEntry
     private void TryStartScene()
     {
         if (!this.config.NpcChat || this.sceneRequestSeq != 0 || this.sceneLines.Count > 0
+            || this.ambientRequestSeq != 0 || this.ambientLines.Count > 0
             || this.scenesToday >= ScenesPerDay || !this.CanChat || !Context.IsPlayerFree || Game1.eventUp || this.talk is not null
             || Game1.currentLocation is not GameLocation location)
             return;
@@ -144,6 +145,8 @@ internal sealed partial class ModEntry
                 this.sceneLocation = location;
                 this.sceneParticipants.Clear();
                 this.sceneParticipants.Add(near[i].Name); this.sceneParticipants.Add(near[j].Name);
+                // They just had their say; no ambient lines for them for a while (docs/ambient-lines.md).
+                this.ambientAskedAt[near[i].Name] = this.ambientAskedAt[near[j].Name] = Game1.timeOfDay;
                 this.sceneRequestSeq = this.Send("scene.request", new()
                 {
                     ["npcs"] = new[] { near[i].Name, near[j].Name },
