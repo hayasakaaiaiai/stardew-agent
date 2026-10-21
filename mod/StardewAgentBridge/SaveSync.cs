@@ -181,6 +181,8 @@ internal sealed partial class ModEntry
             this.bridge.Send(fields);
         if (type == "town.hour" && this.memoryTest is not null)
             this.townTestPackets.Add(new { seq = this.seq, time = Game1.timeOfDay, groups = fields["groups"], nonce = this.loadNonce, day = this.currentDay });
+        if (type == "ambient.request" && this.ambientTestRunning)
+            this.ambientTestPackets.Add(new { seq = this.seq, time = Game1.timeOfDay, npcs = fields["npcs"], nonce = this.loadNonce, day = this.currentDay });
         return this.seq;
     }
 

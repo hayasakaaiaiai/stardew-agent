@@ -22,7 +22,7 @@ internal sealed partial class ModEntry
     private const int AmbientNpcGapMinutes = 120;
     private const int AmbientCallGapMinutes = 30;
     private const int AmbientLineTicks = 180;
-    private const int AmbientReplyTicks = 600;
+    private const int AmbientReplyTicks = 60 * 60;
     private const int AmbientFaceMilliseconds = 3000;
 
     /// <summary>NPC name → game time it last went into a request.</summary>
@@ -36,6 +36,9 @@ internal sealed partial class ModEntry
     private uint nextAmbientLineTick;
     private uint ambientCurrentTick;
 
+    private bool AmbientBusy => this.ambientRequestSeq != 0 || this.ambientLines.Count > 0
+        || this.ambientCurrentTick < this.nextAmbientLineTick;
+
     private void ClearAmbient()
     {
         this.ambientAskedAt.Clear();
@@ -44,6 +47,7 @@ internal sealed partial class ModEntry
         this.ambientToday = 0;
         this.lastAmbientAt = -1;
         this.ambientRequestSeq = 0;
+        this.nextAmbientLineTick = 0;
     }
 
     private bool HandleAmbient(string type, JsonElement message)
@@ -75,12 +79,15 @@ internal sealed partial class ModEntry
     private void TickAmbient(UpdateTickedEventArgs e)
     {
         this.ambientCurrentTick = e.Ticks;
-        if (this.ambientLines.Count > 0 && e.Ticks >= this.nextAmbientLineTick)
+        if (this.ambientTestRunning) this.ambientTestUpdate = e;
+        if (this.config.AmbientLines && Context.IsPlayerFree && !Game1.eventUp && !Game1.isFestival() && this.talk is null
+            && this.ambientLines.Count > 0 && e.Ticks >= this.nextAmbientLineTick)
         {
             // A speaker who has left the map or wandered off is skipped; the others still speak.
             (string id, string to, string text, string emote) = this.ambientLines.Dequeue();
             NPC? npc = Game1.currentLocation?.characters.FirstOrDefault(c => c.Name.Equals(id, StringComparison.OrdinalIgnoreCase));
-            if (npc is not null && Vector2.Distance(npc.Tile, Game1.player.Tile) <= AmbientShowRange)
+            if (npc is not null && !npc.IsInvisible && !ColdShoulder(npc.Name)
+                && Vector2.Distance(npc.Tile, Game1.player.Tile) <= AmbientShowRange)
             {
                 if (to == "farmer")
                 {
@@ -92,6 +99,9 @@ internal sealed partial class ModEntry
                 npc.showTextAboveHead(text);
                 if (BubbleEmotes.TryGetValue(emote, out int emoteId))
                     npc.doEmote(emoteId);
+                if (this.ambientTestRunning)
+                    this.ambientTestShown.Add(new { npc = id, to, text, visible = this.BubbleText(npc), emote,
+                        currentEmote = npc.CurrentEmote, facing = npc.FacingDirection, time = Game1.timeOfDay, tick = e.Ticks, nonce = this.loadNonce });
                 this.bubbleShownAt[npc.Name] = Game1.timeOfDay;
                 this.nextAmbientLineTick = e.Ticks + AmbientLineTicks;
             }
@@ -105,8 +115,7 @@ internal sealed partial class ModEntry
 
     private void TryStartAmbient()
     {
-        if (!this.config.AmbientLines || this.ambientRequestSeq != 0 || this.ambientLines.Count > 0
-            || this.sceneRequestSeq != 0 || this.sceneLines.Count > 0
+        if (!this.config.AmbientLines || this.AmbientBusy || this.SceneBusy
             || this.ambientToday >= AmbientCallsPerDay || !this.CanChat || !Context.IsPlayerFree || Game1.eventUp || Game1.isFestival()
             || this.talk is not null || Game1.currentLocation is not GameLocation location)
             return;

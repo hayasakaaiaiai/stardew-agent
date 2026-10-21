@@ -1,5 +1,9 @@
 # 后台传话与遗留清理 Windows 组合验收
 
+> §6 的记忆来源问题随后按用户要求修复：新写入正文只取本轮玩家完整原话，旧污染条目没有批量重写。结果见 [来源修复报告](2026-10-21-reliability-windows.md)，本页保留原始失败记录。
+
+用户随后要求“推送之后看看新提交 继续测”，代码 `bda43f3` 已推送到 `codex/offscreen-windows-tests`；未合入 `main`。下文“未推送”保留验收完成时的历史状态。
+
 ## 1. 范围与复现
 
 工作分支 `codex/offscreen-windows-tests`，以已合入上一轮 Windows 修复的 `main / 35affae` 为基线，纳入以下提交链，旧验收分支保留：

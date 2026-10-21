@@ -175,12 +175,13 @@ test('a night replaces its notes, retires what the model names, and the next day
     assert.match(first, /第 1 年春季 17 日\n- 农场主：小林（女）\n- 你对农场主的好感：4 心；关系：朋友/);
     assert.match(first, /## 你以前对农场主的印象\n还没有/);
     assert.match(first, /- t1 玩家："记住玩家还没养宠物"\n- t2 NPC："好的1"/);
-    assert.match(first, /## 今天当场记下的\n- （重要度 4）玩家还没养宠物/);
+    assert.match(first, /## 今天当场记下的\n- （重要度 4）农场主说："记住玩家还没养宠物"/);
     assert.match(first, /## 以前的记忆\n（没有）/);
 
     await say('你好');
     assert.match(dialogue.system(), /## 你记得的事\n- 你对农场主的整体印象：忙碌但真诚的人\n- （昨天）农场主说："记住玩家还没养宠物"/);
-    assert.doesNotMatch(dialogue.system(), /- （昨天）玩家还没养宠物/, "the day's own note was replaced");
+    assert.equal(dialogue.system().split('- （昨天）农场主说："记住玩家还没养宠物"').length - 1, 1,
+      'the day and nightly notes cannot both be recalled');
     assert.doesNotMatch(dialogue.system(), /想问她要不要养只猫/, 'the plan stays out of dialogue');
 
     await say('记住玩家养了紫猫星糖');
@@ -213,7 +214,7 @@ test('two invalid answers keep the day pending and a later load can recover it',
     assert.equal(logs.filter((line) => line.includes('无法解析')).length, 2);
     assert.ok(!logs.some(line => line.startsWith('夜间整合完成')));
     await talk(roster, dialogue.model, save)('你好');
-    assert.match(dialogue.system(), /- （昨天）玩家最喜欢下雨天/);
+    assert.match(dialogue.system(), /- （昨天）农场主说："记住玩家最喜欢下雨天"/);
     assert.doesNotMatch(dialogue.system(), /整体印象/);
     await save.close();
     const recovered = nightlyModel([answer({ memories: [{ sources: ['t1'], importance: 4 }], impression: '喜欢下雨天的人' })]);

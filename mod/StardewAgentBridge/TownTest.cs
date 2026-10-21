@@ -32,7 +32,7 @@ internal sealed partial class ModEntry
 
     private bool TownGate(string stage)
     {
-        this.MemoryTestProgress("town", stage);
+        this.MemoryTestProgress(this.ambientTestRunning ? "ambient" : "town", stage);
         string path = Path.Combine(this.memoryTest!.RunDirectory, "control.json");
         if (!File.Exists(path)) return false;
         using JsonDocument data = JsonDocument.Parse(File.ReadAllText(path));
@@ -56,7 +56,7 @@ internal sealed partial class ModEntry
 
     private void TownPlace(string id, string map, int x, int y)
     {
-        NPC npc = Game1.getCharacterFromName(id);
+        NPC npc = this.SocialActor(id);
         npc.controller = null; npc.ignoreScheduleToday = true; npc.isSleeping.Value = false; npc.IsInvisible = false;
         Game1.warpCharacter(npc, Game1.getLocationFromName(map), new Vector2(x, y)); npc.Halt();
     }
@@ -242,7 +242,7 @@ internal sealed partial class ModEntry
                 if (!this.TownHourDone()) return;
                 if (!this.TownGate("town-final-ready")) return;
                 this.TownCheck(true, "town-expired-hour-acknowledged");
-                this.MemoryTestProgress("return-finish", "后台传话、记忆及旧功能组合验收完成。"); break;
+                this.BeginAmbientTest(); break;
         }
     }
 }

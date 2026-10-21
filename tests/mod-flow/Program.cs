@@ -402,6 +402,23 @@ Test("ambient packets reject stale loads and request numbers, skip malformed row
         && Queued() == 0 && ((System.Collections.IDictionary)Get(mod, "ambientAskedAt")!).Count == 0 && ((HashSet<string>)Get(mod, "ambientGreeted")!).Count == 0,
         "A new load/day retained the ambient budget, greetings or pending lines.");
 });
+Test("the final overhead line keeps its display slot and clearing the day releases it", () =>
+{
+    object mod = BubbleMod();
+    foreach (string field in new[] { "ambientAskedAt", "ambientGreeted", "ambientLines", "scenePairs", "sceneLines", "sceneParticipants" })
+        Set(mod, field, Activator.CreateInstance(modType.GetField(field, Fields)!.FieldType)!);
+    bool Busy(string property) => (bool)modType.GetProperty(property, Fields)!.GetValue(mod)!;
+    Set(mod, "ambientCurrentTick", (uint)100); Set(mod, "nextAmbientLineTick", (uint)280);
+    Check(Busy("AmbientBusy"), "Dequeuing the last ambient line released its slot before the display interval.");
+    Set(mod, "ambientCurrentTick", (uint)280);
+    Check(!Busy("AmbientBusy"), "The slot stayed busy after the final ambient line finished.");
+    Set(mod, "nextAmbientLineTick", (uint)400); Invoke(mod, "ClearAmbient");
+    Check(!Busy("AmbientBusy"), "A reload kept the old ambient display interval.");
+    Set(mod, "sceneCurrentTick", (uint)100); Set(mod, "nextSceneLineTick", (uint)280);
+    Check(Busy("SceneBusy"), "Dequeuing the last scene line released its slot before the display interval.");
+    Invoke(mod, "ClearScenes");
+    Check(!Busy("SceneBusy"), "A reload kept the old scene display interval.");
+});
 Test("disabled friendship does not change the per-NPC daily total", () =>
 {
     object mod = TestMod();

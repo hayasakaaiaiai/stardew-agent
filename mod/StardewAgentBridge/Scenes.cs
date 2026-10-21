@@ -20,7 +20,7 @@ internal sealed partial class ModEntry
     private const int ScenesPerDay = 4;
     private const int SceneGapMinutes = 60;
     private const int SceneLineTicks = 180;
-    private const int SceneReplyTicks = 600;
+    private const int SceneReplyTicks = 60 * 60;
 
     private readonly HashSet<string> scenePairs = new();
     private readonly Queue<(string Npc, string Text, string Emote)> sceneLines = new();
@@ -35,6 +35,9 @@ internal sealed partial class ModEntry
     private uint nextSceneLineTick;
     private uint sceneCurrentTick;
 
+    private bool SceneBusy => this.sceneRequestSeq != 0 || this.sceneLines.Count > 0 || this.sceneShowing != 0
+        || this.sceneCurrentTick < this.nextSceneLineTick;
+
     private void ClearScenes()
     {
         this.scenePairs.Clear();
@@ -45,6 +48,7 @@ internal sealed partial class ModEntry
         this.sceneShowing = 0;
         this.sceneParticipants.Clear();
         this.sceneLocation = null;
+        this.nextSceneLineTick = 0;
     }
 
     private bool HandleScenes(string type, JsonElement message)
@@ -120,7 +124,7 @@ internal sealed partial class ModEntry
     private void TryStartScene()
     {
         if (!this.config.NpcChat || this.sceneRequestSeq != 0 || this.sceneLines.Count > 0
-            || this.ambientRequestSeq != 0 || this.ambientLines.Count > 0
+            || this.AmbientBusy
             || this.scenesToday >= ScenesPerDay || !this.CanChat || !Context.IsPlayerFree || Game1.eventUp || this.talk is not null
             || Game1.currentLocation is not GameLocation location)
             return;

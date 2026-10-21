@@ -13,6 +13,8 @@ export const AMBIENT_CALLS_PER_DAY = 12;
 const MAX_LINES = 4;
 const MAX_CHARS = 24;
 const LETTERS = ['a', 'b', 'c', 'd'] as const;
+/** Past/completed actions have no game evidence in this display-only request. Keep potential complements and short exclamations. */
+const UNSUPPORTED_PROGRESS = /刚(?:刚|才)?|已经|曾经|昨(?:天|晚|夜)|上(?:次|回|周)|完成|做完|刷完|吹跑|(?<!不|得|就好|太[^，。！？、\s]{1,2})了/;
 
 /** The same for every call, so the day's calls share the cached prefix. */
 export const AMBIENT_RULES = `# 同一个地方
@@ -90,7 +92,7 @@ export function parseAmbient(content: string, people: readonly AmbientPerson[], 
     const { npc, to, text, emote } = (item ?? {}) as Record<string, unknown>;
     const speaker = byLetter(npc);
     const clean = typeof text === 'string' ? cleanBubbleText(text) : '';
-    if (!speaker || spoken.has(speaker.id) || !clean || Array.from(clean).length > MAX_CHARS) return [];
+    if (!speaker || spoken.has(speaker.id) || !clean || Array.from(clean).length > MAX_CHARS || UNSUPPORTED_PROGRESS.test(clean)) return [];
     const listener = to === 'farmer' ? 'farmer' : byLetter(to)?.id;
     const target = listener && listener !== speaker.id ? listener : 'self';
     const aboutPlayer = clean.includes('农场主') || (playerName !== '' && clean.includes(playerName));

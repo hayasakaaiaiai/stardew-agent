@@ -148,9 +148,9 @@ test('the group ten-heart events and Krobus at fourteen hearts are known by even
       assert.match(gated(id, [confront]), /### 已经发生过的事[\s\S]*\n- 群体 10 心，[^：]+对质：[^\n]*说好一起疏远农场主/, id);
     }
   }
-  assert.match(gated('krobus', []), /\n- 不提那次夜晚的海滩之行。/);
+  assert.match(gated('krobus', []), /\n- 没发生过夜晚的海滩之行；问起就说没有这回事，不当成秘密回避。/);
   assert.doesNotMatch(gated('krobus', []), /看过 14 心事件/, 'the condition is checked in code, not left to the model');
-  assert.doesNotMatch(gated('krobus', ['7771191']), /不提那次夜晚的海滩之行/);
+  assert.doesNotMatch(gated('krobus', ['7771191']), /没发生过夜晚的海滩之行/);
   assert.match(gated('krobus', ['7771191']), /\n- 14 心，夜晚的海滩：他晚上坐在海滩码头看月光水母/);
 });
 

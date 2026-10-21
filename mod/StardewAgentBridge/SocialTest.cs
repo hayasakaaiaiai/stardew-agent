@@ -17,6 +17,7 @@ internal sealed partial class ModEntry
     private readonly List<object> socialTestChecks = new();
     private readonly List<object> socialTestReplies = new();
     private readonly List<object> socialTestSceneLines = new();
+    private readonly Dictionary<string, NPC> socialTestActors = new(StringComparer.OrdinalIgnoreCase);
     private int socialTestPhase;
     private int socialTestStep;
     private int socialTestTurn;
@@ -57,7 +58,20 @@ internal sealed partial class ModEntry
         this.socialTestSum = 0;
         this.StartTalk(this.SocialNpc);
     }
-    private NPC SocialNpc => Game1.getCharacterFromName("Abigail");
+    private NPC SocialNpc => this.SocialActor("Abigail");
+
+    // Keep the original loaded actors when scripted warps temporarily remove them from name lookup.
+    private NPC SocialActor(string name)
+    {
+        NPC? found = Game1.getCharacterFromName(name);
+        if (found is not null) { this.socialTestActors[name] = found; return found; }
+        if (this.socialTestActors.TryGetValue(name, out NPC? retained))
+        {
+            this.Monitor.Log("[MemoryTest] Reusing loaded actor: " + name, LogLevel.Info);
+            return retained;
+        }
+        throw new InvalidOperationException("验收副本缺少角色：" + name);
+    }
     private int SocialPoints => Game1.player.friendshipData["Abigail"].Points;
 
     private void SocialCheck(bool passed, string label, object? detail = null)
@@ -72,6 +86,11 @@ internal sealed partial class ModEntry
     private void BeginSocialTest()
     {
         this.CheckMemoryTestSave();
+        this.socialTestActors.Clear();
+        foreach (string id in SocialNpcs)
+            if (Game1.getCharacterFromName(id) is NPC npc) this.socialTestActors[id] = npc;
+        if (this.ambientTestRunning) { this.ResumeAmbientTest(); return; }
+        if (this.memoryTest!.AmbientOnly) { this.BeginAmbientTest(); return; }
         if (this.townTestRunning) { this.ResumeTownTest(); return; }
         if (this.newsTestRunning) { this.ResumeNewsTest(); return; }
         if (this.newPartsRunning) { this.ResumeNewPartsTest(); return; }
@@ -104,7 +123,7 @@ internal sealed partial class ModEntry
             old.controller = null;
             old.Position = new Vector2(30 * 64, 30 * 64);
         }
-        NPC a = Game1.getCharacterFromName(first), b = Game1.getCharacterFromName(second);
+        NPC a = this.SocialActor(first), b = this.SocialActor(second);
         a.controller = null; b.controller = null;
         Game1.warpCharacter(a, room, new Vector2(5, 8));
         Game1.warpCharacter(b, room, new Vector2(6, 8));

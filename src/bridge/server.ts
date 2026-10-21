@@ -159,7 +159,9 @@ export class BridgeServer {
       const completion = await sceneModel.chat(ambientPrompt(roster, people, worldState(message.world, save.player, this.cardName)),
         {}, { json: true });
       if (save.closed || save.day !== requestedDay) return;
-      const lines = parseAmbient(completion.content, people, save.player.name);
+      // A previous slow request can finish while this one is still generating.
+      const currentPeople = people.map(person => ({ ...person, greeted: person.greeted || budget.greeted.has(person.id) }));
+      const lines = parseAmbient(completion.content, currentPeople, save.player.name);
       const greeters = lines.filter(line => line.to === 'farmer').map(line => line.npc);
       for (const npc of greeters) budget.greeted.add(npc);
       reply(lines);

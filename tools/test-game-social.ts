@@ -15,10 +15,12 @@ import { Roster } from '../src/services/roster/index.ts';
 import { SOCIAL_NPCS } from '../src/types.ts';
 import { digest } from '../src/validation.ts';
 import { socialContentProbes } from './social-content-probes.ts';
+import { AMBIENT_RULES } from '../src/agent/ambient.ts';
+import { ambientContentProbes } from './ambient-content-probes.ts';
 
 interface Config {
   RequestId: string; UniqueId: string; SaveFolder: string; SaveDirectory: string;
-  RunDirectory: string; GamePath: string; BackendUrl: string; Social: boolean; Offline: boolean; NewParts?: boolean;
+  RunDirectory: string; GamePath: string; BackendUrl: string; Social: boolean; Offline: boolean; NewParts?: boolean; AmbientOnly?: boolean;
 }
 interface Check { label: string; passed: boolean; points: number; detail?: unknown }
 interface Report {
@@ -32,6 +34,8 @@ interface Report {
   newPartsChecks: Check[];
   newsChecks: Check[]; newsReports: number[];
   townChecks: Check[]; townPackets: { seq: number; time: number; groups: string[][]; nonce: string; day: number }[]; townHours: number[];
+  ambientChecks: Check[]; ambientShown: { npc: string; to: string; text: string; visible: string; tick: number; nonce: string }[];
+  ambientPackets: { seq: number; time: number; npcs: { npc: string }[]; nonce: string }[];
   presentDeliveries: { npc: string; name: string; id: string; quality: number; stack: number; before: number; after: number; direct: boolean; nonce: string; day: number }[];
   householdSnapshots: { label: string; world: { flags: { partner: { npc: string; status: string } | null; children: number } } }[];
 }
@@ -55,13 +59,16 @@ let newParts = false;
 let news = false;
 let newsLive = false;
 let town = false;
+let ambientLive = false;
+let ambientMemory: unknown;
 let newsSnapshot: Record<string, unknown>[] = [];
 let townQuietCalls = 0;
 const townGates = new Set<string>();
 const TOWN_PUBLIC = '我给自己的蓝色风筝取名云尾，你可以跟朋友们说。';
 const THANKS = '谢谢你上次帮我的忙。';
 const STRING_LINE = '我答应周末给文森特做蓝色风筝。';
-const STRING_NOTE = '记忆验收说周末会给文森特做蓝色风筝。';
+const STRING_SUMMARY = '记忆验收说周末会给文森特做蓝色风筝。';
+const STRING_NOTE = `农场主说：${JSON.stringify(STRING_LINE)}`;
 const HEARD_WIND = /(?:阿比盖尔跟我说|格斯跟我说，阿比盖尔说过)：["“][^\n]+云尾/;
 const PUBLIC_CAT = '我养的小猫叫星糖，你可以跟朋友们说。';
 const SECRET = '这是秘密，别告诉别人：我其实很怕黑。';
@@ -71,7 +78,8 @@ function model(kind: 'dialogue' | 'scene' | 'nightly'): ModelClient {
   return { async chat(messages: ChatMessage[], handlers: StreamHandlers = {}, options = {}): Promise<Completion> {
     const last = messages.at(-1)?.content ?? '';
     const text = messages.map(message => message.content).join('\n');
-    const actual = town ? !config.Offline && (kind === 'nightly' ? last.includes(TOWN_PUBLIC) || last.includes(THANKS)
+    const isAmbient = messages[0]?.content === AMBIENT_RULES;
+    const actual = isAmbient ? ambientLive && !config.Offline : town ? !config.Offline && (kind === 'nightly' ? last.includes(TOWN_PUBLIC) || last.includes(THANKS)
       : kind === 'dialogue' && (last.startsWith(TOWN_PUBLIC) || last.startsWith(THANKS) || HEARD_WIND.test(messages[0]!.content)))
       : news ? newsLive && (kind === 'nightly' ? last.includes(PUBLIC_CAT) || last.includes(SECRET)
       : kind === 'scene' ? last.includes('## 想说的事') : last.startsWith(PUBLIC_CAT) || last.startsWith(SECRET) || HEARD.test(text))
@@ -80,7 +88,9 @@ function model(kind: 'dialogue' | 'scene' | 'nightly'): ModelClient {
     const client = kind === 'scene' ? paidScene : kind === 'nightly' ? paidNightly : paid;
     if (actual) completion = await client!.chat(messages, handlers, options);
     else {
-      const content = JSON.stringify(kind === 'scene' ? { lines: [
+      const content = JSON.stringify(isAmbient ? { lines: ['a', 'b', 'c', 'd'].map((npc, index) => ({ npc,
+        to: index === 0 ? 'farmer' : 'self', text: index === 0 ? '早上好，欢迎光临！' : '今天风很轻。', emote: index === 0 ? 'happy' : 'none' })) }
+        : kind === 'scene' ? { lines: [
         { speaker: 'a', text: '今天天气真不错。', emote: 'happy' }, { speaker: 'b', text: '嗯，出去走走吧。', emote: 'music' },
         ...(news && last.includes('## 想说的事') ? [{ speaker: 'a', text: '记忆验收的小猫叫星糖。', emote: 'happy' }] : []),
       ], told: news && last.includes('## 想说的事') ? ['a'] : [] } : kind === 'nightly' ? {
@@ -92,13 +102,13 @@ function model(kind: 'dialogue' | 'scene' | 'nightly'): ModelClient {
           : messages[0]!.content.includes(STRING_NOTE) ? '你答应给文森特做蓝色风筝。' : '我还没听说呢。'
           : news ? HEARD.test(text) ? '阿比盖尔跟我说，你的小猫叫星糖。' : '嗯，今天过得怎么样？'
           : newParts ? '这个给你，今天过得怎么样？' : '嗯，我记得那块紫水晶。', emotion: 'happy', options: ['再聊一会', '说说近况', '听听你的想法'],
-        remember: town && last.startsWith(STRING_LINE) ? [STRING_NOTE, '再聊一会'] : [],
+        remember: town && last.startsWith(STRING_LINE) ? [STRING_SUMMARY, '再聊一会'] : [],
         mood: town ? 0 : Number(/^好感(-?\d)/.exec(last)?.[1] ?? 2), give: newParts, end: false,
       });
       handlers.onContent?.(content);
       completion = { content, reasoning: '', finishReason: 'stop', usage: null, timing: { firstReasoningMs: null, firstContentMs: 0, totalMs: 0 } };
     }
-    const call = { kind, real: actual, thinking: actual ? client!.config.thinking : null, messages, content: completion.content, usage: completion.usage, timing: completion.timing };
+    const call = { kind: isAmbient ? 'ambient' : kind, real: actual, thinking: actual ? client!.config.thinking : null, messages, content: completion.content, usage: completion.usage, timing: completion.timing };
     calls.push(call); await appendFile(join(directory, 'model-calls.jsonl'), JSON.stringify(call) + '\n');
     return completion;
   } } as ModelClient;
@@ -158,6 +168,9 @@ relay.on('connection', client => {
       // Exercise the real Mod's request-sequence guard; repeated replies must not apply friendship twice.
       client.send(raw); packets.push({ direction: 'backend', packet, injected: 'same-talk-reply-replay' });
     }
+    if (packet.type === 'ambient.lines') {
+      client.send(raw); packets.push({ direction: 'backend', packet, injected: 'same-ambient-reply-replay' });
+    }
   });
   upstream.on('error', error => errors.push(String(error)));
   client.on('close', () => upstream.close());
@@ -172,7 +185,7 @@ const report = async () => {
   catch { /* The game may still be loading or replacing its report. */ }
 };
 try {
-  const deadline = Date.now() + 600000;
+  const deadline = Date.now() + 900000;
   let shown = '';
   while (Date.now() < deadline) {
     if (game.exitCode !== null) throw new Error('测试游戏提前退出');
@@ -274,12 +287,54 @@ try {
       townGates.add(last.message);
       await json(join(directory, 'control.json'), { requestId: config.RequestId, stage: last.message });
     }
+    if (last?.message === 'ambient-fixed-ready' && !townGates.has(last.message)) {
+      const db = new DatabaseSync(join(directory, 'memory/memory.sqlite'), { readOnly: true });
+      try { ambientMemory = db.prepare('SELECT * FROM memory ORDER BY id').all(); } finally { db.close(); }
+      await json(join(directory, 'ambient-memory-before.json'), ambientMemory);
+      townGates.add(last.message);
+      await json(join(directory, 'control.json'), { requestId: config.RequestId, stage: last.message });
+    }
+    if (last?.message === 'ambient-live-ready' && !ambientLive) {
+      ambientLive = true;
+      await json(join(directory, 'control.json'), { requestId: config.RequestId, stage: last.message });
+    }
+    if (last?.message.startsWith('ambient-late-ready-') && !townGates.has(last.message)
+      && packets.some(row => row.direction === 'backend' && row.packet.type === 'ambient.lines'
+        && row.packet.seq === last!.ambientPackets.at(-1)?.seq && row.packet.loadNonce === last!.nonce)) {
+      townGates.add(last.message);
+      await json(join(directory, 'control.json'), { requestId: config.RequestId, stage: last.message });
+    }
+    if (last?.message === 'ambient-content-ready' && !townGates.has(last.message)
+      && packets.some(row => row.direction === 'backend' && row.packet.type === 'ambient.lines'
+        && row.packet.seq === last!.ambientPackets.at(-1)?.seq && row.packet.loadNonce === last!.nonce)) {
+      if (!config.Offline) {
+        const samples = await ambientContentProbes(roster, async (kind, messages) => {
+          const client = kind === 'dialogue' ? paid! : paidScene!;
+          const completion = await client.chat(messages, {}, { json: true });
+          const call = { kind, real: true, probe: true, thinking: client.config.thinking, messages,
+            content: completion.content, usage: completion.usage, timing: completion.timing };
+          calls.push(call); await appendFile(join(directory, 'model-calls.jsonl'), JSON.stringify(call) + '\n');
+          return completion;
+        });
+        await json(join(directory, 'ambient-content-probes.json'), samples);
+        log(`新功能内容样本：${samples.length} 次，格式有效 ${samples.filter(sample => sample.valid).length}；保留原文复核。`);
+      }
+      const db = new DatabaseSync(join(directory, 'memory/memory.sqlite'), { readOnly: true });
+      try {
+        const after = db.prepare('SELECT * FROM memory ORDER BY id').all();
+        assert.deepEqual(after, ambientMemory, 'ambient lines must never create, retire or modify memories');
+        await json(join(directory, 'ambient-memory-after.json'), after);
+      } finally { db.close(); }
+      townGates.add(last.message);
+      await json(join(directory, 'control.json'), { requestId: config.RequestId, stage: last.message });
+    }
     if (last?.completed) break;
     await new Promise(resolve => setTimeout(resolve, 250));
   }
   assert.ok(last?.completed, `组合检查超时：${last?.stage ?? '未加载'}`);
   assert.ok(last.success, last.message);
   assert.deepEqual(errors, []);
+  if (!config.AmbientOnly) {
   const required = ['scene-disabled', 'scene-player-outside-eight-tiles', 'scene-npcs-outside-two-tiles', 'scene-menu-blocks',
     'scene-event-blocks', 'scene-ai-talk-blocks', 'scene-first-request', 'scene-native-lines-shown', 'scene-pair-once-daily',
     'scene-fifty-minute-gap-blocks', 'scene-sixty-minute-gap-allows', 'scene-four-daily-cap',
@@ -306,7 +361,7 @@ try {
   }
   const gifts = mod.filter(packet => packet.type === 'gift.given');
   assert.equal(gifts.length, 2); assert.equal(gifts[0]!.taste, 'love'); assert.equal(gifts[0]!.item, '紫水晶'); assert.equal(gifts[1]!.item, '粘土');
-  assert.equal(mod.filter(packet => packet.type === 'save.loaded').length, config.NewParts ? 10 : 3);
+  assert.equal(mod.filter(packet => packet.type === 'save.loaded').length, config.NewParts ? 11 : 3);
   assert.equal(mod.filter(packet => packet.type === 'save.saved').length, config.NewParts ? 6 : 1);
   const note = '农场主送我紫水晶，我特别喜欢。';
   const prompt = (call: typeof calls[number]) => call.messages[0]!.content;
@@ -420,6 +475,17 @@ try {
         && (row.packet.world as { flags?: { partner?: { status: string }; children?: number } })?.flags?.partner?.status === 'married'));
     }
   }
+  }
+  assert.ok(last.ambientChecks.length >= 30 && last.ambientChecks.every(check => check.passed), 'all native ambient checks must pass');
+  assert.ok(last.ambientShown.every(line => line.text === line.visible), 'native ambient text must match its delivered line');
+  const greeters = last.ambientShown.filter(line => line.to === 'farmer').map(line => `${line.nonce}/${line.npc}`);
+  assert.equal(new Set(greeters).size, greeters.length, 'no NPC may actually greet twice in one native load, even after replayed replies');
+  const ambientRequests = packets.filter(row => row.direction === 'mod' && row.packet.type === 'ambient.request');
+  assert.equal(ambientRequests.length, last.ambientPackets.length);
+  assert.deepEqual(last.ambientPackets[0]!.npcs.map(person => person.npc), ['Pierre', 'Caroline', 'Abigail', 'Gus']);
+  assert.deepEqual(last.ambientPackets[1]!.npcs.map(person => person.npc), ['Pam']);
+  assert.ok((await stat(join(directory, 'ambient-fixed.png'))).size > 100);
+  if (!config.Offline) assert.ok((await stat(join(directory, 'ambient-real.png'))).size > 100);
   success = true;
 } catch (error) { failure = error instanceof Error ? error.message : String(error); }
 finally {
@@ -438,7 +504,7 @@ finally {
   await json(join(directory, 'result.json'), { success, failure, protocol: PROTOCOL_VERSION, mode: 'native-social-combined', offline: config.Offline,
     requestId: config.RequestId, saveFolder: config.SaveFolder, modelCalls: calls.filter(call => call.real).length,
     realCalls: calls.filter(call => call.real).map(({ kind, thinking, usage, timing }) => ({ kind, thinking, usage, timing })),
-    fixedCalls: calls.filter(call => !call.real).length, checks: (last?.socialChecks.length ?? 0) + (last?.newPartsChecks?.length ?? 0) + (last?.newsChecks?.length ?? 0) + (last?.townChecks?.length ?? 0), errors, game: last });
+    fixedCalls: calls.filter(call => !call.real).length, checks: (last?.socialChecks.length ?? 0) + (last?.newPartsChecks?.length ?? 0) + (last?.newsChecks?.length ?? 0) + (last?.townChecks?.length ?? 0) + (last?.ambientChecks?.length ?? 0), errors, game: last });
 }
-console.log(JSON.stringify({ success, failure, directory, checks: (last?.socialChecks.length ?? 0) + (last?.newPartsChecks?.length ?? 0) + (last?.newsChecks?.length ?? 0) + (last?.townChecks?.length ?? 0), seconds: last?.elapsedSeconds }));
+console.log(JSON.stringify({ success, failure, directory, checks: (last?.socialChecks.length ?? 0) + (last?.newPartsChecks?.length ?? 0) + (last?.newsChecks?.length ?? 0) + (last?.townChecks?.length ?? 0) + (last?.ambientChecks?.length ?? 0), seconds: last?.elapsedSeconds }));
 if (!success) process.exitCode = 1;

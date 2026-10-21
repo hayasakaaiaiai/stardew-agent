@@ -82,7 +82,7 @@ test('the night replaces conversation notes with quotes but keeps the gift note'
   for (let i = 0; i < 400 && !h.logs.some(line => line.startsWith('夜间整合完成')); i++) await new Promise(done => setTimeout(done, 10));
   const today = nightly[0]![1]!.content.split('## 今天当场记下的\n')[1]!.split('\n\n')[0]!;
   assert.match(today, new RegExp(`^- （重要度 4）${NOTE}$`, 'm'));
-  assert.match(today, /^- （重要度 5）一起去矿洞/m);
+  assert.match(today, /^- （重要度 5）农场主说："记住一起去矿洞"/m);
 
   wire.send(openTalk(2)); await wire.until('talk.reply', wire.inbox.length);
   const system = h.fake.sent.at(-1)![0]!.content;

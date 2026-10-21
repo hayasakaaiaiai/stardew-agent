@@ -1,7 +1,8 @@
 ﻿[CmdletBinding()]
 param(
     [string]$GamePath = 'E:\games\steamapps\common\Stardew Valley',
-    [switch]$Offline
+    [switch]$Offline,
+    [switch]$AmbientOnly
 )
 
 $ErrorActionPreference = 'Stop'
@@ -33,7 +34,7 @@ try {
     Invoke-SocialCheck 'build' { & npm.cmd run build }
     Invoke-SocialCheck 'mod-build' { & dotnet build mod/StardewAgentBridge -c Release ('-p:GamePath=' + $GamePath) -p:EnableModDeploy=false --nologo }
     Invoke-SocialCheck 'mod-flow' { & dotnet run --project tests/mod-flow -- (Join-Path $taskRoot 'mod\StardewAgentBridge\bin\Release\net6.0\StardewAgentBridge.dll') $GamePath }
-    & (Join-Path $PSScriptRoot 'test-game-memory.ps1') -GamePath $GamePath -Social -Offline:$Offline -RunDirectory (Join-Path $taskRun 'game')
+    & (Join-Path $PSScriptRoot 'test-game-memory.ps1') -GamePath $GamePath -Social -Offline:$Offline -AmbientOnly:$AmbientOnly -RunDirectory (Join-Path $taskRun 'game')
     $taskSuccess = $true
 } catch { $taskFailure = $_.Exception.Message; Write-Warning $taskFailure }
 finally {

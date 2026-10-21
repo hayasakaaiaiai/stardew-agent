@@ -19,6 +19,15 @@ const SHOP: AmbientPerson[] = [
   { id: 'abigail', hearts: 0, relation: 'stranger', greeted: false },
 ];
 
+test('ambient output drops invented completed chores while keeping momentary greetings and potential complements', () => {
+  for (const text of ['锅都刷完啦，老板！', '风把我的图纸都吹跑了。', '刚送文森特回家。', '昨天我赢了八球比赛。']) {
+    assert.deepEqual(parseAmbient(JSON.stringify({ lines: [{ npc: 'a', to: 'farmer', text }] }), SHOP, '小林'), [], text);
+  }
+  for (const text of ['早上好！', '太好了，雨还没停。', '下雨哪儿也去不了。']) {
+    assert.equal(parseAmbient(JSON.stringify({ lines: [{ npc: 'a', to: 'farmer', text }] }), SHOP, '小林').length, 1, text);
+  }
+});
+
 /** Answers every call with the same content and keeps what was sent. */
 function ambientModel(content: string) {
   const sent: ChatMessage[][] = [];
@@ -39,13 +48,13 @@ test('ambient lines keep the first usable line per person, one greeting a day, a
     { npc: 'b', to: 'farmer', text: '哦哦，淋湿了吧？', emote: 'question' },
     { npc: 'b', to: 'a', text: '农场主人真不错。', emote: 'none' },
     { npc: 'b', to: 'b', text: '小林又来了。', emote: 'none' },
-    { npc: 'b', to: 'a', text: '亲爱的，*门口*垫子收了吗？😀', emote: 'wink' },
+    { npc: 'b', to: 'a', text: '亲爱的，*门口*垫子挡路。😀', emote: 'wink' },
     { npc: 'e', to: 'self', text: '我是谁？', emote: 'none' },
     { npc: 'c', to: 'x', text: '一'.repeat(25), emote: 'none' },
     { npc: 'c', to: 'x', text: '唉，下雨哪儿也去不了。', emote: 'sad' },
   ]), SHOP, '小林'), [
     { npc: 'pierre', to: 'farmer', text: '欢迎光临，小林！', emote: 'happy' },
-    { npc: 'caroline', to: 'pierre', text: '亲爱的，门口垫子收了吗？', emote: 'none' },
+    { npc: 'caroline', to: 'pierre', text: '亲爱的，门口垫子挡路。', emote: 'none' },
     { npc: 'abigail', to: 'self', text: '唉，下雨哪儿也去不了。', emote: 'sad' },
   ], 'a greeting may name the player; Caroline already greeted, so only her line to Pierre stays');
   const many = [...SHOP, { id: 'gus', hearts: 4, relation: 'friend', greeted: false }, { id: 'pam', hearts: 2, relation: 'friend', greeted: false }] as AmbientPerson[];
