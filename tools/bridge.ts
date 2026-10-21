@@ -30,7 +30,7 @@ const server = await BridgeServer.start({
   port: Number(process.env.NPC_BRIDGE_PORT ?? 47711),
   log,
 });
-log(`后端已启动：ws://127.0.0.1:${server.port}，角色卡 ${loaded.loaded.length} 张，模型 ${model.config.model}（对话 thinking=${model.config.thinking}，夜间整合 thinking=${NIGHTLY_THINKING}，碰面聊天 thinking=${SCENE_THINKING}）`);
+log(`后端已启动：ws://127.0.0.1:${server.port}，角色卡 ${loaded.loaded.length} 张，模型 ${model.config.model}（对话 thinking=${model.config.thinking}，夜间整合 thinking=${NIGHTLY_THINKING}，碰面聊天和同图 thinking=${SCENE_THINKING}）`);
 console.log('启动游戏读档即可；按 Ctrl+C 停止。');
 
 const stop = async () => {

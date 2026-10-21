@@ -1,4 +1,5 @@
 /** Messages between the SMAPI mod and the backend (docs/game-bridge.md §3, design §10). */
+import type { AmbientLine } from '../agent/ambient.ts';
 import type { Bubble } from '../agent/bubbles.ts';
 import type { Emotion, Season } from '../agent/dialogue.ts';
 import { GIFT_TASTES, type GiftTaste } from '../agent/gifts.ts';
@@ -88,7 +89,18 @@ export type ModMessage =
   /** The lines of that request have been shown, so news told in them is remembered (docs/npc-news.md); reliable, acknowledged. */
   | ({ type: 'scene.shown'; request: number; date: GameDate } & Envelope)
   /** Social NPCs who spent this hour together away from the player, by game name (docs/offscreen-news.md); reliable, acknowledged. */
-  | ({ type: 'town.hour'; groups: string[][]; date: GameDate } & Envelope);
+  | ({ type: 'town.hour'; groups: string[][]; date: GameDate } & Envelope)
+  /** NPCs near the player, each to say at most one line (docs/ambient-lines.md); game names. */
+  | ({ type: 'ambient.request'; npcs: AmbientNpc[]; world: WorldSnapshot } & Envelope);
+
+export interface AmbientNpc {
+  /** The game's internal name, e.g. "Pierre". */
+  npc: string;
+  hearts: number;
+  relation: Relation;
+  /** Already greeted the player over its head today. */
+  greeted: boolean;
+}
 
 export type BackendMessage =
   | { type: 'hello'; protocol: number }
@@ -103,7 +115,9 @@ export type BackendMessage =
   | TalkReply
   | ({ type: 'talk.error'; npc: string; message: string } & Envelope)
   /** Answers a scene.request with its seq; empty when nothing should be shown. */
-  | ({ type: 'scene.lines'; lines: SceneLine[] } & Envelope);
+  | ({ type: 'scene.lines'; lines: SceneLine[] } & Envelope)
+  /** Answers an ambient.request with its seq; empty when nothing should be shown. */
+  | ({ type: 'ambient.lines'; lines: AmbientLine[] } & Envelope);
 
 export type TalkReply = {
   type: 'talk.reply'; npc: string; reply: string; emotion: Emotion; options: string[]; end: boolean;
@@ -245,6 +259,20 @@ export function parseModMessage(raw: string): ModMessage {
       const npcs = data.npcs;
       if (!Array.isArray(npcs) || npcs.length !== 2
         || npcs.some((npc) => typeof npc !== 'string' || !npc || npc.length > 50 || /[\u0000-\u001f]/u.test(npc))) fail('npcs must be two names');
+      world(data.world);
+      break;
+    }
+    case 'ambient.request': {
+      envelope();
+      const npcs = data.npcs;
+      if (!Array.isArray(npcs) || npcs.length < 1 || npcs.length > 4) fail('npcs must list one to four NPCs');
+      for (const item of npcs as unknown[]) {
+        const n = item as Record<string, unknown> | null;
+        if (!n || typeof n.npc !== 'string' || !n.npc || n.npc.length > 50 || /[\u0000-\u001f]/u.test(n.npc)) fail('npcs[].npc must be a name');
+        if (int(n!.hearts, 'npcs[].hearts') < 0 || (n!.hearts as number) > 14) fail('npcs[].hearts is out of range');
+        if (!RELATIONS.has(n!.relation as Relation)) fail('npcs[].relation is invalid');
+        if (typeof n!.greeted !== 'boolean') fail('npcs[].greeted must be a boolean');
+      }
       world(data.world);
       break;
     }

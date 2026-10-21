@@ -28,4 +28,7 @@ internal sealed class ModConfig
 
     /// <summary>Whether NPCs who spend an hour together away from the player pass news on (docs/offscreen-news.md).</summary>
     public bool OffscreenNews { get; set; } = true;
+
+    /// <summary>Whether NPCs near the player say a line over their heads or greet the player (docs/ambient-lines.md).</summary>
+    public bool AmbientLines { get; set; } = true;
 }

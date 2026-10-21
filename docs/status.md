@@ -18,9 +18,9 @@
 | 里程碑 | 状态 | 已完成 | 还没做 | 文档 |
 |---|---|---|---|---|
 | M1 存储与事务 | 完成 | 记忆内核；当天事务；存档与回滚；崩溃恢复；过期临时日志/检查点清理，失败新读档保护旧日志（2026-10-20 合入 `main`） | — | `README.md`、`design.md` §16 |
-| M2 Agent | 第一至八步、公开家庭信息、好感分档已合入；后台传话等功能断言通过 | 后台两手传播、遗留清理、性别提示和道谢过滤在 `codex/offscreen-windows-tests` 131 项原生检查通过，修复关闭赠礼仍写赠礼记忆；原有功能在 `main` | 本轮未推送/合入；真实字符串记忆仍能混入改写的未选项，须设计来源校验；观察自由生成内容 | `dialogue-prototype.md`、`nightly-consolidation.md`、`next-day-plans.md`、`npc-bubbles.md`、`npc-mail.md`、`npc-chat.md`、`npc-gifts.md`、`npc-friendship.md`、`npc-in-person-gifts.md`、`world-public-facts.md`、`npc-news.md`、`offscreen-news.md`、`legacy-cleanup.md` |
+| M2 Agent | 第一至八步已合入；后台传话、小动作及群体事件已测 | 上轮后台传话修复已推送；本轮固定组合和小动作真实定向检查通过，修复三处并发/显示问题 | 新分支仅本地，未合入；完整真实组合有 10 秒超时失败；未选项记忆污染、未看事件回避和自由补写仍待处理 | `dialogue-prototype.md`、`nightly-consolidation.md`、`next-day-plans.md`、`npc-bubbles.md`、`npc-mail.md`、`npc-chat.md`、`npc-gifts.md`、`npc-friendship.md`、`npc-in-person-gifts.md`、`world-public-facts.md`、`npc-news.md`、`offscreen-news.md`、`ambient-lines.md`、`legacy-cleanup.md` |
 | M3 接入游戏 | 完成（Windows） | 游戏里"继续聊"；真实保存/退出、跨天记忆、回滚、后端进程重启与旧档分叉；拼音输入法、原版台词保留、取消三项手测通过 | — | `game-bridge.md`、`game-memory.md` |
-| M4 内容 | 角色卡已完成 | 34 张角色卡（已审阅），"看过事件之后"共 201 条 | 物品名到 ID 的对应、各动作的上限 | `design.md` §11 |
+| M4 内容 | 角色卡已完成 | 34 张角色卡（已审阅），"看过事件之后"共 201 条（`group-events` 补群体 10 心和科罗布斯 14 心后 226 条） | 物品名到 ID 的对应、各动作的上限 | `design.md` §11 |
 
 `main / 35affae` 已合入好感分档与在场传话的 Windows 修复，后端 132 个测试、类型检查和构建通过，另有 20 项 C# 流程检查（Windows）。10 月 20 日阿比盖尔三轮真机回归通过，随后在独立副本中用真实模型完成跨天保留、不保存回滚、后端进程重启、旧档分叉四项真机验收：76.77 秒，13 次模型调用，3 次真实睡觉保存，原测试档 6 个文件哈希均相同。详见 [真机组合验收报告](test-results/2026-10-20-game-memory.md)。
 
@@ -66,7 +66,9 @@ M2b 第八步“NPC 之间传话”在 `m2b-npc-news` 上实现：当晚和玩�
 
 压低自由编造（`less-fabrication`，建在 `scene-player-gender` 上）：8 道诱导补写的题实测 24 次里 7 次有没依据的小细节（紫水晶摆在哪、镇上谁夸了你），两种规则（35–50 token）都没有减少，不加；夜间 `share` 把普通道谢当新鲜事（4 次 3 次），改为代码过滤“谢”（谢恩除外），复测 4/4 拦下、真新鲜事照传，0 token。见 [legacy-cleanup.md](legacy-cleanup.md) §5。
 
-2026-10-21 按用户“测”在 `codex/offscreen-windows-tests` 纳入 `main / 35affae` 后的完整 `less-fabrication / f98222c` 提交链。142/142 Node、20/20 C#、类型检查、构建、Release 零警告/错误通过；一个游戏进程 131 项检查、360.60 秒、41 次真实调用（含 10 次内容抽测）、6 次真实保存、10 次读档通过，原档 6 文件哈希相同，三类真实调用全部 high。修复 `InPersonGifts=false` 未同步后端导致虚假赠礼记忆和冷却的问题；正常开启的 prompt 不变，token 增量 0。11:26:14 已备份并更新正常后端为 PID 22072，安装 DLL 哈希一致，两类新消息探测通过。技术断言通过，但内容复核发现字符串记忆仍把未选项改写进当天上下文；不把它算作事实准确性全通过。失败、成本和未解决项见 [后台传话组合报告](test-results/2026-10-21-offscreen-windows.md)。尚未推送、未合入 main。
+2026-10-21 按用户“测”在 `codex/offscreen-windows-tests` 纳入 `main / 35affae` 后的完整 `less-fabrication / f98222c` 提交链。142/142 Node、20/20 C#、类型检查、构建、Release 零警告/错误通过；一个游戏进程 131 项检查、360.60 秒、41 次真实调用（含 10 次内容抽测）、6 次真实保存、10 次读档通过，原档 6 文件哈希相同，三类真实调用全部 high。修复 `InPersonGifts=false` 未同步后端导致虚假赠礼记忆和冷却的问题；正常开启的 prompt 不变，token 增量 0。11:26:14 已备份并更新正常后端为 PID 22072，安装 DLL 哈希一致，两类新消息探测通过。技术断言通过，但内容复核发现字符串记忆仍把未选项改写进当天上下文；不把它算作事实准确性全通过。失败、成本和未解决项见 [后台传话组合报告](test-results/2026-10-21-offscreen-windows.md)。当时未推送；现已按用户要求推送 bda43f3，未合入 main。
+
+2026-10-21 用户要求“推送之后看看新提交 继续测”，已先推送上一轮 `codex/offscreen-windows-tests / bda43f3`。本轮在 `codex/ambient-windows-tests` 纳入 `56b29e4` 同图小动作和 `89e572c` 群体事件补充，复现并修复重复招呼、菜单期间显示、最后一句覆盖三处问题，正常 token 增量 0。149/149 Node、22/22 C#、类型检查、构建与 Release 0 警告/错误通过；最终固定数据完整组合 160 项检查、226.08 秒、6 次保存/11 次读档通过；真实新功能定向 40/40、116.13 秒、22 次 high 调用通过，原档 6 文件哈希相同。**完整真实组合两轮没有全部通过**：同图 19.293 秒、旧碰面 14.062 秒回复分别超过原有 10 秒上限。事件内容 16 次中 14 次核心状态符合；科罗布斯未看事件两次回避而没明确否认，小动作仍添写细节。14:56:32 已备份并重载正常后端 PID 14908，DLL 哈希相同、三类消息解析探测通过。当前新分支仅本地提交、未推送、未合入 main；完整记录见 [本轮报告](test-results/2026-10-21-ambient-windows.md)。
 
 ## 3. 分支
 
@@ -95,10 +97,13 @@ GitHub 私有仓库：https://github.com/hayasakaaiaiai/stardew-agent
 | `codex/news-windows-tests` | 最新 `main / ed9eb28` + `dc6d1d2`，好感分档与传话组合验收及两处修复；2026-10-21 按用户“合并完继续下一步”快进合入 `main` | Windows：`E:\stardew-agent` |
 | `m2c-offscreen-news`、`legacy-cleanup` | 不在场传话；遗留清理与全部改用 high。已变基到新 `main`，Windows 本轮功能检查通过，内容问题见新报告 | 已提交 |
 | `scene-player-gender` | 碰面聊天补上玩家性别，建在 `legacy-cleanup` 上 | 已提交 |
-| `less-fabrication` | 自由编造实测（不加规则）与 `share` 道谢过滤，建在 `scene-player-gender` 上，现在是最前端 | `/Users/a11/Documents/ChatGPT/stardew-agent-gifts` |
-| `codex/offscreen-windows-tests` | `main / 35affae` + `less-fabrication / f98222c`，扩展统一脚本、赠礼开关修复及真实内容问题记录；未推送 | Windows 当前：`E:\stardew-agent` |
+| `less-fabrication` | 自由编造实测与 share 道谢过滤；已完成上一轮 Windows 验收 | 已提交 |
+| `codex/offscreen-windows-tests` | 上一轮组合验收与赠礼开关修复；`bda43f3` 已按用户要求推送，未合入 main | Windows 历史验收分支 |
+| `m2c-ambient-lines` | 同图小动作，`56b29e4` | 已推送 |
+| `group-events` | 群体 10 心两种结局、科罗布斯 14 心与疏远期限制，`89e572c` | 已推送 |
+| `codex/ambient-windows-tests` | 纳入上述新功能；三处修复、固定组合和真实定向通过，完整真实超时/内容问题见报告；仅本地提交 | Windows 当前工作分支 |
 
-Windows 上的目录是 `E:\stardew-agent`，当前分支 `codex/offscreen-windows-tests` 以包含上一轮修复的新 `main / 35affae` 为祖先，纳入 `less-fabrication / f98222c` 的整条提交链。上一轮 `codex/news-windows-tests` 从 `908e73b` 建立，变基到 `ed9eb28` 后纳入 `dc6d1d2`，如今代码已由上游合入主线。此前所有本地验收分支及 `codex/next-day-plans` / `2260625` 均保留。
+Windows 当前分支 `codex/ambient-windows-tests` 保留已推送的 `bda43f3`，纳入 `group-events / 89e572c`（包括 `m2c-ambient-lines / 56b29e4`）；两条分支都以 `main / 35affae` 为祖先。此前所有本地验收分支均保留。
 
 此前 10 月 20 日按用户“拉下来测”“修复”的要求，Windows 在 `nightly-consolidation` 上完成远端 `3f70b27` 验证和事实归属修复。当时常驻后端日志确认对话 `high`、夜间整合 `low`；最新三类调用全 high 的重载状态见上，原游戏记忆库、临时日志及旧后端日志在每次更新前备份。
 
@@ -188,9 +193,9 @@ dotnet build mod/StardewAgentBridge   # 编译 Mod，编译完自动装进游戏
 |---|---|
 | 字符串 remember 能把未选选项改写成玩家说过的事实，进入当天后续 prompt；当前仅剔除逐字相同的选项，未解决改写污染 | `test-results/2026-10-21-offscreen-windows.md` §6 |
 | 85 条未发生事件已补限制，刘易斯未看/已看各 2 次正确；全部自然剧情仍需观察 | `legacy-cleanup.md` §4、`test-results/2026-10-21-offscreen-windows.md` §6 |
-| high 偶发慢回复：本轮 41 次中 2 次超过 8 秒，最长 10.775 秒 | `test-results/2026-10-21-offscreen-windows.md` §6 |
+| high 慢回复会超过现有 10 秒等待：最新完整实测同图 19.293 秒、旧碰面 14.062 秒，分别导致流程失败；未改等待时长 | `test-results/2026-10-21-ambient-windows.md` §6 |
 | 偶尔有小的事实错误，比如矮人说族里"就剩我一个了" | `dialogue-prototype.md` §11 |
-| 群体 10 心事件、科罗布斯 14 心事件还没写"看过事件之后" | `dialogue-prototype.md` §12.6 |
+| 群体 10 心及科罗布斯 14 心卡片已补，原生疏远开关通过；科罗布斯未看事件两次回避没明确否认，小动作仍编造已完成细节 | `test-results/2026-10-21-ambient-windows.md` §5 |
 | 真实模型附加字段偶尔解析失败，会走现有回退路径；本次 10 次调用出现 1 次 | `test-results/2026-10-20-retest.md` |
 | 夜间事实记忆已改为原话引用；印象与计划仍由模型生成，可能夹带具体事实或遗漏内容，需继续观察 | `test-results/2026-10-20-nightly-facts-fix.md` |
 | 计划开场使用保守问句处理，可能回退为较笼统的提问；尚未解析“下周”等任意日期表达，普通对话仍可能出现事实错误 | `test-results/2026-10-20-next-day-plans.md` |
@@ -205,15 +210,16 @@ dotnet build mod/StardewAgentBridge   # 编译 Mod，编译完自动装进游戏
 3. **M2b 第四步：NPC 碰面聊天**：Windows 组合验收通过，后端 60 分钟冷却/日期修复在 `codex/social-windows-tests`；继续观察镇上自然碰面，见 [npc-chat.md](npc-chat.md) §8。
 4. **M2b 第五步：送礼记忆**：原版赠送、保存、回滚和真实回忆的组合验收通过；生日、任务与节日场景的覆盖边界见 [npc-gifts.md](npc-gifts.md) §7。Mod 与后端均已更新到协议 3。
 5. **M2b 第六步：聊天影响好感**：增减、上限、重复消息、保存与回滚通过，见 [npc-friendship.md](npc-friendship.md) §8；已合入 `main`。按熟悉程度分档在 `m2b-friendship-by-hearts`。
-6. **自主行动**：调度器、合并场景调用和其余白名单动作另行设计。
+6. **自主行动**：不在场传话功能断言已通过；[同图小动作](ambient-lines.md)三处修复、固定组合及真实定向已测。完整真实流程仍有 10 秒超时失败，等待时长/推理强度先按成本与延迟评估再决定；自然游玩继续按该文档 §8 观察。
 7. **已合入 `main`（2026-10-20）**：用户提交组合验收结果并要求合并后，`codex/new-parts-windows-tests` / `908e73b` 快进合入；Mac 上复核 125/125、类型检查、构建和 Release 编译。包含第四至七步、公开家庭信息、临时日志清理，以及 Windows 修的后端碰面冷却与失败读档保护。自然婚礼/电影等剧情、全部 NPC 自然游玩和模型事实可靠性仍按 [本轮报告](test-results/2026-10-20-new-parts-windows.md) 的覆盖边界观察。
 8. **好感分档与在场传话已合入 `main`（2026-10-21）**：`codex/news-windows-tests` / `7ff44ea` 的统一脚本 115 项真机检查通过，含两处修复；按用户要求快进合入，Mac 复核 132/132、类型检查、构建和 Release 编译。结果、失败保留与范围见 [10 月 21 日报告](test-results/2026-10-21-news-windows.md)。
-9. **本轮测试完成，内容问题待处理**：`codex/offscreen-windows-tests` 纳入 `less-fabrication / f98222c`，后台传话、遗留清理、性别提示和道谢过滤的功能断言通过，新增赠礼开关修复。142/142、20/20、131 项原生检查通过，三类真实调用均 high；结果和失败见 [本轮报告](test-results/2026-10-21-offscreen-windows.md)。先设计改写未选项污染 remember 的来源约束；本轮未推送、未合入 main。
+9. **测试结果和待处理项**：上一轮 `bda43f3` 已推送；当前 `codex/ambient-windows-tests` 仅本地提交，未合入 main。固定完整组合与真实新场景的通过、完整真实组合超时失败、科罗布斯未看事件及小动作补写见 [最新报告](test-results/2026-10-21-ambient-windows.md)。上轮 [remember 改写未选项污染](test-results/2026-10-21-offscreen-windows.md) 仍未解决，先设计来源约束，不把解析或流程通过写成事实全部准确。
 
 ## 8. 文档索引
 
 | 文档 | 讲什么 |
 |---|---|
+| `docs/test-results/2026-10-21-ambient-windows.md` | 同图小动作、群体事件与原生疏远状态；三处修复、149/22 检查、真实定向内容和完整组合超时失败 |
 | `docs/test-results/2026-10-21-offscreen-windows.md` | 后台两手传播、遗留清理与 high 组合测试，赠礼开关修复和未选项记忆污染 |
 | `docs/test-results/2026-10-21-news-windows.md` | 好感分档、NPC 传话、显示中断与同日读档预算的组合验收和失败证据 |
 | `AGENTS.md` | 给 AI 助手的协作约定（Claude Code 通过 `CLAUDE.md` 读取它） |
@@ -225,8 +231,9 @@ dotnet build mod/StardewAgentBridge   # 编译 Mod，编译完自动装进游戏
 | `docs/game-bridge.md` | M3a：Mod 和后端的协议、原版界面怎么复用、游戏内测试清单 |
 | `docs/game-memory.md` | M3b：存档同步、跨天记忆、确认补发与崩溃恢复 |
 | `docs/nightly-consolidation.md` | 夜间整合：产出、输入、触发时机、出错处理、实测 token 和真实模型结果 |
+| `docs/ambient-lines.md` | 自主行动第二步：同图小动作的决定、规则、打不打招呼的实测对比、消息、测试和 Windows 清单 |
 | `docs/offscreen-news.md` | 自主行动第一步：玩家不在场时也传话的决定、消息、成本、测试和 Windows 清单 |
-| `docs/legacy-cleanup.md` | 遗留问题清理：字符串记忆、气泡过滤、三档推理强度实测、没发生过的事件、0 心门槛、卡片标准 |
+| `docs/legacy-cleanup.md` | 遗留问题清理：字符串记忆、气泡过滤、三档推理强度实测、没发生过的事件、0 心门槛、卡片标准、压低编造、群体 10 心和科罗布斯 14 心 |
 | `docs/npc-news.md` | M2b 第八步：NPC 之间传话的决定、规则写法对比、真实模型实测、测试和 Windows 清单 |
 | `docs/npc-friendship.md` | M2b 第六步：聊天影响原版好感的决定、规则写法对比、真实模型实测、测试和 Windows 清单 |
 | `docs/npc-in-person-gifts.md` | M2b 第七步：当面送礼、与寄信共用冷却、背包满、实测和组合脚本 |

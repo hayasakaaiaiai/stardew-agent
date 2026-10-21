@@ -1,6 +1,7 @@
 /** WebSocket service for the SMAPI mod, with save-scoped M1 memory (docs/game-memory.md). */
 import type { AddressInfo } from 'node:net';
 import { type WebSocket, WebSocketServer } from 'ws';
+import { AMBIENT_CALLS_PER_DAY, type AmbientLine, type AmbientPerson, ambientPrompt, parseAmbient } from '../agent/ambient.ts';
 import type { Consolidator } from '../agent/consolidation.ts';
 import { OPENING_LINE, runTurn, type Standing, type WorldState } from '../agent/dialogue.ts';
 import { newsFor } from '../agent/news.ts';
@@ -21,7 +22,10 @@ export interface BridgeOptions {
   consolidator?: Consolidator;
   /** Override the 30-second recovery delay for isolated tests. */
   nightlyRetryDelayMs?: number;
-  /** Small talk between NPCs the player can overhear (docs/npc-chat.md); without it requests get no lines. */
+  /**
+   * Small talk between NPCs the player can overhear (docs/npc-chat.md) and lines near the player
+   * (docs/ambient-lines.md); without it requests get no lines.
+   */
   sceneModel?: ModelClient;
   /** 0 picks a free port (tests). */
   port: number;
@@ -40,6 +44,8 @@ class Session {
   todayRevision = 0;
   /** Pairs that already talked on this game day, for the per-day budget. */
   scenes = { day: 0, pairs: new Set<string>(), lastMinute: -1 };
+  /** Calls on this game day and who has greeted the player, for docs/ambient-lines.md. */
+  ambient = { day: 0, calls: 0, greeted: new Set<string>() };
 }
 
 export class BridgeServer {
@@ -128,6 +134,46 @@ export class BridgeServer {
   }
 
   /**
+   * Like a scene: outside the lifecycle queue, with empty lines whenever nothing should show. A greeting the backend
+   * returned counts even if the Mod does not report it, so nobody greets the player twice a day.
+   */
+  private async ambient(session: Session, message: Extract<ModMessage, { type: 'ambient.request' }>, send: (message: BackendMessage) => void) {
+    const save = session.save!;
+    const reply = (lines: AmbientLine[]) => { if (session.save === save) send({ type: 'ambient.lines', ...envelope(message), lines }); };
+    const { roster, sceneModel } = this.options;
+    if (session.ambient.day !== save.day) session.ambient = { day: save.day, calls: 0, greeted: new Set() };
+    const budget = session.ambient;
+    const requestedDay = absoluteDay(message.world.date);
+    const people: AmbientPerson[] = message.npcs.map(({ npc, hearts, relation, greeted }) => {
+      const id = npc.toLowerCase();
+      return { id, hearts, relation, greeted: greeted || budget.greeted.has(id) };
+    });
+    if (!sceneModel || save.closed || requestedDay !== save.day || budget.calls >= AMBIENT_CALLS_PER_DAY
+      || people.some(person => !roster.has(person.id)) || new Set(people.map(person => person.id)).size !== people.length) {
+      reply([]);
+      return;
+    }
+    budget.calls++;
+    const names = people.map(person => roster.get(person.id).name).join('、');
+    try {
+      const completion = await sceneModel.chat(ambientPrompt(roster, people, worldState(message.world, save.player, this.cardName)),
+        {}, { json: true });
+      if (save.closed || save.day !== requestedDay) return;
+      // A previous slow request can finish while this one is still generating.
+      const currentPeople = people.map(person => ({ ...person, greeted: person.greeted || budget.greeted.has(person.id) }));
+      const lines = parseAmbient(completion.content, currentPeople, save.player.name);
+      const greeters = lines.filter(line => line.to === 'farmer').map(line => line.npc);
+      for (const npc of greeters) budget.greeted.add(npc);
+      reply(lines);
+      this.log(`同图：${names}，${lines.length ? `${lines.length} 句` : '没有可显示的'}`
+        + (greeters.length ? `，打招呼：${greeters.map(npc => roster.get(npc).name).join('、')}` : ''));
+    } catch (error) {
+      this.log(`同图失败：${error instanceof Error ? error.message : String(error)}`);
+      reply([]);
+    }
+  }
+
+  /**
    * Replaces the Mod's bubbles for the day and offers this morning's letter; sent again when a late consolidation
    * finishes (docs/npc-bubbles.md, docs/npc-mail.md). The Mod ignores a letter it already has.
    */
@@ -196,7 +242,10 @@ export class BridgeServer {
       session.save = await this.memory.load(message);
       // A rollback with a fresh nonce restarts the day's native scene budget. A repeated announcement of the
       // same load keeps it, and a failed load above must not erase the current load's budget.
-      if (session.save !== previousSave) session.scenes = { day: session.save.day, pairs: new Set(), lastMinute: -1 };
+      if (session.save !== previousSave) {
+        session.scenes = { day: session.save.day, pairs: new Set(), lastMinute: -1 };
+        session.ambient = { day: session.save.day, calls: 0, greeted: new Set() };
+      }
       const previous = this.owners.get(message.lineageId);
       if (previous && previous !== session) {
         previous.pending?.abort('Connection superseded');
@@ -257,6 +306,10 @@ export class BridgeServer {
     }
     if (message.type === 'scene.request') {
       void this.scene(session, message, send);
+      return;
+    }
+    if (message.type === 'ambient.request') {
+      void this.ambient(session, message, send);
       return;
     }
     await save.control(message, () => {

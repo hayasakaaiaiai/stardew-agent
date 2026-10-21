@@ -32,7 +32,7 @@ internal sealed partial class ModEntry
 
     private bool TownGate(string stage)
     {
-        this.MemoryTestProgress("town", stage);
+        this.MemoryTestProgress(this.ambientTestRunning ? "ambient" : "town", stage);
         string path = Path.Combine(this.memoryTest!.RunDirectory, "control.json");
         if (!File.Exists(path)) return false;
         using JsonDocument data = JsonDocument.Parse(File.ReadAllText(path));
@@ -242,7 +242,7 @@ internal sealed partial class ModEntry
                 if (!this.TownHourDone()) return;
                 if (!this.TownGate("town-final-ready")) return;
                 this.TownCheck(true, "town-expired-hour-acknowledged");
-                this.MemoryTestProgress("return-finish", "后台传话、记忆及旧功能组合验收完成。"); break;
+                this.BeginAmbientTest(); break;
         }
     }
 }

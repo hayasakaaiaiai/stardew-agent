@@ -8,12 +8,14 @@ param(
     [switch]$NightlyRecovery,
     [switch]$Social,
     [switch]$Offline,
+    [switch]$AmbientOnly,
     [string]$RunDirectory = ''
 )
 
 $ErrorActionPreference = 'Stop'
 if ($Social -and ($Nightly -or $MorningPlans -or $BubblesOnly -or $MailOnly -or $NightlyRecovery)) { throw '组合验收不可与其他独立场景混用。' }
 if ($Offline -and -not $Social) { throw '-Offline 仅用于三功能组合验收。' }
+if ($AmbientOnly -and -not $Social) { throw '-AmbientOnly 仅用于组合验收的新功能场景。' }
 if (($MailOnly -and ($BubblesOnly -or $Nightly -or $MorningPlans -or $NightlyRecovery)) -or ($BubblesOnly -and $NightlyRecovery)) { throw 'Native fixed-packet fixtures cannot be combined with the recovery scenario.' }
 $taskRoot = Split-Path -Parent $PSScriptRoot
 if (Get-Process -Name StardewModdingAPI,'Stardew Valley' -ErrorAction SilentlyContinue) {
@@ -71,7 +73,7 @@ $taskConfig = [pscustomobject]@{
     BackendUrl=''; RunDirectory=$taskRun; SaveDirectory=$taskCopy; GamePath=$GamePath
     Nightly=[bool]($Nightly -or $MorningPlans -or $NightlyRecovery); MorningPlans=[bool]($MorningPlans -or $NightlyRecovery)
     BubblesOnly=[bool]$BubblesOnly; MailOnly=[bool]$MailOnly; NightlyRecovery=[bool]$NightlyRecovery
-    Social=[bool]$Social; Offline=[bool]$Offline; NewParts=[bool]$Social
+    Social=[bool]$Social; Offline=[bool]$Offline; NewParts=[bool]$Social; AmbientOnly=[bool]$AmbientOnly
 }
 $taskConfigPath = Join-Path $taskRun 'config.json'
 $taskConfig | ConvertTo-Json | Set-Content -LiteralPath $taskConfigPath -Encoding UTF8

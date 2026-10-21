@@ -25,6 +25,7 @@ internal sealed class MemoryTestConfig
     public bool Social { get; set; }
     public bool Offline { get; set; }
     public bool NewParts { get; set; }
+    public bool AmbientOnly { get; set; }
 }
 
 internal sealed partial class ModEntry
@@ -92,7 +93,7 @@ internal sealed partial class ModEntry
             bool matched = control is not null && control.RootElement.GetProperty("requestId").GetString() == test.RequestId;
             if (matched && control!.RootElement.TryGetProperty("abort", out JsonElement reason))
                 throw new InvalidOperationException(reason.GetString());
-            if ((DateTime.UtcNow - this.memoryTestStarted).TotalSeconds > 660)
+            if ((DateTime.UtcNow - this.memoryTestStarted).TotalSeconds > 960)
                 throw new TimeoutException("记忆真机验收超时。");
             if (this.syncFailed)
                 throw new InvalidOperationException("记忆同步失败，请查看后端日志。");
@@ -175,7 +176,7 @@ internal sealed partial class ModEntry
                         throw new InvalidOperationException("阿比盖尔已离开目标地点。");
                     if (test.Social)
                     {
-                        this.MemoryTestProgress(this.townTestRunning ? "town" : this.newsTestRunning ? "news" : this.newPartsRunning ? "new-parts" : "social", "已到组合验收场地。");
+                        this.MemoryTestProgress(this.ambientTestRunning ? "ambient" : this.townTestRunning ? "town" : this.newsTestRunning ? "news" : this.newPartsRunning ? "new-parts" : "social", "已到组合验收场地。");
                         break;
                     }
                     if (test.BubblesOnly)
@@ -331,6 +332,9 @@ internal sealed partial class ModEntry
                     break;
                 case "town":
                     this.TickTownTest();
+                    break;
+                case "ambient":
+                    this.TickAmbientTest();
                     break;
                 case "social-title":
                     if (Game1.activeClickableMenu is TitleMenu && !Context.IsWorldReady && this.lifecycle.Count == 0)
@@ -511,6 +515,8 @@ internal sealed partial class ModEntry
             newPartsChecks = this.newPartsChecks, presentDeliveries = this.newPartsDeliveries, householdSnapshots = this.newPartsWorlds,
             newsChecks = this.newsTestChecks, newsReports = this.newsTestReports,
             townChecks = this.townTestChecks, townPackets = this.townTestPackets, townHours = this.townTestHours,
+            ambientChecks = this.ambientTestChecks, ambientShown = this.ambientTestShown, ambientPackets = this.ambientTestPackets,
+            eventAssets = this.ambientEventAssets,
             worldReady = Context.IsWorldReady, saveProcessing = SaveGame.IsProcessing, newDay = Game1.newDay,
             events = this.memoryTestEvents, elapsedSeconds = Math.Round((DateTime.UtcNow - this.memoryTestStarted).TotalSeconds, 2) },
             new JsonSerializerOptions { WriteIndented = true });

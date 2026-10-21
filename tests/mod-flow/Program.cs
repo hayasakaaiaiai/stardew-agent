@@ -379,6 +379,46 @@ Test("scene packets reject stale loads and request numbers and skip malformed ro
     Check((int)Get(mod, "sceneRequestSeq")! == 0 && (int)Get(mod, "scenesToday")! == 0 && (int)Get(mod, "sceneShowing")! == 0,
         "A new load/day retained pending scenes or their daily budget.");
 });
+Test("ambient packets reject stale loads and request numbers, skip malformed rows, and reset with the day", () =>
+{
+    object mod = BubbleMod();
+    foreach (string field in new[] { "ambientAskedAt", "ambientGreeted", "ambientLines" })
+        Set(mod, field, Activator.CreateInstance(modType.GetField(field, Fields)!.FieldType)!);
+    int Queued() => (int)Get(mod, "ambientLines")!.GetType().GetProperty("Count")!.GetValue(Get(mod, "ambientLines"))!;
+    Set(mod, "ambientRequestSeq", 42);
+    foreach (var identity in new[] { ("old", 42), ("current", 41), ("current", 42) })
+    {
+        using JsonDocument packet = JsonDocument.Parse(JsonSerializer.Serialize(new { lineageId = "farm", loadNonce = identity.Item1,
+            seq = identity.Item2, lines = new object?[] { null, 7, "bad", new { npc = 7 },
+                new { npc = "pierre", to = 7, text = "欢迎光临！", emote = "happy" }, new { npc = "abigail", text = "唉。" } } }));
+        Check((bool)Invoke(mod, "HandleAmbient", "ambient.lines", packet.RootElement)!, "The ambient packet was not recognized.");
+        Check(Queued() == (identity == ("current", 42) ? 2 : 0), "A stale ambient reply entered the queue or valid rows were lost.");
+    }
+    Set(mod, "ambientToday", 12); Set(mod, "lastAmbientAt", 1000); Set(mod, "ambientRequestSeq", 43);
+    ((System.Collections.IDictionary)Get(mod, "ambientAskedAt")!)["Pierre"] = 1000;
+    ((HashSet<string>)Get(mod, "ambientGreeted")!).Add("Pierre");
+    Invoke(mod, "ClearAmbient");
+    Check((int)Get(mod, "ambientRequestSeq")! == 0 && (int)Get(mod, "ambientToday")! == 0 && (int)Get(mod, "lastAmbientAt")! == -1
+        && Queued() == 0 && ((System.Collections.IDictionary)Get(mod, "ambientAskedAt")!).Count == 0 && ((HashSet<string>)Get(mod, "ambientGreeted")!).Count == 0,
+        "A new load/day retained the ambient budget, greetings or pending lines.");
+});
+Test("the final overhead line keeps its display slot and clearing the day releases it", () =>
+{
+    object mod = BubbleMod();
+    foreach (string field in new[] { "ambientAskedAt", "ambientGreeted", "ambientLines", "scenePairs", "sceneLines", "sceneParticipants" })
+        Set(mod, field, Activator.CreateInstance(modType.GetField(field, Fields)!.FieldType)!);
+    bool Busy(string property) => (bool)modType.GetProperty(property, Fields)!.GetValue(mod)!;
+    Set(mod, "ambientCurrentTick", (uint)100); Set(mod, "nextAmbientLineTick", (uint)280);
+    Check(Busy("AmbientBusy"), "Dequeuing the last ambient line released its slot before the display interval.");
+    Set(mod, "ambientCurrentTick", (uint)280);
+    Check(!Busy("AmbientBusy"), "The slot stayed busy after the final ambient line finished.");
+    Set(mod, "nextAmbientLineTick", (uint)400); Invoke(mod, "ClearAmbient");
+    Check(!Busy("AmbientBusy"), "A reload kept the old ambient display interval.");
+    Set(mod, "sceneCurrentTick", (uint)100); Set(mod, "nextSceneLineTick", (uint)280);
+    Check(Busy("SceneBusy"), "Dequeuing the last scene line released its slot before the display interval.");
+    Invoke(mod, "ClearScenes");
+    Check(!Busy("SceneBusy"), "A reload kept the old scene display interval.");
+});
 Test("disabled friendship does not change the per-NPC daily total", () =>
 {
     object mod = TestMod();

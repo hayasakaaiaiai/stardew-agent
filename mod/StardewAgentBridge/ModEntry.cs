@@ -144,6 +144,7 @@ internal sealed partial class ModEntry : Mod
         if (e.IsMultipleOf(30) && this.memoryTest?.BubblesOnly != true)
             this.TickBubbles();
         this.TickScenes(e);
+        this.TickAmbient(e);
         this.TickGifts();
         this.TickTown();
 
@@ -177,8 +178,24 @@ internal sealed partial class ModEntry : Mod
             && this.CanChat
             && Context.IsWorldReady
             && SocialNpcs.Contains(npc.Name)
+            && !ColdShoulder(npc.Name)
             && !Game1.eventUp
             && !Game1.isFestival();
+    }
+
+    /// <summary>
+    /// The week after a group ten-heart confrontation, when vanilla has these six refuse to talk to the player
+    /// (docs/legacy-cleanup.md §6). The event's dump command sets these dialogue events.
+    /// </summary>
+    private static bool ColdShoulder(string name)
+    {
+        string? key = name switch
+        {
+            "Abigail" or "Emily" or "Haley" or "Leah" or "Maru" or "Penny" => "dumped_Girls",
+            "Alex" or "Elliott" or "Harvey" or "Sam" or "Sebastian" or "Shane" => "dumped_Guys",
+            _ => null,
+        };
+        return key is not null && Game1.player.activeDialogueEvents.ContainsKey(key);
     }
 
     private void Offer(NPC npc)
@@ -351,7 +368,7 @@ internal sealed partial class ModEntry : Mod
     {
         string type = message.TryGetProperty("type", out JsonElement typeValue) ? typeValue.GetString() ?? "" : "";
         if (this.HandleSync(type, message) || this.HandleBubbles(type, message) || this.HandleLetters(type, message)
-            || this.HandleScenes(type, message))
+            || this.HandleScenes(type, message) || this.HandleAmbient(type, message))
             return;
         string npc = message.TryGetProperty("npc", out JsonElement npcValue) ? npcValue.GetString() ?? "" : "";
         if (this.talk is not { Waiting: true } t || t.Npc.Name != npc || !this.IsCurrentReply(message, t.RequestSeq))
