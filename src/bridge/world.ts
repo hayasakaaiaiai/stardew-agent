@@ -2,7 +2,7 @@
 import type { WorldState } from '../agent/dialogue.ts';
 import type { PlayerInfo, Weather, WorldFlags, WorldSnapshot } from './protocol.ts';
 
-const WEATHER: Record<Weather, string> = { sunny: '晴', rain: '下雨', storm: '雷雨', snow: '下雪', windy: '刮风' };
+export const WEATHER: Record<Weather, string> = { sunny: '晴', rain: '下雨', storm: '雷雨', snow: '下雪', windy: '刮风' };
 
 /** 1530 → "15:30"; the game clock runs to 2600, i.e. 2 a.m. */
 export function clock(time: number): string {

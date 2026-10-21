@@ -61,6 +61,11 @@ export interface SavePointer {
   dayEnded: number;
 }
 
+/**
+ * Optional on `town.hour`, for scenes between the NPCs of a group (docs/scheduler.md §4.1): each group's place, each
+ * NPC's hearts with the player by game name, and the weather. Without `hearts` the backend starts no scene.
+ */
+export interface Backstage { places?: string[]; hearts?: Record<string, number>; weather?: Weather }
 export type LoadedSave = { type: 'save.loaded'; player: PlayerInfo; date: GameDate; commit: SavePointer | null } & Envelope;
 
 export type ModMessage =
@@ -90,7 +95,7 @@ export type ModMessage =
   /** The lines of that request have been shown, so news told in them is remembered (docs/npc-news.md); reliable, acknowledged. */
   | ({ type: 'scene.shown'; request: number; date: GameDate } & Envelope)
   /** Social NPCs who spent this hour together away from the player, by game name (docs/offscreen-news.md); reliable, acknowledged. */
-  | ({ type: 'town.hour'; groups: string[][]; date: GameDate } & Envelope)
+  | ({ type: 'town.hour'; groups: string[][]; date: GameDate } & Backstage & Envelope)
   /** NPCs near the player, each to say at most one line (docs/ambient-lines.md); game names. */
   | ({ type: 'ambient.request'; npcs: AmbientNpc[]; world: WorldSnapshot } & Envelope)
   /** What happened at a festival the player just left (docs/festival-memories.md); game names. Reliable, acknowledged. */
@@ -263,6 +268,12 @@ export function parseModMessage(raw: string): ModMessage {
       const groups = data.groups;
       if (!Array.isArray(groups) || groups.length > 34 || groups.some((group) => !Array.isArray(group) || group.length < 2 || group.length > 34
         || group.some((npc) => typeof npc !== 'string' || !npc || npc.length > 50 || /[\u0000-\u001f]/u.test(npc)))) fail('groups must be lists of names');
+      const { places, hearts } = data;
+      if (places !== undefined && (!Array.isArray(places) || places.length !== (groups as unknown[]).length
+        || places.some((place) => typeof place !== 'string' || place.length > 50 || /[\u0000-\u001f]/u.test(place)))) fail('places must name each group');
+      if (hearts !== undefined && (!hearts || typeof hearts !== 'object' || Array.isArray(hearts) || Object.keys(hearts).length > 34
+        || Object.entries(hearts).some(([npc, value]) => !isName(npc) || !Number.isSafeInteger(value) || value < 0 || value > 14))) fail('hearts must map names to 0–14');
+      if (data.weather !== undefined) weather(data.weather);
       break;
     }
     case 'festival.ended': {

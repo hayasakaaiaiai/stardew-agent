@@ -1,11 +1,12 @@
 /** Game save coordination around the unchanged M1 memory kernel (docs/game-memory.md). */
 import { mkdir, open, readdir, readFile, rename, rm } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
+import { type BackstageNote, FESTIVAL_DAYS } from '../agent/backstage.ts';
 import type { Consolidator } from '../agent/consolidation.ts';
 import { type Bubble, bubblesFor } from '../agent/bubbles.ts';
 import { AgentMemory, turnLog } from '../agent/dialogue-memory.ts';
 import type { DialogueMemory, Exchange, Remembered, Standing, TurnResult } from '../agent/dialogue.ts';
-import { festivalMemories } from '../agent/festivals.ts';
+import { FESTIVAL_TOPIC, festivalMemories } from '../agent/festivals.ts';
 import { friendshipPoints, friendshipSoFar } from '../agent/friendship.ts';
 import { giftItemName, giftMemory } from '../agent/gifts.ts';
 import { GIVEN_TOPIC, givenMemory, withInPersonGift } from '../agent/in-person-gifts.ts';
@@ -153,6 +154,8 @@ export class GameSave {
   private live = true;
   /** Request seq → what its listeners learned; only in memory, so a backend restart before it was shown forgets it. */
   private readonly scenes = new Map<number, { day: number; transfers: Transfer[] }>();
+  /** Backstage results waiting for the next town hour (docs/scheduler.md §4.5); only in memory, like scenes. */
+  private backstage: { day: number; notes: BackstageNote[] }[] = [];
 
   constructor(runtime: Runtime, path: string, state: Checkpoint, confirmed: (commitId: string) => void = () => {}) {
     this.runtime = runtime; this.path = path; this.state = state; this.confirmed = confirmed;
@@ -380,23 +383,42 @@ export class GameSave {
     if (transfers.length) this.scenes.set(request, { day: this.state.day, transfers });
   }
 
+  /** A model call returns seconds later, when the hour's seq is gone; the next hour writes it under its own seq. */
+  noteBackstage(day: number, notes: BackstageNote[]): void {
+    if (notes.length && day === this.state.day && !this.closed) this.backstage.push({ day, notes });
+  }
+
+  /** Each NPC's festival memories of the last week, newest first, for a backstage scene (docs/scheduler.md §4.3). */
+  async festivalsFor(npcIds: readonly string[], now: number): Promise<Record<string, string[]>> {
+    const found: Record<string, string[]> = {};
+    for (const npcId of npcIds) {
+      const memories = await this.scope!.agent(npcId).recall({ topics: [FESTIVAL_TOPIC], sharedScene: true, nowGameTime: now, limit: 8 });
+      found[npcId] = memories.filter(memory => now - memory.gameTime <= FESTIVAL_DAYS * 1440)
+        .sort((a, b) => b.gameTime - a.gameTime).map(memory => memory.text);
+    }
+    return found;
+  }
+
   /**
-   * Writes what listeners learned as one event in their parts of the day, so it is saved or rolled back with the day.
-   * A listener keeps each origin's news once, whoever told it first.
+   * Writes what listeners learned, and any backstage notes, as one event in their parts of the day, so it is saved or
+   * rolled back with the day. A listener keeps each origin's news once, whoever told it first.
    */
-  private async writeHeard(receipt: Receipt, date: GameDate, transfers: readonly Transfer[], name: (id: string) => string): Promise<Heard[]> {
+  private async writeHeard(receipt: Receipt, date: GameDate, transfers: readonly Transfer[], name: (id: string) => string,
+    notes: readonly BackstageNote[] = []): Promise<Heard[]> {
     const fresh = transfers.filter((transfer, index) => transfer.listener !== transfer.item.origin
       && !heardToday(this.dayEntries(transfer.listener), transfer.listener).some((item) => item.origin === transfer.item.origin)
       && transfers.findIndex((other) => other.listener === transfer.listener && other.item.origin === transfer.item.origin) === index);
-    if (!fresh.length) return [];
-    const listeners = [...new Set(fresh.map((transfer) => transfer.listener))];
-    await this.scope!.record({ seq: receipt.seq, gameTime: gameMinutes(date), changes: listeners.map((listener, index) => {
-      const mine = fresh.filter((transfer) => transfer.listener === listener);
-      return { npcId: listener, memories: mine.map((transfer) => heardMemory(transfer, name)),
-        log: { heard: mine.map(({ from, item }) => ({ origin: item.origin, from, share: item.share, hand: item.hand })),
+    if (!fresh.length && !notes.length) return [];
+    const npcIds = [...new Set([...fresh.map((transfer) => transfer.listener), ...notes.map((note) => note.npcId)])];
+    await this.scope!.record({ seq: receipt.seq, gameTime: gameMinutes(date), changes: npcIds.map((npcId, index) => {
+      const mine = fresh.filter((transfer) => transfer.listener === npcId);
+      const own = notes.filter((note) => note.npcId === npcId);
+      return { npcId, memories: [...mine.map((transfer) => heardMemory(transfer, name)), ...own.map((note) => note.memory)],
+        log: { ...(mine.length ? { heard: mine.map(({ from, item }) => ({ origin: item.origin, from, share: item.share, hand: item.hand })) } : {}),
+          ...(own.length ? { backstage: own.map((note) => note.memory.text) } : {}),
           ...(index === 0 ? { bridgeReceipt: JSON.parse(canonical(receipt)) } : {}) } };
     }) });
-    return fresh.map((transfer) => ({ npcId: transfer.listener, memory: heardMemory(transfer, name) }));
+    return [...fresh.map((transfer) => ({ npcId: transfer.listener, memory: heardMemory(transfer, name) })), ...notes];
   }
 
   /** What the listeners of a shown scene learned (docs/npc-news.md); a resent or unknown scene writes nothing. */
@@ -416,7 +438,8 @@ export class GameSave {
 
   /**
    * NPCs who spent the hour together away from the player pass news on in code, without a model call
-   * (docs/offscreen-news.md). One that no longer fits the open day is acknowledged without effect.
+   * (docs/offscreen-news.md), and the backstage scenes that came back since the last hour are written with it
+   * (docs/scheduler.md §4.5). One that no longer fits the open day is acknowledged without effect.
    */
   townHour(message: TownHour, name: (id: string) => string): Promise<Heard[]> {
     return this.enqueue(async () => {
@@ -426,7 +449,10 @@ export class GameSave {
       if (this.state.phase === 'open' && absoluteDay(message.date) === this.day) {
         const groups = message.groups.map((group) => [...new Set(group.map((npc) => npc.toLowerCase()))]
           .filter((id) => (SOCIAL_NPCS as readonly string[]).includes(id))).filter((group) => group.length >= 2);
-        if (groups.length) heard = await this.writeHeard(receipt, message.date, spread(groups, await this.gossip(groups.flat())), name);
+        const notes = this.backstage.filter((item) => item.day === this.day).flatMap((item) => item.notes);
+        this.backstage = [];
+        const transfers = groups.length ? spread(groups, await this.gossip(groups.flat())) : [];
+        heard = await this.writeHeard(receipt, message.date, transfers, name, notes);
       }
       this.addReceipt(receipt);
       await this.persist();

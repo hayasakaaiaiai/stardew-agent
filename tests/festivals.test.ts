@@ -20,7 +20,7 @@ test('the dance partner remembers dancing, and everyone else who was there saw i
   assert.deepEqual(rows(festivalMemories(results({ present: ['abigail', 'sebastian', 'lewis', 'sebastian'], dance: 'abigail' }), name)), [
     `abigail 4 ${DANCED}`, `sebastian 2 ${SAW_DANCE}`, `lewis 2 ${SAW_DANCE}`]);
   const [partner, onlooker] = festivalMemories(results({ present: ['abigail', 'sebastian'], dance: 'abigail' }), name);
-  assert.deepEqual(partner!.memory, { text: DANCED, importance: 4, kind: 'observation', subjects: ['player'], visibility: 'normal' });
+  assert.deepEqual(partner!.memory, { text: DANCED, importance: 4, kind: 'observation', subjects: ['player'], topics: ['festival'], visibility: 'normal' });
   assert.deepEqual(onlooker!.memory.subjects, ['player', 'abigail']);
   assert.deepEqual(rows(festivalMemories(results({ present: ['sebastian'], dance: 'abigail' }), name)),
     [`abigail 4 ${DANCED}`, `sebastian 2 ${SAW_DANCE}`], 'the partner remembers even if the Mod missed her among the actors');

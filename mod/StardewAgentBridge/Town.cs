@@ -8,7 +8,8 @@ namespace StardewAgentBridge;
 /// <summary>
 /// Who spends each in-game hour together away from the player, so the backend can pass news between them in code
 /// (docs/offscreen-news.md). Indoors the whole location counts as together; outdoors, NPCs within a few tiles of
-/// each other. The player's own location is left to the scenes they can see (docs/npc-chat.md).
+/// each other. The player's own location is left to the scenes they can see (docs/npc-chat.md). With each group go its
+/// place, and for backstage scenes everyone's hearts and the weather (docs/scheduler.md §4.1).
 /// </summary>
 internal sealed partial class ModEntry
 {
@@ -16,6 +17,9 @@ internal sealed partial class ModEntry
 
     /// <summary>The latest hour not yet sent; a newer hour replaces it.</summary>
     private List<List<string>>? townPending;
+
+    /// <summary>Where each pending group is, in the same order.</summary>
+    private List<string> townPlaces = new();
 
     private void ClearTown() => this.townPending = null;
 
@@ -25,6 +29,7 @@ internal sealed partial class ModEntry
             || (this.memoryTest is not null && !this.townTestRunning) || this.abigailTestRequest is not null)
             return;
         List<List<string>> groups = new();
+        List<string> places = new();
         foreach (GameLocation location in Game1.locations)
         {
             if (location == Game1.currentLocation)
@@ -35,6 +40,7 @@ internal sealed partial class ModEntry
             if (!location.IsOutdoors)
             {
                 groups.Add(here.Select(npc => npc.Name).ToList());
+                places.Add(location.DisplayName ?? "");
                 continue;
             }
             // Outdoors, join everyone within reach of someone already in the group.
@@ -48,11 +54,14 @@ internal sealed partial class ModEntry
                     group.AddRange(near);
                     here.RemoveAll(near.Contains);
                 }
-                if (group.Count >= 2)
-                    groups.Add(group.Select(npc => npc.Name).ToList());
+                if (group.Count < 2)
+                    continue;
+                groups.Add(group.Select(npc => npc.Name).ToList());
+                places.Add(location.DisplayName ?? "");
             }
         }
         this.townPending = groups.Count > 0 ? groups : null;
+        this.townPlaces = places;
     }
 
     /// <summary>
@@ -63,7 +72,14 @@ internal sealed partial class ModEntry
     {
         if (this.townPending is null || this.talk is not null || this.initialSave is null || !this.activeLoad)
             return;
-        this.Send("town.hour", new() { ["groups"] = this.townPending, ["date"] = GameState.Date() });
+        Dictionary<string, object?> fields = new() { ["groups"] = this.townPending, ["places"] = this.townPlaces, ["date"] = GameState.Date() };
+        if (this.config.BackstageScenes)
+        {
+            fields["hearts"] = this.townPending.SelectMany(group => group).Distinct()
+                .ToDictionary(name => name, name => Game1.player.getFriendshipHeartLevelForNPC(name));
+            fields["weather"] = GameState.Weather();
+        }
+        this.Send("town.hour", fields);
         this.townPending = null;
     }
 }

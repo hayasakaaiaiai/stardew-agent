@@ -431,6 +431,18 @@ try {
     assert.deepEqual(groups(1), [['Gus', 'Pam', 'Sam']], 'six-tile links join transitively; invisible and seven-tile NPCs are absent');
     assert.deepEqual(groups(2), [['Pam', 'Leah']]);
     assert.deepEqual(groups(3), [['Abigail', 'Leah']], 'the latest pending hour replaces the earlier Jodi group');
+    for (const [index, hour] of hours.entries()) {
+      const names = [...new Set((hour.groups as string[][]).flat())].sort();
+      assert.equal((hour.places as string[]).length, (hour.groups as string[][]).length, 'every group names its place (docs/scheduler.md §4.1)');
+      assert.ok((hour.places as string[]).every(place => place.length > 0), 'places are the game\'s display names');
+      if (index === hours.length - 1) {
+        assert.ok(!('hearts' in hour) && !('weather' in hour), 'BackstageScenes off sends no hearts, so no backstage scene');
+        continue;
+      }
+      assert.deepEqual(Object.keys(hour.hearts as Record<string, number>).sort(), names, 'backstage hearts for exactly the NPCs in the groups');
+      assert.ok(Object.values(hour.hearts as Record<string, number>).every(value => Number.isInteger(value) && value >= 0 && value <= 14));
+      assert.ok(['sunny', 'rain', 'storm', 'snow', 'windy'].includes(hour.weather as string));
+    }
     const windQuestions = calls.filter(call => call.kind === 'dialogue' && call.messages.at(-1)?.content.startsWith('最近有人告诉你我给蓝色风筝'));
     assert.equal(windQuestions.length, 3);
     assert.match(windQuestions[0]!.messages[0]!.content, HEARD_WIND);
