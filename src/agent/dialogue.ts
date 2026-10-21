@@ -80,11 +80,7 @@ export const RELATIONS: Record<Relation, string> = {
   stranger: '刚认识', friend: '朋友', dating: '正在约会', engaged: '已订婚', married: '已结婚', roommate: '室友',
 };
 
-/**
- * Same for every NPC and every call, so it stays in the cached prefix. `remember` comes before `options`: written
- * after them, it took an option the player had not chosen for something the player said, 5 times in 17 on one
- * line, against 0 in 16 this way (docs/legacy-cleanup.md §8).
- */
+/** Same for every NPC and every call, so it stays in the cached prefix. */
 export const RULES = `# 角色扮演规则
 
 你在《星露谷物语》里扮演一位居民，正在和玩家聊天。玩家是不久前搬来、继承了爷爷旧农场的农夫。下面依次给出你的角色卡、当前情况和今天的对话。
@@ -102,13 +98,13 @@ export const RULES = `# 角色扮演规则
 
 ## 输出格式
 只输出一个 JSON 对象，reply 必须是第一个字段。例如：
-{"reply":"嘿。下雨天你也出门了？","emotion":"happy","remember":[],"options":["一起走走吧","你喜欢下雨？","我先回农场了"],"mood":0,"end":false}
+{"reply":"嘿。下雨天你也出门了？","emotion":"happy","options":["一起走走吧","你喜欢下雨？","我先回农场了"],"remember":[],"mood":0,"end":false}
 
 字段：
 - reply：你说的台词，只写台词。
 - emotion：说这句话时的表情，取 neutral、happy、sad、blush、angry、special 之一。
-- remember：这轮里值得你长期记住的事，0–2 条，每条写成 {"text":"……","importance":1到5}，用你自己的视角写，比如“小林说她最喜欢下雨天”。玩家说出的喜好、计划、承诺、经历和心里话都要记；寒暄和你自己说的话不用记；没有就写 []。
 - options：玩家下一句可以说的话，正好 3 条，用玩家的口吻，每条不超过 15 字，方向要不同，比如一条顺着聊、一条追问、一条告别或岔开。
+- remember：这轮里值得你长期记住的事，0–2 条，每条写成 {"text":"……","importance":1到5}，用你自己的视角写，比如“小林说她最喜欢下雨天”。玩家说出的喜好、计划、承诺、经历和心里话都要记；寒暄和你自己说的话不用记；没有就写 []。
 - mood：这句话让你对玩家好感的变化，-2 到 2：闲聊 0，合心意 1，很感动 2，冒犯 -1，很过分 -2；讨好感、空奉承算 0。
 - end：你想结束这次对话时写 true，比如玩家道别或你不想再聊了；否则写 false。`;
 
@@ -117,7 +113,7 @@ export const RULES = `# 角色扮演规则
  * DeepSeek's JSON mode returns nothing but whitespace; naming the fields stops it copying the reply-only
  * shape of the history (measured 3/6 complete without, 6/6 with).
  */
-export const JSON_HINT = '（用 json 回复，字段齐全：reply、emotion、remember、options、mood、end）';
+export const JSON_HINT = '（用 json 回复，字段齐全：reply、emotion、options、remember、mood、end）';
 
 export interface PromptInput {
   npcName: string;

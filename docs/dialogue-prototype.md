@@ -92,10 +92,10 @@ render(id, view): { stable: string; gated: string }
 使用服务商的 JSON 输出模式，模型只输出一个 JSON 对象，`reply` 放第一个字段：
 
 ```json
-{"reply":"嘿。下雨天你也出门了？……我正打算去找青蛙。","emotion":"happy","remember":[{"text":"玩家下雨天来找我聊天","importance":2}],"options":["一起去吧","你喜欢青蛙？","我得回农场了"],"mood":0,"end":false}
+{"reply":"嘿。下雨天你也出门了？……我正打算去找青蛙。","emotion":"happy","options":["一起去吧","你喜欢青蛙？","我得回农场了"],"remember":[{"text":"玩家下雨天来找我聊天","importance":2}],"mood":0,"end":false}
 ```
 
-`remember` 写在 `options` 前面：写在后面时，模型会把玩家还没选的选项记成玩家说过的话（`legacy-cleanup.md` §8）。`mood` 见 `npc-friendship.md`。
+`remember` 只用来决定这轮记不记、重要度多少，正文由代码换成玩家这一轮的原话，所以模型把没选的选项写进 `remember` 也不会被记下（`legacy-cleanup.md` §8–§9）。`mood` 见 `npc-friendship.md`。
 
 台词仍然能一边生成一边显示：`ReplyStream` 从还没写完的 JSON 里逐字解出 `reply` 的值，转义符被切在两个分块之间也能处理。
 

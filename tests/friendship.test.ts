@@ -32,8 +32,8 @@ test('a stranger is hard to win over and quick to offend, a close friend the oth
 
 test('the model rates the player’s line in mood; anything but an integer from −2 to 2 is 0', () => {
   assert.match(RULES, /\n- mood：这句话让你对玩家好感的变化，-2 到 2：闲聊 0，合心意 1，很感动 2，冒犯 -1，很过分 -2；讨好感、空奉承算 0。\n- end：/);
-  assert.match(RULES, /"options":\[[^\]]*\],"mood":0,"end":false\}/);
-  assert.match(JSON_HINT, /options、mood、end/);
+  assert.match(RULES, /"remember":\[\],"mood":0,"end":false\}/);
+  assert.match(JSON_HINT, /remember、mood、end/);
   const mood = (value: unknown) => parseOutput(JSON.stringify({ reply: '嗯。', emotion: 'happy', options: ['一', '二', '三'], remember: [], mood: value, end: false })).meta.mood;
   assert.deepEqual([-2, 1, 2, 3, -3, 1.5, '1', null].map(mood), [-2, 1, 2, 0, 0, 0, 0, 0]);
   assert.equal(parseOutput('{"reply":"嗯。","emotion":"happy","options":["一","二","三"],"remember":[],"end":false}').ok, true,

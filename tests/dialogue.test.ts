@@ -65,13 +65,6 @@ test('output parsing never throws and falls back to neutral defaults', () => {
   assert.deepEqual(partial.meta.options, ['只有一条', ...FALLBACK_OPTIONS.slice(0, 2)]);
 });
 
-test('remember is written before the options, so an option the player has not chosen is not remembered as said', () => {
-  const example = RULES.split('\n').find((line) => line.startsWith('{"reply"'))!;
-  assert.ok(example.indexOf('"remember"') < example.indexOf('"options"'), example);
-  assert.ok(RULES.indexOf('\n- remember：') < RULES.indexOf('\n- options：'));
-  assert.ok(JSON_HINT.indexOf('remember') < JSON_HINT.indexOf('options'), JSON_HINT);
-});
-
 test('prompt order: rules, stable card, gated card, situation, memory, then the conversation', () => {
   const messages = buildMessages({
     npcName: '阿比盖尔',
