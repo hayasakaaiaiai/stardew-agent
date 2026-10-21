@@ -471,6 +471,7 @@ Test("a festival's results are packed once it ends, wait for the conversation to
 });
 
 FestivalReadChecks.Run(modAssembly, gameAssembly, Test);
+ScheduleReadChecks.Run(modAssembly, gameAssembly, Test);
 
 Console.WriteLine($"Mod flow checks: {checks - failures}/{checks} passed.");
 return failures == 0 ? 0 : 1;

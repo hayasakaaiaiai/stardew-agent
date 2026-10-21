@@ -219,7 +219,7 @@ internal sealed partial class ModEntry : Mod
             return;
         }
         this.talk = new Talk(npc);
-        this.talk.RequestSeq = this.Send("talk.open", new()
+        Dictionary<string, object?> fields = new()
         {
             ["npc"] = npc.Name,
             ["hearts"] = GameState.Hearts(npc),
@@ -227,7 +227,9 @@ internal sealed partial class ModEntry : Mod
             ["seenEvents"] = GameState.SeenEvents(),
             ["inPersonGifts"] = this.config.InPersonGifts,
             ["world"] = GameState.World(),
-        });
+        };
+        GameState.AddSchedule(fields, npc);
+        this.talk.RequestSeq = this.Send("talk.open", fields);
         this.BeginWaiting(this.talk);
     }
 

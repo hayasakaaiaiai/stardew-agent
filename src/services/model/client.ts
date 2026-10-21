@@ -1,4 +1,4 @@
-/** Minimal OpenAI-compatible streaming client for the dialogue prototype; queueing and tiers come in M2. */
+/** Minimal OpenAI-compatible streaming client; queueing and tiers live in gateway.ts. */
 
 export type Thinking = 'disabled' | 'low' | 'high' | 'max';
 
@@ -45,6 +45,17 @@ export interface StreamHandlers {
   onReasoning?: (delta: string) => void;
 }
 
+export interface ChatOptions {
+  /** Turns on the provider's JSON output mode; the prompt must still describe the object. */
+  json?: boolean;
+  signal?: AbortSignal;
+}
+
+/** What callers need from a model: a `ModelClient`, or a gateway lane in front of one. */
+export interface ChatModel {
+  chat(messages: ChatMessage[], handlers?: StreamHandlers, options?: ChatOptions): Promise<Completion>;
+}
+
 const THINKING = new Set<Thinking>(['disabled', 'low', 'high', 'max']);
 
 export function modelConfigFromEnv(env: NodeJS.ProcessEnv = process.env): ModelConfig {
@@ -65,15 +76,14 @@ export function modelConfigFromEnv(env: NodeJS.ProcessEnv = process.env): ModelC
   };
 }
 
-export class ModelClient {
+export class ModelClient implements ChatModel {
   readonly config: ModelConfig;
 
   constructor(config: ModelConfig) {
     this.config = config;
   }
 
-  /** `json` turns on the provider's JSON output mode; the prompt must still describe the object. */
-  async chat(messages: ChatMessage[], handlers: StreamHandlers = {}, options: { json?: boolean; signal?: AbortSignal } = {}): Promise<Completion> {
+  async chat(messages: ChatMessage[], handlers: StreamHandlers = {}, options: ChatOptions = {}): Promise<Completion> {
     const { config } = this;
     const started = performance.now();
     const elapsed = () => Math.round(performance.now() - started);

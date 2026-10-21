@@ -1,15 +1,11 @@
 /** Turns the mod's raw game state into the dialogue's WorldState (docs/game-bridge.md §3). */
 import type { WorldState } from '../agent/dialogue.ts';
+import { clock } from '../agent/schedule.ts';
 import type { PlayerInfo, Weather, WorldFlags, WorldSnapshot } from './protocol.ts';
 
-const WEATHER: Record<Weather, string> = { sunny: '晴', rain: '下雨', storm: '雷雨', snow: '下雪', windy: '刮风' };
+export const WEATHER: Record<Weather, string> = { sunny: '晴', rain: '下雨', storm: '雷雨', snow: '下雪', windy: '刮风' };
 
-/** 1530 → "15:30"; the game clock runs to 2600, i.e. 2 a.m. */
-export function clock(time: number): string {
-  const hours = Math.floor(time / 100) % 24;
-  const minutes = time % 100;
-  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
-}
+export { clock };
 
 /**
  * The facts the cards' natural-language conditions depend on (see tools/chat/scenarios), and what the whole town

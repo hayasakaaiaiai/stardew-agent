@@ -4,10 +4,12 @@
  *   npm run bridge          # ws://127.0.0.1:47711, or NPC_BRIDGE_PORT
  */
 import { join, resolve } from 'node:path';
+import { BACKSTAGE_THINKING } from '../src/agent/backstage.ts';
 import { NIGHTLY_THINKING, nightlyConsolidator } from '../src/agent/nightly.ts';
 import { SCENE_THINKING } from '../src/agent/scene.ts';
 import { BridgeServer } from '../src/bridge/server.ts';
 import { ModelClient, modelConfigFromEnv } from '../src/services/model/client.ts';
+import { ModelGateway } from '../src/services/model/gateway.ts';
 import { Roster } from '../src/services/roster/index.ts';
 import { SOCIAL_NPCS } from '../src/types.ts';
 
@@ -21,16 +23,19 @@ const model = new ModelClient(modelConfigFromEnv());
 const stamp = () => new Date().toLocaleTimeString('zh-CN', { hour12: false });
 const log = (line: string) => console.log(`[${stamp()}] ${line}`);
 const nightlyModel = new ModelClient({ ...model.config, thinking: NIGHTLY_THINKING });
+// Every call goes through one queue: dialogue first, at most 3 others at once (docs/scheduler.md §3).
+const gateway = new ModelGateway();
 
 const server = await BridgeServer.start({
-  roster, model,
+  roster, model: gateway.lane('dialogue', model), gateway,
   memoryDirectory: join(ROOT, '.runtime', 'game'),
-  consolidator: nightlyConsolidator({ roster, model: nightlyModel, log }),
-  sceneModel: new ModelClient({ ...model.config, thinking: SCENE_THINKING }),
+  consolidator: nightlyConsolidator({ roster, model: gateway.lane('nightly', nightlyModel), log }),
+  sceneModel: gateway.lane('nearby', new ModelClient({ ...model.config, thinking: SCENE_THINKING })),
+  backstageModel: gateway.lane('background', new ModelClient({ ...model.config, thinking: BACKSTAGE_THINKING })),
   port: Number(process.env.NPC_BRIDGE_PORT ?? 47711),
   log,
 });
-log(`后端已启动：ws://127.0.0.1:${server.port}，角色卡 ${loaded.loaded.length} 张，模型 ${model.config.model}（对话 thinking=${model.config.thinking}，夜间整合 thinking=${NIGHTLY_THINKING}，碰面聊天和同图 thinking=${SCENE_THINKING}）`);
+log(`后端已启动：ws://127.0.0.1:${server.port}，角色卡 ${loaded.loaded.length} 张，模型 ${model.config.model}（对话 thinking=${model.config.thinking}，夜间整合 thinking=${NIGHTLY_THINKING}，碰面聊天和同图 thinking=${SCENE_THINKING}，后台场景 thinking=${BACKSTAGE_THINKING}）`);
 console.log('启动游戏读档即可；按 Ctrl+C 停止。');
 
 const stop = async () => {

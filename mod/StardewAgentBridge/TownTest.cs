@@ -235,12 +235,14 @@ internal sealed partial class ModEntry
                 this.TownCheck(this.talk!.Reply.Contains("云尾"), "town-second-hand-save-reload-native-recall", this.talk.Reply);
                 this.townTestStep = 83; this.CloseMemoryTestTalk("town"); break;
             case 83:
-                this.TownIsolate(); this.config.OffscreenNews = true;
+                // The last hour also checks that backstage scenes can be turned off (docs/scheduler.md §4.1).
+                this.TownIsolate(); this.config.OffscreenNews = true; this.config.BackstageScenes = false;
                 this.TownPlace("Gus", "Saloon", 5, 5); this.TownPlace("Robin", "Saloon", 6, 5);
                 this.TownHour(1000, 84); break;
             case 84:
                 if (!this.TownHourDone()) return;
                 if (!this.TownGate("town-final-ready")) return;
+                this.config.BackstageScenes = true;
                 this.TownCheck(true, "town-expired-hour-acknowledged");
                 this.BeginAmbientTest(); break;
         }

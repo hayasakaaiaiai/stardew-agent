@@ -11,6 +11,7 @@ import { parseModMessage, PROTOCOL_VERSION } from '../src/bridge/protocol.ts';
 import { NIGHTLY_THINKING, nightlyConsolidator } from '../src/agent/nightly.ts';
 import { SCENE_THINKING } from '../src/agent/scene.ts';
 import { ModelClient, modelConfigFromEnv, type ChatMessage, type Completion, type StreamHandlers, type Thinking } from '../src/services/model/client.ts';
+import { ModelGateway } from '../src/services/model/gateway.ts';
 import { Roster } from '../src/services/roster/index.ts';
 import { SOCIAL_NPCS } from '../src/types.ts';
 import { digest } from '../src/validation.ts';
@@ -115,8 +116,9 @@ function model(kind: 'dialogue' | 'scene' | 'nightly'): ModelClient {
 }
 const roster = new Roster({ directory: join(ROOT, 'data/npcs'), npcIds: SOCIAL_NPCS });
 assert.equal((await roster.load()).errors.length, 0);
-const server = await BridgeServer.start({ roster, model: model('dialogue'), sceneModel: model('scene'),
-  consolidator: nightlyConsolidator({ roster, model: model('nightly'), log }), memoryDirectory: join(directory, 'memory'), port: 0, log });
+const gateway = new ModelGateway();
+const server = await BridgeServer.start({ roster, model: gateway.lane('dialogue', model('dialogue')), sceneModel: gateway.lane('nearby', model('scene')), gateway,
+  consolidator: nightlyConsolidator({ roster, model: gateway.lane('nightly', model('nightly')), log }), memoryDirectory: join(directory, 'memory'), port: 0, log });
 const packets: { direction: string; packet: Record<string, unknown>; injected?: string }[] = [];
 const errors: string[] = [];
 const relay = new WebSocketServer({ host: '127.0.0.1', port: 0 });
@@ -359,6 +361,22 @@ try {
     assert.ok(reply, 'a disabled-gift opening must still receive its normal reply');
     assert.equal(reply.packet.gift, undefined, 'the disabled native setting must prevent a backend gift offer');
   }
+  // Schedules ride on four messages (docs/npc-schedules.md). The backend has already checked their shape; record every
+  // place so map names that the game shows untranslated can be reviewed.
+  type Stop = { time: number; place: string; sleep: boolean };
+  const schedules = mod.flatMap((packet): [string, string, Stop[]][] => {
+    if (packet.type === 'talk.open') return packet.schedule ? [['talk.open', packet.npc as string, packet.schedule as Stop[]]] : [];
+    if (packet.type === 'ambient.request') return (packet.npcs as { npc: string; schedule?: Stop[] }[])
+      .flatMap(npc => npc.schedule ? [['ambient.request', npc.npc, npc.schedule] as [string, string, Stop[]]] : []);
+    if (packet.type === 'scene.request' || packet.type === 'town.hour')
+      return Object.entries((packet.schedules ?? {}) as Record<string, Stop[]>).map(([npc, stops]) => [packet.type as string, npc, stops]);
+    return [];
+  });
+  const places = [...new Set(schedules.flatMap(([, , stops]) => stops.map(stop => stop.place)))].sort();
+  await json(join(directory, 'schedules.json'), { places, untranslated: places.filter(place => /^[\x20-\x7e]+$/.test(place)),
+    samples: schedules.slice(0, 40).map(([type, npc, stops]) => ({ type, npc, stops })) });
+  for (const [type, npc, stops] of schedules)
+    assert.ok(stops.every((stop, i) => i === 0 || stop.time >= stops[i - 1]!.time), `${type} ${npc}: the Mod sends stops in time order`);
   const gifts = mod.filter(packet => packet.type === 'gift.given');
   assert.equal(gifts.length, 2); assert.equal(gifts[0]!.taste, 'love'); assert.equal(gifts[0]!.item, '紫水晶'); assert.equal(gifts[1]!.item, '粘土');
   assert.equal(mod.filter(packet => packet.type === 'save.loaded').length, config.NewParts ? 11 : 3);
@@ -429,6 +447,18 @@ try {
     assert.deepEqual(groups(1), [['Gus', 'Pam', 'Sam']], 'six-tile links join transitively; invisible and seven-tile NPCs are absent');
     assert.deepEqual(groups(2), [['Pam', 'Leah']]);
     assert.deepEqual(groups(3), [['Abigail', 'Leah']], 'the latest pending hour replaces the earlier Jodi group');
+    for (const [index, hour] of hours.entries()) {
+      const names = [...new Set((hour.groups as string[][]).flat())].sort();
+      assert.equal((hour.places as string[]).length, (hour.groups as string[][]).length, 'every group names its place (docs/scheduler.md §4.1)');
+      assert.ok((hour.places as string[]).every(place => place.length > 0), 'places are the game\'s display names');
+      if (index === hours.length - 1) {
+        assert.ok(!('hearts' in hour) && !('weather' in hour) && !('schedules' in hour), 'BackstageScenes off sends no hearts, so no backstage scene');
+        continue;
+      }
+      assert.deepEqual(Object.keys(hour.hearts as Record<string, number>).sort(), names, 'backstage hearts for exactly the NPCs in the groups');
+      assert.ok(Object.values(hour.hearts as Record<string, number>).every(value => Number.isInteger(value) && value >= 0 && value <= 14));
+      assert.ok(['sunny', 'rain', 'storm', 'snow', 'windy'].includes(hour.weather as string));
+    }
     const windQuestions = calls.filter(call => call.kind === 'dialogue' && call.messages.at(-1)?.content.startsWith('最近有人告诉你我给蓝色风筝'));
     assert.equal(windQuestions.length, 3);
     assert.match(windQuestions[0]!.messages[0]!.content, HEARD_WIND);

@@ -4,7 +4,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { WebSocket } from 'ws';
 import type { Consolidator } from '../../src/agent/consolidation.ts';
-import { BridgeServer } from '../../src/bridge/server.ts';
+import { type BridgeOptions, BridgeServer } from '../../src/bridge/server.ts';
 import { PROTOCOL_VERSION, type BackendMessage, type LoadedSave, type SavePointer, type WorldSnapshot } from '../../src/bridge/protocol.ts';
 import type { ChatMessage, Completion, ModelClient, StreamHandlers } from '../../src/services/model/client.ts';
 import { Roster } from '../../src/services/roster/index.ts';
@@ -83,10 +83,10 @@ export async function harness(t: TestContext) {
   const fake = fakeModel();
   const servers: BridgeServer[] = [];
   const logs: string[] = [];
-  const start = async (consolidator?: Consolidator, nightlyRetryDelayMs?: number, sceneModel?: ModelClient) => {
+  const start = async (consolidator?: Consolidator, nightlyRetryDelayMs?: number, sceneModel?: ModelClient, extra: Partial<BridgeOptions> = {}) => {
     const server = await BridgeServer.start({ roster, model: fake.model, memoryDirectory: directory, port: 0, log: line => logs.push(line),
       ...(consolidator ? { consolidator } : {}), ...(nightlyRetryDelayMs !== undefined ? { nightlyRetryDelayMs } : {}),
-      ...(sceneModel ? { sceneModel } : {}) });
+      ...(sceneModel ? { sceneModel } : {}), ...extra });
     servers.push(server); return server;
   };
   const stop = async (server: BridgeServer) => { servers.splice(servers.indexOf(server), 1); await server.close(); };

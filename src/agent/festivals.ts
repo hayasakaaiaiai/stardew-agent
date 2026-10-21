@@ -10,6 +10,8 @@ export type Festival = typeof FESTIVALS[number];
 /** First to third place, 4 for none, or the mayor's shorts on display. */
 export type GrangeResult = 1 | 2 | 3 | 4 | 'shorts';
 export const SOUP_LEVELS = 7;
+/** Lets backstage scenes find a recent festival to talk about (docs/scheduler.md §4.3). */
+export const FESTIVAL_TOPIC = 'festival';
 
 export interface FestivalResults {
   festival: Festival;
@@ -47,7 +49,7 @@ const SOUP = [
 export function festivalMemories(results: FestivalResults, name: (id: string) => string): FestivalNote[] {
   const notes: FestivalNote[] = [];
   const note = (npcId: string, text: string, importance: number, subjects: string[] = ['player']) =>
-    notes.push({ npcId, memory: { text, importance, kind: 'observation', subjects, visibility: 'normal' } });
+    notes.push({ npcId, memory: { text, importance, kind: 'observation', subjects, topics: [FESTIVAL_TOPIC], visibility: 'normal' } });
   const others = (...involved: string[]) => [...new Set(results.present)].filter((id) => !involved.includes(id));
   const lewis = 'lewis';
 

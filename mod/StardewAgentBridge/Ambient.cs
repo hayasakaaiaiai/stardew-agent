@@ -137,13 +137,13 @@ internal sealed partial class ModEntry
         this.ambientRequestedTick = this.ambientCurrentTick;
         this.ambientRequestSeq = this.Send("ambient.request", new()
         {
-            ["npcs"] = near.Select(npc => new Dictionary<string, object?>
+            ["npcs"] = near.Select(npc => GameState.AddSchedule(new Dictionary<string, object?>
             {
                 ["npc"] = npc.Name,
                 ["hearts"] = GameState.Hearts(npc),
                 ["relation"] = GameState.Relation(npc),
                 ["greeted"] = this.ambientGreeted.Contains(npc.Name),
-            }).ToList(),
+            }, npc)).ToList(),
             ["world"] = GameState.World(),
         });
     }

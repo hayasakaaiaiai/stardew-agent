@@ -1,22 +1,25 @@
 /** WebSocket service for the SMAPI mod, with save-scoped M1 memory (docs/game-memory.md). */
 import type { AddressInfo } from 'node:net';
 import { type WebSocket, WebSocketServer } from 'ws';
+import { BACKSTAGE_PER_DAY, BACKSTAGE_TOPIC, type BackstagePerson, backstageHour, backstagePrompt, parseBackstage, pickBackstage } from '../agent/backstage.ts';
 import { AMBIENT_CALLS_PER_DAY, type AmbientLine, type AmbientPerson, ambientPrompt, parseAmbient } from '../agent/ambient.ts';
 import type { Consolidator } from '../agent/consolidation.ts';
 import { OPENING_LINE, runTurn, type Standing, type WorldState } from '../agent/dialogue.ts';
 import { newsFor } from '../agent/news.ts';
 import { parseScene, type SceneLine, type SceneNews, SCENES_PER_DAY, SCENE_GAP_MINUTES, scenePrompt } from '../agent/scene.ts';
-import type { ModelClient } from '../services/model/client.ts';
+import { nextStop, restOfDay, type ScheduleStop } from '../agent/schedule.ts';
+import type { ChatModel } from '../services/model/client.ts';
+import type { ModelGateway } from '../services/model/gateway.ts';
 import type { Roster } from '../services/roster/index.ts';
 import { SOCIAL_NPCS } from '../types.ts';
 import { requireValue } from '../validation.ts';
 import { GameMemory, type GameSave } from './memory.ts';
-import { absoluteDay, type BackendMessage, type Envelope, type ModMessage, parseModMessage, PROTOCOL_VERSION } from './protocol.ts';
-import { clock, worldState } from './world.ts';
+import { absoluteDay, type BackendMessage, type Envelope, gameMinutes, type ModMessage, parseModMessage, PROTOCOL_VERSION, type Schedules } from './protocol.ts';
+import { clock, WEATHER, worldState } from './world.ts';
 
 export interface BridgeOptions {
   roster: Roster;
-  model: ModelClient;
+  model: ChatModel;
   memoryDirectory: string;
   /** Consolidates each confirmed save in the background (docs/nightly-consolidation.md). */
   consolidator?: Consolidator;
@@ -26,7 +29,11 @@ export interface BridgeOptions {
    * Small talk between NPCs the player can overhear (docs/npc-chat.md) and lines near the player
    * (docs/ambient-lines.md); without it requests get no lines.
    */
-  sceneModel?: ModelClient;
+  sceneModel?: ChatModel;
+  /** NPCs who spend an hour together away from the player chat and remember it (docs/scheduler.md §4); without it there are none. */
+  backstageModel?: ChatModel;
+  /** Logs the model usage since the last save after each new save (docs/scheduler.md §3.2). */
+  gateway?: ModelGateway;
   /** 0 picks a free port (tests). */
   port: number;
   host?: string;
@@ -34,6 +41,12 @@ export interface BridgeOptions {
 }
 
 interface OpenTalk { npcId: string; standing: Standing; world: WorldState; inPersonGifts: boolean }
+interface BackstageBudget { day: number; calls: number; joined: Set<string>; lastMinute: number }
+
+/** An NPC's schedule from the Mod's map of game names (docs/npc-schedules.md); none when the Mod sent none. */
+function scheduleOf(schedules: Schedules | undefined, id: string): ScheduleStop[] {
+  return Object.entries(schedules ?? {}).find(([npc]) => npc.toLowerCase() === id)?.[1] ?? [];
+}
 class Session {
   hello = false;
   save: GameSave | undefined;
@@ -54,6 +67,8 @@ export class BridgeServer {
   private readonly memory: GameMemory;
   private readonly sessions = new Set<Session>();
   private readonly owners = new Map<string, Session>();
+  /** The same load keeps its backstage budget when its WebSocket reconnects. A new load gets a new GameSave. */
+  private readonly backstageBudgets = new WeakMap<GameSave, BackstageBudget>();
 
   private constructor(options: BridgeOptions, server: WebSocketServer, memory: GameMemory) {
     this.options = options; this.server = server; this.memory = memory;
@@ -118,7 +133,8 @@ export class BridgeServer {
       const people = await save.gossip([a!, b!]);
       const [newsA, newsB] = [newsFor(people[a!], people[b!]), newsFor(people[b!], people[a!])];
       const news: SceneNews = { ...(newsA ? { a: newsA } : {}), ...(newsB ? { b: newsB } : {}) };
-      const completion = await sceneModel.chat(scenePrompt(roster, a!, b!, worldState(message.world, save.player, this.cardName), news),
+      const next = [a!, b!].map(id => nextStop(scheduleOf(message.schedules, id), time));
+      const completion = await sceneModel.chat(scenePrompt(roster, a!, b!, worldState(message.world, save.player, this.cardName), news, next),
         {}, { json: true });
       if (save.closed || save.day !== requestedDay) return;
       const { lines, told } = parseScene(completion.content, a!, b!, save.player.name, news);
@@ -144,9 +160,10 @@ export class BridgeServer {
     if (session.ambient.day !== save.day) session.ambient = { day: save.day, calls: 0, greeted: new Set() };
     const budget = session.ambient;
     const requestedDay = absoluteDay(message.world.date);
-    const people: AmbientPerson[] = message.npcs.map(({ npc, hearts, relation, greeted }) => {
+    const people: AmbientPerson[] = message.npcs.map(({ npc, hearts, relation, greeted, schedule }) => {
       const id = npc.toLowerCase();
-      return { id, hearts, relation, greeted: greeted || budget.greeted.has(id) };
+      const next = nextStop(schedule ?? [], message.world.date.time);
+      return { id, hearts, relation, greeted: greeted || budget.greeted.has(id), ...(next ? { next } : {}) };
     });
     if (!sceneModel || save.closed || requestedDay !== save.day || budget.calls >= AMBIENT_CALLS_PER_DAY
       || people.some(person => !roster.has(person.id)) || new Set(people.map(person => person.id)).size !== people.length) {
@@ -170,6 +187,55 @@ export class BridgeServer {
     } catch (error) {
       this.log(`同图失败：${error instanceof Error ? error.message : String(error)}`);
       reply([]);
+    }
+  }
+
+  /**
+   * At most one group per town hour talks among themselves (docs/scheduler.md §4). The result waits in the load's memory
+   * until the next hour writes it, so it is saved or rolled back with the day; a scene that fails is just skipped.
+   */
+  private async backstage(session: Session, message: Extract<ModMessage, { type: 'town.hour' }>) {
+    const save = session.save!;
+    const { roster, backstageModel } = this.options;
+    const day = absoluteDay(message.date);
+    if (!backstageModel || !message.hearts || save.closed || day !== save.day || !backstageHour(message.date.time)) return;
+    const previous = this.backstageBudgets.get(save);
+    const budget: BackstageBudget = previous?.day === save.day ? previous
+      : { day: save.day, calls: 0, joined: new Set(), lastMinute: -1 };
+    this.backstageBudgets.set(save, budget);
+    // A resent hour, or one older than the last, starts nothing: at most one scene per hour.
+    const minute = gameMinutes(message.date);
+    if (minute <= budget.lastMinute || budget.calls >= BACKSTAGE_PER_DAY) return;
+    budget.lastMinute = minute;
+    const hearts = Object.fromEntries(Object.entries(message.hearts).map(([npc, value]) => [npc.toLowerCase(), value]));
+    const groups = message.groups.map((group, index) => ({ place: message.places?.[index] ?? '',
+      ids: [...new Set(group.map(npc => npc.toLowerCase()))].filter(id => roster.has(id) && !budget.joined.has(id)) }))
+      .filter(group => group.ids.length >= 2);
+    if (!groups.length) return;
+    try {
+      const gossip = await save.gossip(groups.flatMap(group => group.ids));
+      const pick = pickBackstage(groups.map(group => ({ place: group.place,
+        people: group.ids.map(id => ({ id, hearts: hearts[id] ?? 0, hasNews: (gossip[id]?.tellable.length ?? 0) > 0 })) })), budget.joined);
+      if (!pick || session.save !== save || save.closed || save.day !== day
+        || budget.calls >= BACKSTAGE_PER_DAY || pick.ids.some(id => budget.joined.has(id))) return;
+      budget.calls++;
+      for (const id of pick.ids) budget.joined.add(id);
+      const festivals = await save.festivalsFor(pick.ids, minute);
+      if (session.save !== save || save.closed || save.day !== day) return;
+      const people: BackstagePerson[] = pick.ids.map(id => {
+        const next = nextStop(scheduleOf(message.schedules, id), message.date.time);
+        return { id, news: gossip[id]?.tellable ?? [], festivals: festivals[id] ?? [], ...(next ? { next } : {}) };
+      });
+      const world = { ...message.date, time: clock(message.date.time), weather: message.weather ? WEATHER[message.weather] : '',
+        location: pick.place, player: save.player, facts: {} };
+      const names = pick.ids.map(this.idName).join('、');
+      const completion = await backstageModel.chat(backstagePrompt(roster, people, pick.place, world), {}, { json: true });
+      if (session.save !== save || save.closed || save.day !== day) return;
+      const notes = parseBackstage(completion.content, pick.ids, pick.place, this.idName);
+      save.noteBackstage(day, notes);
+      this.log(`后台场景：${pick.place || '镇上'}，${names}，${notes.length ? `${notes.length} 条等下一个整点写入` : '没有可记的'}`);
+    } catch (error) {
+      this.log(`后台场景失败：${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
@@ -270,9 +336,10 @@ export class BridgeServer {
       if (session.pending) {
         send({ type: 'talk.error', ...envelope(message), npc: message.npc, message: '上一句还没回完' }); return;
       }
+      const schedule = restOfDay(message.schedule ?? [], message.world.date.time);
       const talk: OpenTalk = { npcId, inPersonGifts: message.inPersonGifts !== false,
         standing: { hearts: message.hearts, relation: message.relation, seenEvents: new Set(message.seenEvents) },
-        world: worldState(message.world, save.player, this.cardName) };
+        world: { ...worldState(message.world, save.player, this.cardName), ...(schedule ? { schedule } : {}) } };
       session.open.set(message.npc, talk);
       void this.turn(session, talk, message, OPENING_LINE, send);
       return;
@@ -301,7 +368,8 @@ export class BridgeServer {
     if (message.type === 'town.hour') {
       const heard = await save.townHour(message, this.idName);
       send({ type: 'ack', ...envelope(message) });
-      for (const item of heard) this.log(`镇上传话：${this.idName(item.npcId)}记下了：${item.memory.text}`);
+      for (const item of heard) this.log(`${item.memory.topics?.includes(BACKSTAGE_TOPIC) ? '后台场景' : '镇上传话'}：${this.idName(item.npcId)}记下了：${item.memory.text}`);
+      void this.backstage(session, message);
       return;
     }
     if (message.type === 'festival.ended') {
@@ -318,6 +386,7 @@ export class BridgeServer {
       void this.ambient(session, message, send);
       return;
     }
+    const head = save.head, day = save.day;
     await save.control(message, () => {
       if (message.type === 'talk.close') session.open.delete(message.npc);
       else session.open.clear();
@@ -325,6 +394,7 @@ export class BridgeServer {
       session.pending = undefined;
     });
     send({ type: 'ack', ...envelope(message) });
+    if (message.type === 'save.saved' && save.head !== head && this.options.gateway) this.log(this.options.gateway.report(day));
     if (message.type === 'day.started') void this.sendToday(session);
   }
 

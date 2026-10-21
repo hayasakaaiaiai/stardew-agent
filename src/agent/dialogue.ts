@@ -1,4 +1,4 @@
-import type { ChatMessage, Completion, ModelClient, StreamHandlers, Usage } from '../services/model/client.ts';
+import type { ChatMessage, ChatModel, Completion, StreamHandlers, Usage } from '../services/model/client.ts';
 import type { Relation, RenderedCard, Roster } from '../services/roster/index.ts';
 import { sourceRemembered } from './turn-facts.ts';
 
@@ -16,6 +16,8 @@ export interface WorldState {
   time: string;
   weather: string;
   location: string;
+  /** The rest of the NPC's day from the game's schedule, for its own conversation (docs/npc-schedules.md). */
+  schedule?: string;
   player: { name: string; gender: 'male' | 'female'; farm: string };
   /** Facts the cards' natural-language conditions depend on, e.g. 肯特 → 还在前线. */
   facts: Record<string, string>;
@@ -157,6 +159,7 @@ function situation({ npcName, world, standing, memory }: PromptInput): string {
     `- 你是${npcName}。`,
     `- 时间：第 ${world.year} 年${SEASONS[world.season]} ${world.day} 日（${weekday(world.day)}）${world.time}，${world.weather}`,
     `- 地点：${world.location}`,
+    ...(world.schedule ? [`- 你今天接下来：${world.schedule}`] : []),
     `- 玩家：${player.name}（${player.gender === 'female' ? '女' : '男'}），经营${player.farm}农场`,
     `- 你对玩家的好感：${standing.hearts} 心；关系：${RELATIONS[standing.relation]}`,
     ...(facts.length ? ['- 世界事实：', ...facts] : []),
@@ -305,7 +308,7 @@ export interface TurnHandlers {
 }
 
 export async function runTurn(
-  deps: { roster: Roster; model: ModelClient; memory?: DialogueMemory },
+  deps: { roster: Roster; model: ChatModel; memory?: DialogueMemory },
   input: TurnInput,
   handlers: TurnHandlers = {},
 ): Promise<TurnResult> {

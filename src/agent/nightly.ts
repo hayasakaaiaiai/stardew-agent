@@ -7,7 +7,7 @@ import { withGivenCooldown } from './in-person-gifts.ts';
 import { giftFor, safeLetter } from './letters.ts';
 import { rankMemories } from './memory.ts';
 import { safeShare } from './news.ts';
-import type { ChatMessage, ModelClient, Thinking } from '../services/model/client.ts';
+import type { ChatMessage, ChatModel, Thinking } from '../services/model/client.ts';
 import type { Roster } from '../services/roster/index.ts';
 import type { StoreService } from '../services/store/index.ts';
 import type { ConsolidationInput, Memory, NpcChange, NpcState } from '../types.ts';
@@ -194,7 +194,7 @@ function dateLabel(day: number): string {
 }
 
 /** An exhausted format retry propagates just like a network failure; no incomplete batch is committed. */
-export function nightlyConsolidator(deps: { roster: Roster; model: ModelClient; log?: (line: string) => void }): Consolidator {
+export function nightlyConsolidator(deps: { roster: Roster; model: ChatModel; log?: (line: string) => void }): Consolidator {
   return async (input, signal) => {
     const npc = input.npcs[0]!;
     const prompt = nightlyPrompt(deps.roster, input.commit, npc);

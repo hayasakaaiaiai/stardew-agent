@@ -4,6 +4,7 @@ import type { Bubble } from '../agent/bubbles.ts';
 import type { Emotion, Season } from '../agent/dialogue.ts';
 import { type Festival, FESTIVALS, type GrangeResult, SOUP_LEVELS } from '../agent/festivals.ts';
 import { GIFT_TASTES, type GiftTaste } from '../agent/gifts.ts';
+import { MAX_STOPS, type ScheduleStop } from '../agent/schedule.ts';
 import type { DeliveredLetter } from '../agent/letters.ts';
 import type { SceneLine } from '../agent/scene.ts';
 import type { Relation } from '../services/roster/index.ts';
@@ -61,6 +62,13 @@ export interface SavePointer {
   dayEnded: number;
 }
 
+/**
+ * Optional on `town.hour`, for scenes between the NPCs of a group (docs/scheduler.md §4.1): each group's place, each
+ * NPC's hearts with the player by game name, and the weather. Without `hearts` the backend starts no scene.
+ */
+export interface Backstage { places?: string[]; hearts?: Record<string, number>; weather?: Weather; schedules?: Schedules }
+/** Today's schedule of each NPC that has one, by game name (docs/npc-schedules.md); optional on scenes and town hours. */
+export type Schedules = Record<string, ScheduleStop[]>;
 export type LoadedSave = { type: 'save.loaded'; player: PlayerInfo; date: GameDate; commit: SavePointer | null } & Envelope;
 
 export type ModMessage =
@@ -79,6 +87,8 @@ export type ModMessage =
     seenEvents: string[];
     /** Mod setting; omitted by older protocol-3 clients, which keep the original enabled behavior. */
     inPersonGifts?: boolean;
+    /** Its schedule today, if it follows one (docs/npc-schedules.md). */
+    schedule?: ScheduleStop[];
     world: WorldSnapshot;
   } & Envelope)
   | ({ type: 'talk.say'; npc: string; text: string; date: GameDate } & Envelope)
@@ -86,11 +96,11 @@ export type ModMessage =
   /** A vanilla gift the NPC should remember (docs/npc-gifts.md); reliable like the save lifecycle, acknowledged with ack. */
   | ({ type: 'gift.given'; npc: string; item: string; taste: GiftTaste; birthday: boolean; date: GameDate } & Envelope)
   /** Two NPCs standing together near the player (docs/npc-chat.md); game names. */
-  | ({ type: 'scene.request'; npcs: [string, string]; world: WorldSnapshot } & Envelope)
+  | ({ type: 'scene.request'; npcs: [string, string]; world: WorldSnapshot; schedules?: Schedules } & Envelope)
   /** The lines of that request have been shown, so news told in them is remembered (docs/npc-news.md); reliable, acknowledged. */
   | ({ type: 'scene.shown'; request: number; date: GameDate } & Envelope)
   /** Social NPCs who spent this hour together away from the player, by game name (docs/offscreen-news.md); reliable, acknowledged. */
-  | ({ type: 'town.hour'; groups: string[][]; date: GameDate } & Envelope)
+  | ({ type: 'town.hour'; groups: string[][]; date: GameDate } & Backstage & Envelope)
   /** NPCs near the player, each to say at most one line (docs/ambient-lines.md); game names. */
   | ({ type: 'ambient.request'; npcs: AmbientNpc[]; world: WorldSnapshot } & Envelope)
   /** What happened at a festival the player just left (docs/festival-memories.md); game names. Reliable, acknowledged. */
@@ -115,6 +125,8 @@ export interface AmbientNpc {
   relation: Relation;
   /** Already greeted the player over its head today. */
   greeted: boolean;
+  /** Its schedule today, if it follows one (docs/npc-schedules.md). */
+  schedule?: ScheduleStop[];
 }
 
 export type BackendMessage =
@@ -190,6 +202,15 @@ export function parseModMessage(raw: string): ModMessage {
   };
   const weather = (value: unknown) => { if (!WEATHERS.has(value as Weather)) fail('weather is invalid'); };
   const isName = (value: unknown) => typeof value === 'string' && value.length > 0 && value.length <= 50 && !/[\u0000-\u001f]/u.test(value);
+  const isSchedule = (value: unknown) => Array.isArray(value) && value.length <= MAX_STOPS && value.every((item) => {
+    const stop = item as Record<string, unknown> | null;
+    return !!stop && Number.isSafeInteger(stop.time) && (stop.time as number) >= 0 && (stop.time as number) <= 2800
+      && (stop.time as number) % 100 <= 59 && isName(stop.place) && typeof stop.sleep === 'boolean';
+  });
+  const schedules = (value: unknown) => {
+    if (value !== undefined && (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).length > 34
+      || Object.entries(value).some(([npc, stops]) => !isName(npc) || !isSchedule(stops)))) fail('schedules must map names to stops');
+  };
   const world = (value: unknown) => {
     const w = value as Record<string, unknown> | null;
     if (!w || typeof w.location !== 'string' || !w.flags || typeof w.flags !== 'object') fail('world is invalid');
@@ -236,6 +257,7 @@ export function parseModMessage(raw: string): ModMessage {
       if (!RELATIONS.has(data.relation as Relation)) fail('relation is invalid');
       if (!Array.isArray(data.seenEvents) || data.seenEvents.some((e) => typeof e !== 'string')) fail('seenEvents must be strings');
       if (data.inPersonGifts !== undefined && typeof data.inPersonGifts !== 'boolean') fail('inPersonGifts must be a boolean');
+      if (data.schedule !== undefined && !isSchedule(data.schedule)) fail('schedule must be a list of stops');
       world(data.world);
       break;
     }
@@ -263,6 +285,13 @@ export function parseModMessage(raw: string): ModMessage {
       const groups = data.groups;
       if (!Array.isArray(groups) || groups.length > 34 || groups.some((group) => !Array.isArray(group) || group.length < 2 || group.length > 34
         || group.some((npc) => typeof npc !== 'string' || !npc || npc.length > 50 || /[\u0000-\u001f]/u.test(npc)))) fail('groups must be lists of names');
+      const { places, hearts } = data;
+      if (places !== undefined && (!Array.isArray(places) || places.length !== (groups as unknown[]).length
+        || places.some((place) => typeof place !== 'string' || place.length > 50 || /[\u0000-\u001f]/u.test(place)))) fail('places must name each group');
+      if (hearts !== undefined && (!hearts || typeof hearts !== 'object' || Array.isArray(hearts) || Object.keys(hearts).length > 34
+        || Object.entries(hearts).some(([npc, value]) => !isName(npc) || !Number.isSafeInteger(value) || value < 0 || value > 14))) fail('hearts must map names to 0–14');
+      if (data.weather !== undefined) weather(data.weather);
+      schedules(data.schedules);
       break;
     }
     case 'festival.ended': {
@@ -288,6 +317,7 @@ export function parseModMessage(raw: string): ModMessage {
       const npcs = data.npcs;
       if (!Array.isArray(npcs) || npcs.length !== 2
         || npcs.some((npc) => typeof npc !== 'string' || !npc || npc.length > 50 || /[\u0000-\u001f]/u.test(npc))) fail('npcs must be two names');
+      schedules(data.schedules);
       world(data.world);
       break;
     }
@@ -301,6 +331,7 @@ export function parseModMessage(raw: string): ModMessage {
         if (int(n!.hearts, 'npcs[].hearts') < 0 || (n!.hearts as number) > 14) fail('npcs[].hearts is out of range');
         if (!RELATIONS.has(n!.relation as Relation)) fail('npcs[].relation is invalid');
         if (typeof n!.greeted !== 'boolean') fail('npcs[].greeted must be a boolean');
+        if (n!.schedule !== undefined && !isSchedule(n!.schedule)) fail('npcs[].schedule must be a list of stops');
       }
       world(data.world);
       break;
