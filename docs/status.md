@@ -20,7 +20,7 @@
 | M1 存储与事务 | 完成 | 记忆内核；当天事务；存档与回滚；崩溃恢复；过期临时日志/检查点清理，失败新读档保护旧日志（2026-10-20 合入 `main`） | — | `README.md`、`design.md` §16 |
 | M2 Agent | 第一至八步、公开家庭信息、好感分档已合入 | 对话、夜间整合、次日计划、气泡、寄信、恢复；碰面、送礼、好感（按熟悉程度分档）、当面赠礼、家庭信息、在场传话（2026-10-21 Windows 验收后合入 `main`） | 不在场传话（`m2c-offscreen-news`）、遗留清理/全部改用 high（`legacy-cleanup`）和同图小动作（`m2c-ambient-lines`）待验收；观察正常游玩和自由生成内容 | `dialogue-prototype.md`、`nightly-consolidation.md`、`next-day-plans.md`、`npc-bubbles.md`、`npc-mail.md`、`npc-chat.md`、`npc-gifts.md`、`npc-friendship.md`、`npc-in-person-gifts.md`、`world-public-facts.md`、`npc-news.md`、`offscreen-news.md`、`legacy-cleanup.md`、`ambient-lines.md` |
 | M3 接入游戏 | 完成（Windows） | 游戏里"继续聊"；真实保存/退出、跨天记忆、回滚、后端进程重启与旧档分叉；拼音输入法、原版台词保留、取消三项手测通过 | — | `game-bridge.md`、`game-memory.md` |
-| M4 内容 | 角色卡已完成 | 34 张角色卡（已审阅），"看过事件之后"共 201 条 | 物品名到 ID 的对应、各动作的上限 | `design.md` §11 |
+| M4 内容 | 角色卡已完成 | 34 张角色卡（已审阅），"看过事件之后"共 201 条（`group-events` 补群体 10 心和科罗布斯 14 心后 226 条） | 物品名到 ID 的对应、各动作的上限 | `design.md` §11 |
 
 `main` 上后端 103 个测试、类型检查和构建通过，另有 18 项 C# 流程检查（Windows）。10 月 20 日阿比盖尔三轮真机回归通过，随后在独立副本中用真实模型完成跨天保留、不保存回滚、后端进程重启、旧档分叉四项真机验收：76.77 秒，13 次模型调用，3 次真实睡觉保存，原测试档 6 个文件哈希均相同。详见 [真机组合验收报告](test-results/2026-10-20-game-memory.md)。
 
@@ -68,6 +68,8 @@ M2b 第八步“NPC 之间传话”在 `m2b-npc-news` 上实现：当晚和玩�
 
 同图小动作（`m2c-ambient-lines`，建在 `less-fabrication` 上）用户确认设计后已实现，等 Windows 验收：玩家附近最多 4 位 NPC 合并调用一次，每人最多冒一句、可以每天跟农场主打一次招呼；每位 NPC 两个游戏小时最多一次、两次调用隔 30 游戏分钟、一天最多 12 次；只显示，不写记忆。真实模型 21 次平均输入 799、输出 248 token、2.9 秒，一天最多约 9.6k 输入、3.0k 输出。最终代码真实模型 12 次平均 785 / 220 token、2.4 秒，过滤后每次 2.6 句。141/141、类型检查、构建和 Release 编译通过，新增的 C# 流程检查要在 Windows 跑。见 [ambient-lines.md](ambient-lines.md)。
 
+补内容（`group-events`，建在 `m2c-ambient-lines` 上）：群体 10 心的两种结局其实是两个编号不同的事件（女生 `195012` 对质 / `195019` 兔子脚，男生 `195013` / `195099`），科罗布斯 14 心是 `7771191`。按用户选择 12 张候选人卡各加两条（没看过时每卡常驻 +44 token），科罗布斯那条禁忌补上编号（没看过时 40 → 14）；原版疏远的那一周，这六人不弹“继续聊”、不参加同图小动作。真实模型 7 道题各 2 次全部符合预期，142/142、类型检查和 Release 编译通过。见 [legacy-cleanup.md](legacy-cleanup.md) §6。
+
 ## 3. 分支
 
 GitHub 私有仓库：https://github.com/hayasakaaiaiai/stardew-agent
@@ -96,7 +98,8 @@ GitHub 私有仓库：https://github.com/hayasakaaiaiai/stardew-agent
 | `m2c-offscreen-news`、`legacy-cleanup` | 不在场传话；遗留清理与全部改用 high。已变基到新 `main`，待独立验收 | 已提交 |
 | `scene-player-gender` | 碰面聊天补上玩家性别，建在 `legacy-cleanup` 上 | 已提交 |
 | `less-fabrication` | 自由编造实测（不加规则）与 `share` 道谢过滤，建在 `scene-player-gender` 上 | 已提交 |
-| `m2c-ambient-lines` | 同图小动作，建在 `less-fabrication` 上，现在是最前端；待 Windows 验收 | `/Users/a11/Documents/ChatGPT/stardew-agent-gifts` |
+| `m2c-ambient-lines` | 同图小动作，建在 `less-fabrication` 上；待 Windows 验收 | 已推送 |
+| `group-events` | 群体 10 心、科罗布斯 14 心的“看过事件之后”和疏远期处理，建在 `m2c-ambient-lines` 上，现在是最前端 | `/Users/a11/Documents/ChatGPT/stardew-agent-gifts` |
 
 Windows 上的目录是 `E:\stardew-agent`。当前 `codex/news-windows-tests` 从上一轮 `908e73b` 建立，测试期间发现主线更新后先备份改动、变基到 `origin/main / ed9eb28`，再纳入最新 `m2b-npc-news / dc6d1d2`，保留上游新加的动态好感预期与本轮真机夹具。此前所有本地验收分支及 `codex/next-day-plans` / `2260625` 均保留。
 
@@ -186,12 +189,12 @@ dotnet build mod/StardewAgentBridge   # 编译 Mod，编译完自动装进游戏
 
 | 问题 | 在哪记的 |
 |---|---|
-| 别人的心事件在这个 NPC 的卡里没有对应禁忌，玩家问起还没发生的事件时，NPC 可能会顺着说下去（比如刘易斯和服装疗法） | `dialogue-prototype.md` §12.6 |
-| 推理强度 `high` 偶尔推理太长，单轮超过 8 秒 | `dialogue-prototype.md` §12.6 |
+| 别人的心事件在这个 NPC 的卡里没有对应禁忌，玩家问起还没发生的事件时，NPC 可能会顺着说下去（比如刘易斯和服装疗法）。`legacy-cleanup` 已改为没看过时写明“没发生过”，待验收 | `dialogue-prototype.md` §12.6、`legacy-cleanup.md` §4.1 |
+| 推理强度 `high` 偶尔推理太长，单轮超过 8 秒。66 道探测题重测后用户仍选 `high` | `dialogue-prototype.md` §12.6、`legacy-cleanup.md` §3 |
 | 偶尔有小的事实错误，比如矮人说族里"就剩我一个了" | `dialogue-prototype.md` §11 |
-| 0 心时 NPC 可能太健忘。最简单的调法是把这一档的重要度门槛从 4 降到 3 | `dialogue-prototype.md` §14.5 |
-| 群体 10 心事件、科罗布斯 14 心事件还没写"看过事件之后" | `dialogue-prototype.md` §12.6 |
-| 每次都发给模型的卡片核心部分实测 530–690 token，超过最初定的 500 | `design.md` §11 |
+| 0 心时 NPC 可能太健忘。`legacy-cleanup` 已把 0–1 心的门槛从 4 降到 3，待验收 | `dialogue-prototype.md` §14.5、`legacy-cleanup.md` §4.2 |
+| 群体 10 心事件、科罗布斯 14 心事件还没写"看过事件之后"。`group-events` 已补，待验收 | `legacy-cleanup.md` §6 |
+| 每次都发给模型的卡片核心部分实测 530–690 token，超过最初定的 500。用户决定不压，标准改为 700 | `design.md` §11、`legacy-cleanup.md` §4.3 |
 | 真实模型附加字段偶尔解析失败，会走现有回退路径；本次 10 次调用出现 1 次 | `test-results/2026-10-20-retest.md` |
 | 夜间事实记忆已改为原话引用；印象与计划仍由模型生成，可能夹带具体事实或遗漏内容，需继续观察 | `test-results/2026-10-20-nightly-facts-fix.md` |
 | 计划开场使用保守问句处理，可能回退为较笼统的提问；尚未解析“下周”等任意日期表达，普通对话仍可能出现事实错误 | `test-results/2026-10-20-next-day-plans.md` |
@@ -209,7 +212,7 @@ dotnet build mod/StardewAgentBridge   # 编译 Mod，编译完自动装进游戏
 6. **自主行动**：第一步不在场传话待验收；第二步[同图小动作](ambient-lines.md)已实现，待 Windows 验收（清单见该文档 §8）。
 7. **已合入 `main`（2026-10-20）**：用户提交组合验收结果并要求合并后，`codex/new-parts-windows-tests` / `908e73b` 快进合入；Mac 上复核 125/125、类型检查、构建和 Release 编译。包含第四至七步、公开家庭信息、临时日志清理，以及 Windows 修的后端碰面冷却与失败读档保护。自然婚礼/电影等剧情、全部 NPC 自然游玩和模型事实可靠性仍按 [本轮报告](test-results/2026-10-20-new-parts-windows.md) 的覆盖边界观察。
 8. **好感分档与在场传话已合入 `main`（2026-10-21）**：`codex/news-windows-tests` / `7ff44ea` 的统一脚本 115 项真机检查通过，含两处修复；按用户要求快进合入，Mac 复核 132/132、类型检查、构建和 Release 编译。结果、失败保留与范围见 [10 月 21 日报告](test-results/2026-10-21-news-windows.md)。
-9. **待验收**：`m2c-offscreen-news`（不在场传话）和 `legacy-cleanup`（字符串记忆、气泡过滤、没发生过的事件、0 心门槛、全部改用 high）已变基到新 `main`，切到最前端的 `m2c-ambient-lines`（含性别修正、压低编造和同图小动作）一起测；不能将 `dc6d1d2` 的 low/disabled 数据当作它们已通过。
+9. **待验收**：`m2c-offscreen-news`（不在场传话）和 `legacy-cleanup`（字符串记忆、气泡过滤、没发生过的事件、0 心门槛、全部改用 high）已变基到新 `main`，切到最前端的 `group-events`（含性别修正、压低编造、同图小动作和补内容）一起测；不能将 `dc6d1d2` 的 low/disabled 数据当作它们已通过。
 
 ## 8. 文档索引
 
@@ -227,7 +230,7 @@ dotnet build mod/StardewAgentBridge   # 编译 Mod，编译完自动装进游戏
 | `docs/nightly-consolidation.md` | 夜间整合：产出、输入、触发时机、出错处理、实测 token 和真实模型结果 |
 | `docs/ambient-lines.md` | 自主行动第二步：同图小动作的决定、规则、打不打招呼的实测对比、消息、测试和 Windows 清单 |
 | `docs/offscreen-news.md` | 自主行动第一步：玩家不在场时也传话的决定、消息、成本、测试和 Windows 清单 |
-| `docs/legacy-cleanup.md` | 遗留问题清理：字符串记忆、气泡过滤、三档推理强度实测、没发生过的事件、0 心门槛、卡片标准 |
+| `docs/legacy-cleanup.md` | 遗留问题清理：字符串记忆、气泡过滤、三档推理强度实测、没发生过的事件、0 心门槛、卡片标准、压低编造、群体 10 心和科罗布斯 14 心 |
 | `docs/npc-news.md` | M2b 第八步：NPC 之间传话的决定、规则写法对比、真实模型实测、测试和 Windows 清单 |
 | `docs/npc-friendship.md` | M2b 第六步：聊天影响原版好感的决定、规则写法对比、真实模型实测、测试和 Windows 清单 |
 | `docs/npc-in-person-gifts.md` | M2b 第七步：当面送礼、与寄信共用冷却、背包满、实测和组合脚本 |

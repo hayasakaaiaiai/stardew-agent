@@ -178,8 +178,24 @@ internal sealed partial class ModEntry : Mod
             && this.CanChat
             && Context.IsWorldReady
             && SocialNpcs.Contains(npc.Name)
+            && !ColdShoulder(npc.Name)
             && !Game1.eventUp
             && !Game1.isFestival();
+    }
+
+    /// <summary>
+    /// The week after a group ten-heart confrontation, when vanilla has these six refuse to talk to the player
+    /// (docs/legacy-cleanup.md §6). The event's dump command sets these dialogue events.
+    /// </summary>
+    private static bool ColdShoulder(string name)
+    {
+        string? key = name switch
+        {
+            "Abigail" or "Emily" or "Haley" or "Leah" or "Maru" or "Penny" => "dumped_Girls",
+            "Alex" or "Elliott" or "Harvey" or "Sam" or "Sebastian" or "Shane" => "dumped_Guys",
+            _ => null,
+        };
+        return key is not null && Game1.player.activeDialogueEvents.ContainsKey(key);
     }
 
     private void Offer(NPC npc)

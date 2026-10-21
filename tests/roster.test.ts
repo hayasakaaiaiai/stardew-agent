@@ -14,14 +14,13 @@ async function loadAll() {
   return { roster, result: await roster.load() };
 }
 
-test('all 34 cards parse, and only the two known conditions are left to the model', async () => {
+test('all 34 cards parse, and only the one known condition is left to the model', async () => {
   const { result } = await loadAll();
   assert.deepEqual(result.errors.map((e) => e.message), []);
   assert.deepEqual(result.loaded.sort(), [...IDS].sort());
   assert.deepEqual((await readdir(CARDS)).filter((f) => !f.startsWith('_')).length, 34);
-  assert.equal(result.warnings.length, 2);
-  assert.ok(result.warnings.some((w) => w.startsWith('krobus.md')));
-  assert.ok(result.warnings.some((w) => w.startsWith('pam.md')));
+  assert.equal(result.warnings.length, 1);
+  assert.ok(result.warnings[0]!.startsWith('pam.md'));
 });
 
 test('a gift whose own name has a colon is written in 「」 and keeps the whole name', async () => {
@@ -134,7 +133,25 @@ test('an after-event entry with no rule of its own is stated as not having happe
   assert.match(abigail, /没发生过：艾米丽的 8 心事件，服装疗法/);
   let lines = 0;
   for (const id of IDS) lines += (roster.render(id, { hearts: 0, seenEvents: new Set(), purpose: 'dialogue' }).gated.match(/\n- 没发生过：/g) ?? []).length;
-  assert.equal(lines, 85, 'every uncovered entry across the 34 cards');
+  assert.equal(lines, 109, 'every uncovered entry across the 34 cards');
+});
+
+test('the group ten-heart events and Krobus at fourteen hearts are known by event id (docs/legacy-cleanup.md §6)', async () => {
+  const { roster } = await loadAll();
+  const gated = (id: string, seen: string[]) => roster.render(id, { hearts: 10, seenEvents: new Set(seen), purpose: 'dialogue' }).gated;
+  for (const [ids, confront, lucky] of [[['abigail', 'emily', 'haley', 'leah', 'maru', 'penny'], '195012', '195019'],
+    [['alex', 'elliott', 'harvey', 'sam', 'sebastian', 'shane'], '195013', '195099']] as const) {
+    for (const id of ids) {
+      const events = roster.get(id).afterEvents.map((entry) => entry.event);
+      assert.ok(events.includes(confront) && events.includes(lucky), id);
+      assert.equal(gated(id, []).match(/没发生过：群体 10 心/g)?.length, 2, id);
+      assert.match(gated(id, [confront]), /### 已经发生过的事[\s\S]*\n- 群体 10 心，[^：]+对质：[^\n]*说好一起疏远农场主/, id);
+    }
+  }
+  assert.match(gated('krobus', []), /\n- 不提那次夜晚的海滩之行。/);
+  assert.doesNotMatch(gated('krobus', []), /看过 14 心事件/, 'the condition is checked in code, not left to the model');
+  assert.doesNotMatch(gated('krobus', ['7771191']), /不提那次夜晚的海滩之行/);
+  assert.match(gated('krobus', ['7771191']), /\n- 14 心，夜晚的海滩：他晚上坐在海滩码头看月光水母/);
 });
 
 test('every event a rule hides has an after-event line, so nothing goes blank once the rule lapses', async () => {

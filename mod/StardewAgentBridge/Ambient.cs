@@ -140,8 +140,9 @@ internal sealed partial class ModEntry
     }
 
     /// <summary>
-    /// Not asked within two hours, not in a scene, and nothing over its head within the hour. Last night's lines
-    /// say more than small talk, so someone with some left waits until they have all shown (docs/ambient-lines.md §2).
+    /// Not asked within two hours, not in a scene, nothing over its head within the hour, and not giving the player the
+    /// cold shoulder. Last night's lines say more than small talk, so someone with some left waits until they have all
+    /// shown (docs/ambient-lines.md §2).
     /// </summary>
     private bool AmbientDue(string name)
     {
@@ -149,6 +150,6 @@ internal sealed partial class ModEntry
             return false;
         if (this.bubbleShownAt.TryGetValue(name, out int shown) && Utility.CalculateMinutesBetweenTimes(shown, Game1.timeOfDay) < BubbleGapMinutes)
             return false;
-        return !this.sceneParticipants.Contains(name) && !this.HasBubblesLeft(name);
+        return !this.sceneParticipants.Contains(name) && !this.HasBubblesLeft(name) && !ColdShoulder(name);
     }
 }
