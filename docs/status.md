@@ -70,6 +70,8 @@ M2b 第八步“NPC 之间传话”在 `m2b-npc-news` 上实现：当晚和玩�
 
 补内容（`group-events`，建在 `m2c-ambient-lines` 上）：群体 10 心的两种结局其实是两个编号不同的事件（女生 `195012` 对质 / `195019` 兔子脚，男生 `195013` / `195099`），科罗布斯 14 心是 `7771191`。按用户选择 12 张候选人卡各加两条（没看过时每卡常驻 +44 token），科罗布斯那条禁忌补上编号（没看过时 40 → 14）；原版疏远的那一周，这六人不弹“继续聊”、不参加同图小动作。真实模型 7 道题各 2 次全部符合预期，142/142、类型检查和 Release 编译通过。见 [legacy-cleanup.md](legacy-cleanup.md) §6。
 
+节日记忆（`festival-memories`，建在 `group-events` 上）设计稿，等用户确认：花舞节舞伴、冬日星盛宴秘密礼物、复活节/冰雪节比赛和展览会名次、夏威夷宴会汤的评价，按模板给在场的 NPC 记，不调用模型，被想起时每条 18–29 token。见 [festival-memories.md](festival-memories.md)。
+
 ## 3. 分支
 
 GitHub 私有仓库：https://github.com/hayasakaaiaiai/stardew-agent
@@ -99,7 +101,8 @@ GitHub 私有仓库：https://github.com/hayasakaaiaiai/stardew-agent
 | `scene-player-gender` | 碰面聊天补上玩家性别，建在 `legacy-cleanup` 上 | 已提交 |
 | `less-fabrication` | 自由编造实测（不加规则）与 `share` 道谢过滤，建在 `scene-player-gender` 上 | 已提交 |
 | `m2c-ambient-lines` | 同图小动作，建在 `less-fabrication` 上；待 Windows 验收 | 已推送 |
-| `group-events` | 群体 10 心、科罗布斯 14 心的“看过事件之后”和疏远期处理，建在 `m2c-ambient-lines` 上，现在是最前端 | `/Users/a11/Documents/ChatGPT/stardew-agent-gifts` |
+| `group-events` | 群体 10 心、科罗布斯 14 心的“看过事件之后”和疏远期处理，建在 `m2c-ambient-lines` 上 | 已推送 |
+| `festival-memories` | 节日记忆，建在 `group-events` 上；设计稿待确认 | `/Users/a11/Documents/ChatGPT/stardew-agent-gifts` |
 
 Windows 上的目录是 `E:\stardew-agent`。当前 `codex/news-windows-tests` 从上一轮 `908e73b` 建立，测试期间发现主线更新后先备份改动、变基到 `origin/main / ed9eb28`，再纳入最新 `m2b-npc-news / dc6d1d2`，保留上游新加的动态好感预期与本轮真机夹具。此前所有本地验收分支及 `codex/next-day-plans` / `2260625` 均保留。
 
@@ -228,6 +231,7 @@ dotnet build mod/StardewAgentBridge   # 编译 Mod，编译完自动装进游戏
 | `docs/game-bridge.md` | M3a：Mod 和后端的协议、原版界面怎么复用、游戏内测试清单 |
 | `docs/game-memory.md` | M3b：存档同步、跨天记忆、确认补发与崩溃恢复 |
 | `docs/nightly-consolidation.md` | 夜间整合：产出、输入、触发时机、出错处理、实测 token 和真实模型结果 |
+| `docs/festival-memories.md` | 节日记忆：每项结果从游戏哪里读、记什么、消息、测试和 Windows 清单 |
 | `docs/ambient-lines.md` | 自主行动第二步：同图小动作的决定、规则、打不打招呼的实测对比、消息、测试和 Windows 清单 |
 | `docs/offscreen-news.md` | 自主行动第一步：玩家不在场时也传话的决定、消息、成本、测试和 Windows 清单 |
 | `docs/legacy-cleanup.md` | 遗留问题清理：字符串记忆、气泡过滤、三档推理强度实测、没发生过的事件、0 心门槛、卡片标准、压低编造、群体 10 心和科罗布斯 14 心 |
