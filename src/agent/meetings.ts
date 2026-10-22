@@ -16,7 +16,23 @@ export const MEET_PLACES: Readonly<Record<string, RegExp>> = {
   博物馆: /博物馆|图书馆|图书室/,
   星之果实餐吧: /星之果实|餐吧|酒吧|酒馆/,
   杂货店: /杂货店|皮埃尔的店|皮埃尔那/,
+  // Not 农场主, which is how everyone calls the player.
+  农场: /农场(?!主)|地里|田里/,
 };
+
+/** Farm chores a close NPC did on arrival (docs/npc-farm-help.md); counts from the Mod. */
+export interface Helped { watered: number; harvested: number; fed: number; ponds: number }
+
+/** "浇了 120 格水、收了 35 个作物放进农舍门口的箱子"; what there was nothing of is left out. */
+export function helpedText(helped: Helped): string {
+  const parts = [
+    ...(helped.watered ? [`浇了 ${helped.watered} 格水`] : []),
+    ...(helped.harvested ? [`收了 ${helped.harvested} 个作物放进农舍门口的箱子`] : []),
+    ...(helped.fed ? [`给动物添了 ${helped.fed} 份干草`] : []),
+    ...(helped.ponds ? [`收了 ${helped.ponds} 个鱼塘的产物放进箱子`] : []),
+  ];
+  return parts.length ? parts.join('、') : '农场里没什么要干的活';
+}
 
 const TOMORROW = /明天|明早|明晚|明儿|明日/;
 const TIME_WORDS = /早上|早晨|上午|中午|下午|傍晚|晚上|明晚|明早|点|\d{1,2}[:：]\d{2}/;
@@ -76,14 +92,14 @@ export function meetingLeave(time: number): number {
 }
 
 /** For the NPC's own conversation that day; nothing once it has left the place. */
-export function meetingLine(meeting: Meeting | undefined, now: number, here: boolean): string | undefined {
+export function meetingLine(meeting: Meeting | undefined, now: number, here: boolean, helped?: Helped): string | undefined {
   if (!meeting || now > meetingLeave(meeting.time)) return undefined;
-  return `今天 ${clock(meeting.time)} 在${meeting.place}见面${here ? '，现在就在这里碰面了' : ''}`;
+  return `今天 ${clock(meeting.time)} 在${meeting.place}见面${here ? '，现在就在这里碰面了' : ''}${helped ? `；你来了以后已经${helpedText(helped)}` : ''}`;
 }
 
 /** What the NPC remembers once the appointment is over. */
-export function meetingMemory(meeting: Meeting & { met: boolean; left: number }): MemoryDraft {
-  const agreed = `约好 ${clock(meeting.time)} 在${meeting.place}见面`;
+export function meetingMemory(meeting: Meeting & { met: boolean; left: number; helped?: Helped }): MemoryDraft {
+  const agreed = `约好 ${clock(meeting.time)} 在${meeting.place}见面${meeting.helped ? `，我${helpedText(meeting.helped)}` : ''}`;
   return meeting.met
     ? { text: `${agreed}，农场主来了。`, importance: 2, kind: 'observation', subjects: ['player'], visibility: 'private' }
     : { text: `${agreed}，我等到 ${clock(meeting.left)}，农场主没来。`, importance: 3, kind: 'observation', subjects: ['player'], visibility: 'private' };

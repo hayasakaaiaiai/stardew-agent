@@ -35,8 +35,9 @@ function times(text: string, includePeriods = true): number[] {
 /** Both parties must show intent, and every quoted concrete time must agree with the proposed ten-minute slot. */
 export function quotedAgreement(quoted: readonly Quote[], all: readonly Quote[], placeWords: RegExp, time: number): boolean {
   const text = quoted.map(quote => quote.text).join('\n');
+  const farmHelp = /农场(?!主)|地里|田里/.test(text) && /帮.{0,8}(?:浇|收|喂|添|干活)|来帮.{0,4}忙/.test(text);
   if (quoted.length < 2 || REFUSED.test(text) || CONDITIONAL.test(text) || /后天|下周|下个/.test(text)
-    || !/(?:一起|见面?|碰面|等(?:你|我|着)|约(?:好|定)?)/.test(text)) return false;
+    || !farmHelp && !/(?:一起|见面?|碰面|等(?:你|我|着)|约(?:好|定)?)/.test(text)) return false;
   const concreteTimes = quoted.flatMap(quote => times(quote.text, false));
   const evidenceTimes = concreteTimes.length ? concreteTimes : quoted.flatMap(quote => times(quote.text));
   if (!evidenceTimes.length || evidenceTimes.some(value => value !== time)) return false;

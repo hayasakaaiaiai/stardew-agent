@@ -82,6 +82,7 @@ test('the Mod learns who walks over after the night, not after talking today, an
       await new Promise(resolve => setTimeout(resolve, 10));
     assert.deepEqual(approaches(from).at(-1), expected);
   };
+  await waitFor(0, {});
   assert.deepEqual(approaches(0), [{}], 'nobody on the first day');
   const calls = h.fake.sent.length;
   const commit = await sleep(wire);

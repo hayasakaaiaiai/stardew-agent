@@ -2,16 +2,17 @@
 import type { State } from './test-game-world.ts';
 
 interface Meeting { Npc: string; Time: number; Place: string; Leave: number; Depart: number; Applied: boolean; Failed: boolean;
-  Arrived: boolean; Met: boolean; Reported: boolean; spot: { map: string; x: number; y: number } }
+  Arrived: boolean; Met: boolean; Reported: boolean; Stage: number; Helps: boolean; Spouse: boolean; Destroys: boolean | null;
+  Helped: { Watered: number; Harvested: number; Fed: number; Ponds: number } | null; spot: { map: string; x: number; y: number } }
 export interface ActionState { eligible: Record<string, number>; approached: string[]; lastApproachAt: number;
   approach: { npc: string; phase: string; Talked: boolean; origin: { x: number; y: number; facing: number }; path: number; hold: boolean } | null;
   meetings: Meeting[]; routes: { time: number; map: string; x: number; y: number; steps: number }[] | null }
-interface Host { rpc(operation: string, args?: Record<string, unknown>): Promise<State>;
+export interface Host { rpc(operation: string, args?: Record<string, unknown>): Promise<State>;
   chapter(season: string, day: number, rain?: boolean, year?: number): Promise<State>;
   check(label: string, passed: unknown, detail?: unknown): void;
   say(npc: string, text: string, label: string): Promise<State>; close(): Promise<void>;
   packets(type: string, from?: number): Record<string, unknown>[]; wireCount(): number;
-  latestSystem(): string; seedNight(enabled: boolean): void;
+  latestSystem(): string; seedNight(enabled: boolean, farm?: boolean): void;
   meetingEntries(): Promise<number>;
 }
 const npc = (state: State, id = 'Abigail') => state.npcs!.find(npc => npc.id === id)!;

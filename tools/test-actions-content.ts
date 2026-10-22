@@ -8,11 +8,13 @@ import { Roster } from '../src/services/roster/index.ts';
 import { SOCIAL_NPCS, type ConsolidationInput, type RecallResult } from '../src/types.ts';
 
 const root = resolve(import.meta.dirname, '..');
-const replay = process.argv[2] === '--replay' ? process.argv[3] : undefined;
-if (process.argv.length > 2 && !replay) throw new Error('Usage: node tools/test-actions-content.ts [--replay <calls.jsonl>]');
+const farmOnly = process.argv.includes('--farm');
+const args = process.argv.slice(2).filter(arg => arg !== '--farm');
+const replay = args[0] === '--replay' ? args[1] : undefined;
+if (args.length && (!replay || args.length !== 2)) throw new Error('Usage: node tools/test-actions-content.ts [--farm] [--replay <calls.jsonl>]');
 const recordings = replay ? (await readFile(resolve(replay), 'utf8')).trim().split('\n').map(line => JSON.parse(line) as Completion & { messages: ChatMessage[] }) : undefined;
 if (!recordings) process.loadEnvFile(join(root, '.env'));
-const output = join(root, '.runtime', 'actions-content-' + (replay ? 'replay-' : '') + new Date().toISOString().replace(/[:.]/g, '-'));
+const output = join(root, '.runtime', (farmOnly ? 'farm' : 'actions') + '-content-' + (replay ? 'replay-' : '') + new Date().toISOString().replace(/[:.]/g, '-'));
 await mkdir(output);
 const roster = new Roster({ directory: join(root, 'data/npcs'), npcIds: SOCIAL_NPCS }); await roster.load();
 const client = recordings ? undefined : new ModelClient({ ...modelConfigFromEnv(), thinking: 'high' });
@@ -24,7 +26,7 @@ const model: ChatModel = { async chat(messages, handlers, options) {
   await appendFile(join(output, 'calls.jsonl'), JSON.stringify({ messages, ...completion, thinking: 'high', real: !recordings }) + '\n');
   return completion;
 } };
-const fixtures = [
+const ordinaryFixtures = [
   { id: 'beach-afternoon', npc: 'abigail', player: '明天下午一起去海边钓鱼吧？', reply: '好啊，那就明天下午海边见。', meet: { time: 1400, place: '海滩' } },
   { id: 'pub-evening', npc: 'shane', player: '明晚在星之果实餐吧见面？', reply: '行，明晚餐吧见。', meet: { time: 1900, place: '星之果实餐吧' } },
   { id: 'museum-three', npc: 'penny', player: '明天下午三点在博物馆等我。', reply: '好，明天下午三点博物馆见。', meet: { time: 1500, place: '博物馆' } },
@@ -36,6 +38,15 @@ const fixtures = [
   { id: 'unsupported-place', npc: 'leah', player: '明天下午两点在我家见面吧？', reply: '好，明天下午两点你家见。', meet: null },
   { id: 'own-plan', npc: 'willy', player: '明天下午你要做什么？', reply: '我明天下午自己去海边修船，不用来找我。', meet: null, noApproach: true },
 ] as const;
+const farmFixtures = [
+  { id: 'farm-water-morning', npc: 'abigail', player: '明天上午来农场帮我浇浇水好吗？', reply: '好啊，明天上午我去农场帮你浇水。', meet: { time: 1000, place: '农场' } },
+  { id: 'farm-harvest-field', npc: 'leah', player: '明天上午来田里帮我收成熟的作物吧？', reply: '没问题，明天上午我来帮忙。', meet: { time: 1000, place: '农场' } },
+  { id: 'farm-visit-afternoon', npc: 'penny', player: '明天下午来农场看看鸡，我们在门口见。', reply: '好，明天下午我来农场。', meet: { time: 1400, place: '农场' } },
+  { id: 'farm-refused', npc: 'haley', player: '明天上午来农场帮忙好吗？', reply: '不行，我明天不来农场。', meet: null },
+  { id: 'farm-conditional', npc: 'sam', player: '如果明天上午有空，你来农场帮我浇水吧。', reply: '还不确定，到时候再说。', meet: null },
+  { id: 'farm-no-time', npc: 'leah', player: '明天来农场帮我收作物吧，几点还没想好。', reply: '好，时间定了再告诉我。', meet: null },
+] as const;
+const fixtures = farmOnly ? farmFixtures : ordinaryFixtures;
 const results = [];
 for (const repeat of [1, 2]) for (const fixture of fixtures) {
   const input: ConsolidationInput = { commit: { id: `probe-${fixture.id}-${repeat}`, lineageId: 'probe', parentId: 'root', dayEnded: 1, status: 'confirmed' },

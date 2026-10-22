@@ -90,7 +90,8 @@ internal sealed partial class ModEntry
         try
         {
             string controlPath = Path.Combine(test.RunDirectory, "control.json");
-            using JsonDocument? control = File.Exists(controlPath) ? JsonDocument.Parse(File.ReadAllText(controlPath)) : null;
+            using JsonDocument? control = !File.Exists(controlPath) ? null : test.World ? ReadWorldControl(controlPath)
+                : JsonDocument.Parse(File.ReadAllText(controlPath));
             bool matched = control is not null && control.RootElement.GetProperty("requestId").GetString() == test.RequestId;
             if (matched && control!.RootElement.TryGetProperty("abort", out JsonElement reason))
                 throw new InvalidOperationException(reason.GetString());

@@ -234,7 +234,11 @@ internal sealed partial class ModEntry : Mod
         };
         GameState.AddSchedule(fields, npc);
         if (this.MeetingTalk(npc))
+        {
             fields["atMeeting"] = true;
+            if (this.MeetingHelped(npc) is { } helped)
+                fields["helped"] = helped;
+        }
         this.talk.RequestSeq = this.Send("talk.open", fields);
         this.BeginWaiting(this.talk);
     }
@@ -366,6 +370,9 @@ internal sealed partial class ModEntry : Mod
         this.talk = null;
         if (t.Waiting)
             Game1.player.CanMove = true;
+        // Let vanilla expire our pause on its next update so it also releases freezeMotion.
+        t.Npc.faceTowardFarmerTimer = Math.Min(t.Npc.faceTowardFarmerTimer, 1);
+        t.Npc.movementPause = Math.Min(t.Npc.movementPause, 1);
         this.Send("talk.close", new() { ["npc"] = t.Npc.Name });
         if (notice is not null)
             Game1.addHUDMessage(new HUDMessage(notice, HUDMessage.error_type));

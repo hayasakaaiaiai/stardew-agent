@@ -17,10 +17,11 @@ import { Roster } from '../src/services/roster/index.ts';
 import { SOCIAL_NPCS } from '../src/types.ts';
 import { digest } from '../src/validation.ts';
 import { runActions, runActionEdges, runActionTiming, runActionRender, runActionQueue, runActionPlaces, runActionIncoming, type ActionState } from './game-actions.ts';
+import { runFarmChores, runFarmVisits, runFarmSave, type FarmState } from './game-farm-help.ts';
 
 interface Config { RequestId: string; UniqueId: string; SaveFolder: string; SaveDirectory: string; RunDirectory: string; GamePath: string; BackendUrl: string; World: boolean; Offline: boolean; Section: string }
-interface Npc { id: string; name: string; location: string; x: number; y: number; ignoreScheduleToday: boolean; controller: boolean; temporary: boolean; queued: number; schedule: ScheduleStop[] | null }
-export interface State { ready: boolean; canChat: boolean; time: number; nonce: string; generation: number; location: string; weather: string; npcs: Npc[] | null; actions?: ActionState; player?: { x: number; y: number; facing: number } | null;
+interface Npc { id: string; name: string; location: string; x: number; y: number; ignoreScheduleToday: boolean; controller: boolean; temporary: boolean; queued: number; destroys: boolean; schedule: ScheduleStop[] | null }
+export interface State { ready: boolean; canChat: boolean; time: number; nonce: string; generation: number; location: string; weather: string; npcs: Npc[] | null; actions?: ActionState; farm?: FarmState; player?: { x: number; y: number; facing: number } | null;
   festival: { id: string; isFestival: boolean; actors: string[]; schedules: Record<string, unknown>; dance: string | null; soup: number | null; grangeScore: number; giver: string | null } | null;
   native: Record<string, unknown> | null; reply: { npc: string; text: string } | null; minigame: string | null }
 interface Command { id: number; operation: string; completed: boolean; success: boolean; error?: string; state: State }
@@ -31,17 +32,26 @@ const ROOT = resolve(import.meta.dirname, '..');
 const configPath = resolve(process.argv[2]!);
 const config = JSON.parse((await readFile(configPath, 'utf8')).replace(/^\uFEFF/, '')) as Config;
 assert.equal(config.World, true); assert.equal(config.SaveFolder, `MemoryTest_${config.UniqueId}`); assert.notEqual(config.UniqueId, '436774213');
-assert.ok(['all', 'schedules', 'backstage', 'festivals', 'content', 'fair-return', 'actions', 'actions-edge', 'actions-timing', 'actions-checks', 'actions-places', 'actions-incoming'].includes(config.Section), 'Unknown native world test section.');
+assert.ok(['all', 'schedules', 'backstage', 'festivals', 'content', 'fair-return', 'actions', 'actions-edge', 'actions-timing', 'actions-checks', 'actions-places', 'actions-incoming', 'farm-help', 'farm-chores', 'farm-visits', 'farm-save'].includes(config.Section), 'Unknown native world test section.');
 assert.equal(resolve(config.SaveDirectory), resolve(process.env.APPDATA!, 'StardewValley/Saves', config.SaveFolder));
 assert.ok(resolve(config.RunDirectory).startsWith(resolve(ROOT, '.runtime') + '\\'));
 const directory = config.RunDirectory;
 await mkdir(join(directory, 'sources'));
-for (const file of ['tools/test-game-world.ts', 'tools/game-actions.ts', 'tools/prepare-world-fixture.ps1', 'src/agent/schedule.ts', 'src/agent/dialogue.ts', 'src/agent/dialogue-facts.ts',
+for (const file of ['tools/test-game-world.ts', 'tools/game-actions.ts', 'tools/game-farm-help.ts', 'mod/StardewAgentBridge/FarmHelp.cs', 'mod/StardewAgentBridge/FarmVisits.cs', 'mod/StardewAgentBridge/FarmTest.cs', 'tools/prepare-world-fixture.ps1', 'src/agent/schedule.ts', 'src/agent/dialogue.ts', 'src/agent/dialogue-facts.ts',
   'src/agent/approach.ts', 'src/agent/meetings.ts', 'src/agent/meeting-agreement.ts', 'src/agent/nightly.ts', 'mod/StardewAgentBridge/ActionTest.cs', 'mod/StardewAgentBridge/Approach.cs', 'mod/StardewAgentBridge/Meetings.cs',
   'mod/StardewAgentBridge/SaveSync.cs', 'mod/StardewAgentBridge/ModEntry.cs',
   'src/bridge/server.ts', 'mod/StardewAgentBridge/WorldTest.cs', 'mod/StardewAgentBridge/MemoryTest.cs', 'mod/StardewAgentBridge/Festivals.cs'])
   await copyFile(join(ROOT, file), join(directory, 'sources', file.split('/').at(-1)!));
-const json = async (file: string, value: unknown) => { await writeFile(file + '.tmp', JSON.stringify(value, null, 2)); await rename(file + '.tmp', file); };
+const json = async (file: string, value: unknown) => {
+  await writeFile(file + '.tmp', JSON.stringify(value, null, 2));
+  for (let attempt = 0; ; attempt++) {
+    try { await rename(file + '.tmp', file); return; }
+    catch (error) {
+      if (attempt >= 7 || !['EPERM', 'EBUSY', 'EACCES'].includes((error as NodeJS.ErrnoException).code ?? '')) throw error;
+      await new Promise(resolve => setTimeout(resolve, 10 * (attempt + 1)));
+    }
+  }
+};
 const checks: { label: string; passed: boolean; detail?: unknown; scope: 'technical' | 'content' }[] = [];
 function check(label: string, passed: unknown, detail?: unknown) {
   checks.push({ label, passed: !!passed, detail, scope: 'technical' });
@@ -63,13 +73,15 @@ const reports: { day: number; usage: ReturnType<ModelGateway['usage']>; line: st
 const deferred = () => { let resolve!: () => void; const promise = new Promise<void>(done => { resolve = done; }); return { promise, resolve }; };
 let heldBackstage: ReturnType<typeof deferred> | undefined;
 let actionSeedNight = false;
+let actionSeedFarm = false;
+const seedNight = (enabled: boolean, farm = false) => { actionSeedNight = enabled; actionSeedFarm = farm; };
 const fixed = (content: unknown): Completion => ({ content: JSON.stringify(content), reasoning: '', finishReason: 'stop',
   usage: { inputTokens: 120, cachedInputTokens: 60, outputTokens: 20, reasoningTokens: null }, timing: { firstReasoningMs: null, firstContentMs: 1, totalMs: 1 } });
 function model(kind: Kind): ChatModel {
   return { async chat(messages: ChatMessage[], handlers: StreamHandlers = {}, options: ChatOptions = {}) {
     starts.push({ kind, time: Date.now(), held: !!heldBackstage });
     if (kind === 'background') await heldBackstage?.promise;
-    const real = !config.Offline && (kind === 'dialogue' || kind === 'background');
+    const real = !config.Offline && (kind === 'dialogue' || kind === 'background') && !actionSeedNight;
     let result: Completion;
     if (real) result = await (kind === 'background' ? paidBackstage! : paid!).chat(messages, handlers, options);
     else {
@@ -78,10 +90,11 @@ function model(kind: Kind): ChatModel {
       const remembered = /- （(?:今天|昨天|\d+ 天前)）([^\n]+)/.exec(text)?.[1] ?? '';
       result = fixed(kind === 'background' ? { memories: { a: '格斯说汤的味道不错。', b: '潘姆说巴士站的风很大。', c: '我们聊了餐吧的天气。' } }
         : kind === 'nightly' ? { memories: actionSeedNight ? [{ sources: ['t2', 't3'], importance: 4 }] : [], retire: [], impression: '',
-          plan: actionSeedNight ? '想问农场主下午在海滩见面的事' : '', seek: actionSeedNight,
-          meet: actionSeedNight ? { time: '14:00', place: '海滩', sources: ['t2', 't3'] } : null, bubbles: [], letter: '', gift: false, share: '' }
+          plan: actionSeedNight ? actionSeedFarm ? '想问农场主上午来农场帮忙的事' : '想问农场主下午在海滩见面的事' : '', seek: actionSeedNight,
+          meet: actionSeedNight ? { time: actionSeedFarm ? '10:00' : '14:00', place: actionSeedFarm ? '农场' : '海滩', sources: ['t2', 't3'] } : null, bubbles: [], letter: '', gift: false, share: '' }
         : kind === 'nearby' ? { lines: [] }
-        : { reply: actionSeedNight && messages.at(-1)!.content.includes('明天下午') ? '好啊，那就明天下午14:00在海滩见。'
+        : { reply: actionSeedNight && actionSeedFarm ? '好啊，明天上午10:00我来农场帮你浇水。'
+          : actionSeedNight && messages.at(-1)!.content.includes('明天下午') ? '好啊，那就明天下午14:00在海滩见。'
           : remembered || (schedule ? `我的安排是：${schedule}` : '我还没有确定安排。'), emotion: 'neutral', options: ['继续聊', '换个话题', '再见'], remember: [], mood: 0, end: false });
       handlers.onContent?.(result.content);
     }
@@ -413,21 +426,28 @@ try {
   if (config.Section === 'all' || config.Section === 'festivals') await festivals();
   if (config.Section === 'fair-return') await fairReturn();
   if (config.Section === 'all' || config.Section === 'actions') await runActions({ rpc, chapter, check, say, close, packets: modPackets, wireCount: () => packets.length,
-    latestSystem: () => latestDialogue().messages[0]!.content, seedNight: enabled => { actionSeedNight = enabled; }, meetingEntries });
+    latestSystem: () => latestDialogue().messages[0]!.content, seedNight, meetingEntries });
   if (config.Section === 'actions-edge') await runActionEdges({ rpc, chapter, check, say, close, packets: modPackets, wireCount: () => packets.length,
-    latestSystem: () => latestDialogue().messages[0]!.content, seedNight: enabled => { actionSeedNight = enabled; }, meetingEntries });
+    latestSystem: () => latestDialogue().messages[0]!.content, seedNight, meetingEntries });
   if (config.Section === 'all' || config.Section === 'actions-timing') await runActionTiming({ rpc, chapter, check, say, close, packets: modPackets, wireCount: () => packets.length,
-    latestSystem: () => latestDialogue().messages[0]!.content, seedNight: enabled => { actionSeedNight = enabled; }, meetingEntries });
+    latestSystem: () => latestDialogue().messages[0]!.content, seedNight, meetingEntries });
   if (config.Section === 'actions-checks') {
     const host = { rpc, chapter, check, say, close, packets: modPackets, wireCount: () => packets.length,
-      latestSystem: () => latestDialogue().messages[0]!.content, seedNight: (enabled: boolean) => { actionSeedNight = enabled; }, meetingEntries };
+      latestSystem: () => latestDialogue().messages[0]!.content, seedNight, meetingEntries };
     await runActionQueue(host); await runActionRender(host);
   }
   if (config.Section === 'actions-places') await runActionPlaces({ rpc, chapter, check, say, close, packets: modPackets, wireCount: () => packets.length,
-    latestSystem: () => latestDialogue().messages[0]!.content, seedNight: enabled => { actionSeedNight = enabled; }, meetingEntries });
+    latestSystem: () => latestDialogue().messages[0]!.content, seedNight, meetingEntries });
   if (config.Section === 'all' || config.Section === 'actions-incoming') await runActionIncoming({ rpc, chapter, check, say, close, packets: modPackets, wireCount: () => packets.length,
-    latestSystem: () => latestDialogue().messages[0]!.content, seedNight: enabled => { actionSeedNight = enabled; }, meetingEntries });
+    latestSystem: () => latestDialogue().messages[0]!.content, seedNight, meetingEntries });
   if (config.Section === 'content') await festival('spring24', 'festival-main', {}, packet => packet.dance === 'Abigail', 1, true);
+  if (['all', 'farm-help', 'farm-chores', 'farm-visits', 'farm-save'].includes(config.Section)) {
+    const host = { rpc, chapter, check, say, close, packets: modPackets, wireCount: () => packets.length,
+      latestSystem: () => latestDialogue().messages[0]!.content, seedNight, meetingEntries };
+    if (['all', 'farm-help', 'farm-chores'].includes(config.Section)) await runFarmChores(host);
+    if (['all', 'farm-help', 'farm-visits'].includes(config.Section)) await runFarmVisits(host);
+    if (['all', 'farm-help', 'farm-save'].includes(config.Section)) await runFarmSave(host);
+  }
   if (!config.Offline) {
     check('real-dialogue-preserves-configured-thinking', calls.filter(call => call.real && call.kind === 'dialogue').every(call => call.thinking === paid!.config.thinking));
     check('real-backstage-disables-thinking', calls.filter(call => call.real && call.kind === 'background').every(call => call.thinking === 'disabled'));

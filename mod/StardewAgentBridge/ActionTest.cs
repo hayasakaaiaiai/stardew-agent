@@ -32,6 +32,7 @@ internal sealed partial class ModEntry
         meetings = this.meetings.Values.Select(m => new
         {
             m.Npc, m.Time, m.Place, m.Leave, m.Depart, m.Applied, m.Failed, m.Arrived, m.Met, m.Reported,
+            m.Stage, m.Helps, m.Spouse, m.Helped, m.Destroys,
             spot = new { map = m.Spot.Map, x = m.Spot.X, y = m.Spot.Y },
         }).ToArray(),
         routes = this.actionTestNpc.Length == 0 || Game1.getCharacterFromName(this.actionTestNpc) is not NPC npc ? null
@@ -133,6 +134,7 @@ internal sealed partial class ModEntry
 
     private void TickActionTestPending()
     {
+        this.TickFarmTestPending();
         if (this.worldTestPending == "action-menu-closed")
         {
             // Closing vanilla dialogue can enqueue the normal "continue chatting" question on the next update.

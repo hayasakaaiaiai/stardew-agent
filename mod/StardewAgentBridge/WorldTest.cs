@@ -65,10 +65,12 @@ internal sealed partial class ModEntry
         return new
         {
             ready, canChat = this.CanChat, time = ready ? Game1.timeOfDay : 0,
+            farm = ready ? this.FarmTestSnapshot() : null,
             date = ready ? GameState.Date() : null, weather = ready ? GameState.Weather() : null,
             location = ready ? Game1.currentLocation?.NameOrUniqueName : null,
             player = ready ? new { x = Game1.player.TilePoint.X, y = Game1.player.TilePoint.Y, facing = Game1.player.FacingDirection } : null,
             menu = Game1.activeClickableMenu?.GetType().Name, minigame = Game1.currentMinigame?.GetType().Name,
+            dialogue = Game1.activeClickableMenu is DialogueBox box ? new { text = box.getCurrentString(), box.isQuestion } : null,
             Game1.globalFade, Game1.fadeToBlack, Game1.fadeIn, Game1.fadeToBlackAlpha, Game1.eventUp, Game1.isWarping,
             nonce = this.loadNonce, generation = this.bridge.Generation, queue = this.lifecycle.Count,
             festival = festival is null ? null : new
@@ -87,7 +89,7 @@ internal sealed partial class ModEntry
                 id = npc.Name, name = npc.displayName, location = npc.currentLocation?.NameOrUniqueName,
                 x = npc.TilePoint.X, y = npc.TilePoint.Y, npc.ignoreScheduleToday, npc.followSchedule,
                 controller = npc.controller is not null, temporary = npc.temporaryController is not null,
-                queued = npc.queuedSchedulePaths.Count,
+                queued = npc.queuedSchedulePaths.Count, destroys = npc.willDestroyObjectsUnderfoot,
                 schedule = GameState.Schedule(npc),
             }).ToArray() : null,
         };
@@ -215,6 +217,12 @@ internal sealed partial class ModEntry
                         this.WorldComplete();
                         break;
                     case "sleep":
+                        // Native overnight events can show an informational message before saving.
+                        if (Game1.activeClickableMenu is DialogueBox { transitioning: false, isQuestion: false } notice)
+                        {
+                            this.Monitor.Log("[WorldTest] Overnight message: " + notice.getCurrentString(), LogLevel.Info);
+                            this.WorldNativeMenus();
+                        }
                         if (Context.IsWorldReady && !Game1.newDay && !SaveGame.IsProcessing && this.CanChat
                             && this.currentDay == this.memoryTestSleepDay + 1 && this.savedCommit?.DayEnded == this.memoryTestSleepDay
                             && Game1.activeClickableMenu is null) this.WorldComplete();
@@ -350,7 +358,7 @@ internal sealed partial class ModEntry
                     this.worldTestCaptureAt = DateTime.UtcNow.AddSeconds(1);
                     this.WorldWait("capture"); break;
                 default:
-                    if (!this.ActionCommand(this.worldTestOperation, args)) throw new InvalidOperationException("未知世界测试命令：" + this.worldTestOperation);
+                    if (!this.ActionCommand(this.worldTestOperation, args) && !this.FarmTestCommand(this.worldTestOperation, args)) throw new InvalidOperationException("未知世界测试命令：" + this.worldTestOperation);
                     break;
             }
         }
