@@ -70,6 +70,44 @@ function tripMemory(place: string, trip: MineTrip): string {
   return `我陪农场主${went}${fight}${trip.rescued ? '；农场主晕倒了，我把农场主背了出来' : ''}`;
 }
 
+/**
+ * What the NPC saw the player do after they met somewhere ordinary, from the Mod (docs/npc-outing.md): places as the
+ * game shows them, in the order first visited (at most six), and the first three kinds of fish caught.
+ */
+export interface Outing {
+  places: string[]; here: string;
+  fish: number; fishNames: string[]; escaped: number; treasures: number; foraged: number; artifacts: number;
+}
+
+/** "钓到 2 条鱼（鲈鱼、沙丁鱼），跑了 1 条，捡了 3 个采集物"; empty when the player did none of it. */
+function outingDone(outing: Outing): string {
+  const names = outing.fishNames.length ? `（${outing.fishNames.join('、')}）` : '';
+  return [
+    ...(outing.fish ? [`钓到 ${outing.fish} 条鱼${names}`] : []),
+    ...(outing.escaped ? [`${outing.fish ? '' : '钓鱼'}跑了 ${outing.escaped} 条`] : []),
+    ...(outing.treasures ? [`钓到 ${outing.treasures} 个宝箱`] : []),
+    ...(outing.foraged ? [`捡了 ${outing.foraged} 个采集物`] : []),
+    ...(outing.artifacts ? [`挖到 ${outing.artifacts} 件古物`] : []),
+  ].join('，');
+}
+
+/** "你一直陪着农场主，从海滩到了鹈鹕镇；农场主钓到 2 条鱼（鲈鱼、沙丁鱼）", for a talk while together. */
+export function outingText(outing: Outing): string {
+  const { places, here } = outing;
+  const where = places.length <= 1 ? `现在在${here}`
+    : here === places.at(-1) ? `从${places[0]}到了${places.slice(1).join('、')}` : `去过${places.join('、')}，现在在${here}`;
+  const done = outingDone(outing);
+  return `你一直陪着农场主，${where}${done ? `；农场主${done}` : ''}`;
+}
+
+/** The outing as the NPC remembers it afterwards, in its own voice. */
+function outingMemory(outing: Outing): string {
+  const { places } = outing;
+  const where = places.length <= 1 ? `在${places[0] ?? outing.here}走了走` : `从${places[0]}到了${places.slice(1).join('、')}`;
+  const done = outingDone(outing);
+  return `我陪农场主${where}${done ? `，看农场主${done}` : ''}`;
+}
+
 const TOMORROW = /明天|明早|明晚|明儿|明日/;
 const TIME_WORDS = /早上|早晨|上午|中午|下午|傍晚|晚上|明晚|明早|点|\d{1,2}[:：]\d{2}/;
 const EARLIEST = 800;
@@ -146,10 +184,12 @@ const agreedText = (meeting: Meeting) => meeting.soon ? `约好马上去${meetin
  * For the NPC's own conversation that day; nothing once it has left the place, unless it is still with the player in a
  * dungeon. One agreed today may arrive late, so it lasts until the Mod reports it over.
  */
-export function meetingLine(meeting: Meeting | undefined, now: number, here: boolean, helped?: Helped, trip?: MineTrip): string | undefined {
-  if (!meeting || meeting.calledOff || !trip && (meeting.sameDay ? meeting.ended || now >= MEET_END : now > meetingLeave(meeting.time))) return undefined;
+export function meetingLine(meeting: Meeting | undefined, now: number, here: boolean, helped?: Helped, trip?: MineTrip,
+  outing?: Outing): string | undefined {
+  if (!meeting || meeting.calledOff || !trip && !outing && (meeting.sameDay ? meeting.ended || now >= MEET_END : now > meetingLeave(meeting.time))) return undefined;
   const agreed = meeting.soon ? `今天 ${clock(meeting.time)} ${agreedText(meeting)}` : `今天 ${clock(meeting.time)} 在${meeting.place}见面`;
   if (trip) return `${agreed}；${tripText(meeting.place, trip)}`;
+  if (outing) return `${agreed}；${outingText(outing)}`;
   return `${agreed}${here ? '，现在就在这里碰面了' : ''}${helped ? `；你来了以后已经${helpedText(helped)}` : ''}`;
 }
 
@@ -157,13 +197,18 @@ export function meetingLine(meeting: Meeting | undefined, now: number, here: boo
  * What the NPC remembers once the appointment is over, or once it was called off before they met; `arrived` is when one
  * agreed today got there late.
  */
-export function meetingMemory(meeting: Meeting & { met: boolean; left: number; helped?: Helped; trip?: MineTrip; arrived?: number }): MemoryDraft {
+export function meetingMemory(meeting: Meeting & { met: boolean; left: number; helped?: Helped; trip?: MineTrip; outing?: Outing; arrived?: number }): MemoryDraft {
   const late = meeting.arrived ? `，我 ${clock(meeting.arrived)} 才到` : '';
   const sent = meeting.met && meeting.calledOff ? meeting.calledOff === '玩家' ? '，后来农场主让我先回去了' : '，后来我先回去了' : '';
   if (meeting.trip) {
     // A rescue is the kind of thing one remembers for a long time.
     return { text: `${agreedText(meeting)}${late}，农场主来了，${tripMemory(meeting.place, meeting.trip)}${sent}。`,
       importance: meeting.trip.rescued ? 4 : 3, kind: 'observation', subjects: ['player'], visibility: 'private' };
+  }
+  // Time spent together is remembered like a trip into the mines.
+  if (meeting.outing && meeting.met) {
+    return { text: `${agreedText(meeting)}${late}，农场主来了，${outingMemory(meeting.outing)}${sent}。`, importance: 3, kind: 'observation',
+      subjects: ['player'], visibility: 'private' };
   }
   if (meeting.calledOff && !meeting.met) {
     return { text: `${agreedText(meeting)}，后来${meeting.calledOff === '玩家' ? '农场主说不去了' : '我跟农场主说去不了了'}。`, importance: 2,

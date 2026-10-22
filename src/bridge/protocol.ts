@@ -7,7 +7,7 @@ import { FRIENDSHIP_DAY_MAX, FRIENDSHIP_DAY_MIN } from '../agent/friendship.ts';
 import { GIFT_TASTES, type GiftTaste } from '../agent/gifts.ts';
 import { MAX_STOPS, type ScheduleStop } from '../agent/schedule.ts';
 import type { DeliveredLetter } from '../agent/letters.ts';
-import type { Helped, MineTrip } from '../agent/meetings.ts';
+import type { Helped, MineTrip, Outing } from '../agent/meetings.ts';
 import type { SceneLine } from '../agent/scene.ts';
 import type { Relation } from '../services/roster/index.ts';
 
@@ -97,6 +97,8 @@ export type ModMessage =
     helped?: Helped;
     /** It is in a dungeon with the player now (docs/npc-mine-companion.md). */
     mine?: MineTrip;
+    /** It has been with the player since they met somewhere ordinary (docs/npc-outing.md). */
+    outing?: Outing;
     world: WorldSnapshot;
   } & Envelope)
   | ({ type: 'talk.say'; npc: string; text: string; date: GameDate } & Envelope)
@@ -119,7 +121,7 @@ export type ModMessage =
    * (docs/npc-meeting-friendship.md). Reliable, acknowledged.
    */
   | ({ type: 'meet.ended'; npc: string; place: string; time: number; arrived?: number; left: number; met: boolean; helped?: Helped; mine?: MineTrip;
-    friendship?: number; date: GameDate } & Envelope);
+    outing?: Outing; friendship?: number; date: GameDate } & Envelope);
 
 export interface FestivalEnded {
   festival: Festival;
@@ -240,6 +242,13 @@ export function parseModMessage(raw: string): ModMessage {
       || (m.floor as number) > (m.deepest as number) || typeof m.fights !== 'boolean' || typeof m.rescued !== 'boolean')) fail('mine is invalid');
   };
   const isName = (value: unknown) => typeof value === 'string' && value.length > 0 && value.length <= 50 && !/[\u0000-\u001f]/u.test(value);
+  const outing = (value: unknown) => {
+    const o = value as Record<string, unknown> | null | undefined;
+    if (o !== undefined && (!o || typeof o !== 'object' || Array.isArray(o)
+      || !Array.isArray(o.places) || !o.places.length || o.places.length > 6 || !o.places.every(isName) || !isName(o.here)
+      || ['fish', 'escaped', 'treasures', 'foraged', 'artifacts'].some(key => !Number.isSafeInteger(o[key]) || (o[key] as number) < 0 || (o[key] as number) > 100000)
+      || !Array.isArray(o.fishNames) || o.fishNames.length > Math.min(3, o.fish as number) || !o.fishNames.every(isName))) fail('outing is invalid');
+  };
   const isSchedule = (value: unknown) => Array.isArray(value) && value.length <= MAX_STOPS && value.every((item) => {
     const stop = item as Record<string, unknown> | null;
     return !!stop && Number.isSafeInteger(stop.time) && (stop.time as number) >= 0 && (stop.time as number) <= 2800
@@ -299,6 +308,7 @@ export function parseModMessage(raw: string): ModMessage {
       if (data.atMeeting !== undefined && typeof data.atMeeting !== 'boolean') fail('atMeeting must be a boolean');
       helped(data.helped);
       mine(data.mine);
+      outing(data.outing);
       world(data.world);
       break;
     }
@@ -318,6 +328,7 @@ export function parseModMessage(raw: string): ModMessage {
       }
       helped(data.helped);
       mine(data.mine);
+      outing(data.outing);
       date(data.date);
       break;
     }

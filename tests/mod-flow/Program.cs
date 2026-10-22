@@ -643,6 +643,39 @@ Test("one that walking cannot get there in time may appear there half an hour ea
     Check(Warp(1000, 1030) == 1040 && Warp(1500, 1450) == 1500, "Right away, or too late to wait: not the next tick.");
 });
 
+Test("an outing follows the player except where monsters are, into the bathhouse or a festival, and stands at their side", () =>
+{
+    bool Goes(string? location) => (bool)modType.GetMethod("OutingGoes", BindingFlags.Static | BindingFlags.NonPublic)!.Invoke(null, new object?[] { location })!;
+    Check(new[] { "Beach", "Town", "Mountain", "Mine", "SkullCave", "Desert", "FarmHouse", "Saloon", "BathHouse_Entry", "Caldera" }.All(Goes),
+        "An ordinary place was left out (docs/npc-outing.md).");
+    Check(!new[] { "UndergroundMine35", "UndergroundMine121", "VolcanoDungeon3", "BugLand", "BathHouse_Pool", "BathHouse_MensLocker",
+        "BathHouse_WomensLocker", "Temp", null }.Any(Goes), "It followed where it should wait.");
+    MethodInfo besideTiles = modType.GetMethod("BesideTiles", BindingFlags.Static | BindingFlags.NonPublic)!;
+    Type pointType = besideTiles.ReturnType.GetElementType()!;
+    // The game's Point, through reflection: this project does not reference MonoGame.
+    string Beside(int x, int y, int facing) => string.Join(" ", ((Array)besideTiles.Invoke(null, new[] { Activator.CreateInstance(pointType, x, y)!, facing })!)
+        .Cast<object>().Select(point => $"{pointType.GetField("X")!.GetValue(point)},{pointType.GetField("Y")!.GetValue(point)}"));
+    Check(Beside(10, 10, 2) == "9,10 11,10" && Beside(10, 10, 0) == "9,10 11,10" && Beside(10, 10, 1) == "10,9 10,11" && Beside(10, 10, 3) == "10,9 10,11",
+        "Not at the player's sides, looking the way they look.");
+});
+
+Test("an outing reports the places first visited, at most six, in the backend's fields; only ordinary places have one", () =>
+{
+    Type outingType = modType.GetNestedType("Outing", BindingFlags.NonPublic)!;
+    object outing = Activator.CreateInstance(outingType)!;
+    foreach (string place in new[] { "海滩", "鹈鹕镇", "海滩", "山区", "煤矿森林", "博物馆", "星之果实餐吧", "杂货店" })
+        outingType.GetMethod("Visit")!.Invoke(outing, new object[] { place });
+    var fields = (Dictionary<string, object?>)outingType.GetMethod("Fields")!.Invoke(outing, null)!;
+    // src/bridge/protocol.ts `outing`: these keys, places 1-6, fishNames at most 3.
+    Check(fields.Keys.OrderBy(key => key, StringComparer.Ordinal).SequenceEqual(new[] { "artifacts", "escaped", "fish", "fishNames", "foraged", "here", "places", "treasures" }),
+        "The fields differ from the backend's (src/agent/meetings.ts Outing).");
+    Check(((string[])fields["places"]!).SequenceEqual(new[] { "海滩", "鹈鹕镇", "山区", "煤矿森林", "博物馆", "星之果实餐吧" }) && (string)fields["here"]! == "杂货店",
+        "Places are not the first six visited, or where it is now was lost.");
+    Type meetingType = modType.GetNestedType("Meeting", BindingFlags.NonPublic)!;
+    bool Ordinary(string place) => (bool)meetingType.GetProperty("Ordinary")!.GetValue(Activator.CreateInstance(meetingType, "Abigail", 1400, place, false))!;
+    Check(Ordinary("海滩") && Ordinary("杂货店") && !Ordinary("农场") && !Ordinary("矿洞") && !Ordinary("火山"), "The farm or a dungeon door went on an outing.");
+});
+
 Test("farm chores are worded like the backend, and the farm is a place an appointment can be at", () =>
 {
     Type doneType = modAssembly.GetType("StardewAgentBridge.FarmHelp+Done", throwOnError: true)!;

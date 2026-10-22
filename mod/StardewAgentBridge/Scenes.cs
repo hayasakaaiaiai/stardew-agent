@@ -132,7 +132,8 @@ internal sealed partial class ModEntry
             return;
         Vector2 player = Game1.player.Tile;
         List<NPC> near = location.characters
-            .Where(npc => SocialNpcs.Contains(npc.Name) && Vector2.Distance(npc.Tile, player) <= ScenePlayerRange && !this.Approaching(npc.Name))
+            .Where(npc => SocialNpcs.Contains(npc.Name) && Vector2.Distance(npc.Tile, player) <= ScenePlayerRange && !this.Approaching(npc.Name)
+                && !this.OnOuting(npc.Name))
             .ToList();
         for (int i = 0; i < near.Count; i++)
         {

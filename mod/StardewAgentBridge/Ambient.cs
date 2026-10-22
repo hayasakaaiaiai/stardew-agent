@@ -124,7 +124,7 @@ internal sealed partial class ModEntry
         Vector2 player = Game1.player.Tile;
         List<NPC> near = location.characters
             .Where(npc => SocialNpcs.Contains(npc.Name) && !npc.IsInvisible && Vector2.Distance(npc.Tile, player) <= AmbientRange
-                && this.AmbientDue(npc.Name))
+                && this.AmbientDue(npc.Name) && !this.OnOuting(npc.Name))
             .OrderBy(npc => Vector2.Distance(npc.Tile, player))
             .Take(AmbientMaxNpcs)
             .ToList();

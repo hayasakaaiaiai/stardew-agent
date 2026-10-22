@@ -54,6 +54,7 @@ internal sealed partial class ModEntry
                 ["npc"] = npc.Name, ["item"] = held.DisplayName, ["taste"] = taste, ["birthday"] = birthday, ["date"] = GameState.Date(),
             });
             this.Monitor.Log($"{npc.displayName}收到礼物“{held.DisplayName}”（{taste}{(birthday ? "，生日" : "")}），已交给后端记住。", LogLevel.Trace);
+            this.OutingGift(npc, taste);
         }
     }
 
