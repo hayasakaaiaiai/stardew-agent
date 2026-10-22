@@ -682,6 +682,15 @@ Test("an outing follows the player except where monsters are, into the bathhouse
         "Not at the player's sides, looking the way they look.");
 });
 
+Test("on an outing it suggests only ordinary places, and a shop only while it is open", () =>
+{
+    bool Open(string place, int time, int day) => (bool)modType.GetMethod("OpenNow", BindingFlags.Static | BindingFlags.NonPublic)!.Invoke(null, new object[] { place, time, day })!;
+    Check(Open("海滩", 700, 3) && Open("山上湖边", 2000, 10) && !Open("农场", 1200, 1) && !Open("矿洞", 1200, 1) && !Open("花舞节", 1200, 24),
+        "The farm, a dungeon door or a festival was suggested (docs/npc-meetings-more.md §4).");
+    Check(Open("杂货店", 1000, 1) && !Open("杂货店", 1000, 3) && !Open("杂货店", 1800, 1) && Open("博物馆", 1500, 3) && !Open("博物馆", 1900, 3)
+        && !Open("星之果实餐吧", 1100, 1) && Open("星之果实餐吧", 2000, 1), "A shop was suggested while closed.");
+});
+
 Test("an outing reports the places first visited, at most six, in the backend's fields; only ordinary places have one", () =>
 {
     Type outingType = modType.GetNestedType("Outing", BindingFlags.NonPublic)!;
