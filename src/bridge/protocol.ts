@@ -227,7 +227,10 @@ export function parseModMessage(raw: string): ModMessage {
   const helped = (value: unknown) => {
     const h = value as Record<string, unknown> | null | undefined;
     if (h !== undefined && (!h || typeof h !== 'object' || Array.isArray(h)
-      || ['watered', 'harvested', 'fed', 'ponds'].some(key => !Number.isSafeInteger(h[key]) || (h[key] as number) < 0 || (h[key] as number) > 100000))) fail('helped is invalid');
+      || ['watered', 'harvested', 'fed', 'ponds'].some(key => !Number.isSafeInteger(h[key]) || (h[key] as number) < 0 || (h[key] as number) > 100000)
+      // The animals tended, from a Mod that does them (docs/npc-farm-animals.md).
+      || ['collected', 'milked', 'sheared', 'petted', 'truffles'].some(key => h[key] !== undefined
+        && (!Number.isSafeInteger(h[key]) || (h[key] as number) < 0 || (h[key] as number) > 100000)))) fail('helped is invalid');
   };
   const mine = (value: unknown) => {
     const m = value as Record<string, unknown> | null | undefined;

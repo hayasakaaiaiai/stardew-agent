@@ -196,12 +196,23 @@ internal sealed partial class ModEntry
             parts.Add($"给动物添了 {done.Fed} 份干草");
         if (done.Ponds > 0)
             parts.Add($"收了 {done.Ponds} 个鱼塘的产物放进箱子");
+        if (done.Collected > 0)
+            parts.Add($"捡了 {done.Collected} 个鸡舍里的产品放进箱子");
+        if (done.Milked > 0)
+            parts.Add($"挤了 {done.Milked} 只动物的奶");
+        if (done.Sheared > 0)
+            parts.Add($"剪了 {done.Sheared} 只羊的毛");
+        if (done.Petted > 0)
+            parts.Add($"摸了 {done.Petted} 只动物");
+        if (done.Truffles > 0)
+            parts.Add($"捡了 {done.Truffles} 个松露");
         return parts.Count > 0 ? string.Join("、", parts) : "农场里没什么要干的活";
     }
 
     private static Dictionary<string, object?> HelpedFields(FarmHelp.Done done) => new()
     {
         ["watered"] = done.Watered, ["harvested"] = done.Harvested, ["fed"] = done.Fed, ["ponds"] = done.Ponds,
+        ["collected"] = done.Collected, ["milked"] = done.Milked, ["sheared"] = done.Sheared, ["petted"] = done.Petted, ["truffles"] = done.Truffles,
     };
 
     /// <summary>A stop that came due while something held the NPC was only queued; set off now, as vanilla does.</summary>

@@ -26,8 +26,14 @@ export const MEET_PLACES: Readonly<Record<string, RegExp>> = {
   火山: /火山/,
 };
 
-/** Farm chores a close NPC did on arrival (docs/npc-farm-help.md); counts from the Mod. */
-export interface Helped { watered: number; harvested: number; fed: number; ponds: number }
+/**
+ * Farm chores a close NPC did on arrival (docs/npc-farm-help.md), and the animals tended (docs/npc-farm-animals.md);
+ * counts from the Mod. An older Mod sends no animal counts.
+ */
+export interface Helped {
+  watered: number; harvested: number; fed: number; ponds: number;
+  collected?: number; milked?: number; sheared?: number; petted?: number; truffles?: number;
+}
 
 /** "浇了 120 格水、收了 35 个作物放进农舍门口的箱子"; what there was nothing of is left out. */
 export function helpedText(helped: Helped): string {
@@ -36,6 +42,11 @@ export function helpedText(helped: Helped): string {
     ...(helped.harvested ? [`收了 ${helped.harvested} 个作物放进农舍门口的箱子`] : []),
     ...(helped.fed ? [`给动物添了 ${helped.fed} 份干草`] : []),
     ...(helped.ponds ? [`收了 ${helped.ponds} 个鱼塘的产物放进箱子`] : []),
+    ...(helped.collected ? [`捡了 ${helped.collected} 个鸡舍里的产品放进箱子`] : []),
+    ...(helped.milked ? [`挤了 ${helped.milked} 只动物的奶`] : []),
+    ...(helped.sheared ? [`剪了 ${helped.sheared} 只羊的毛`] : []),
+    ...(helped.petted ? [`摸了 ${helped.petted} 只动物`] : []),
+    ...(helped.truffles ? [`捡了 ${helped.truffles} 个松露`] : []),
   ];
   return parts.length ? parts.join('、') : '农场里没什么要干的活';
 }

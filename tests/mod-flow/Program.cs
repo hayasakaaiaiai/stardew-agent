@@ -609,10 +609,12 @@ Test("an appointment moves friendship by the backend's tiers: one step up when k
 Test("farm chores are worded like the backend, and the farm is a place an appointment can be at", () =>
 {
     Type doneType = modAssembly.GetType("StardewAgentBridge.FarmHelp+Done", throwOnError: true)!;
-    string Text(int watered, int harvested, int fed, int ponds) => (string)modType.GetMethod("FarmHelpText", BindingFlags.Static | BindingFlags.NonPublic)!
-        .Invoke(null, new[] { Activator.CreateInstance(doneType, watered, harvested, fed, ponds) })!;
+    string Text(int watered, int harvested, int fed, int ponds, int collected = 0, int milked = 0, int sheared = 0, int petted = 0, int truffles = 0)
+        => (string)modType.GetMethod("FarmHelpText", BindingFlags.Static | BindingFlags.NonPublic)!
+        .Invoke(null, new[] { Activator.CreateInstance(doneType, watered, harvested, fed, ponds, collected, milked, sheared, petted, truffles) })!;
     Check(Text(120, 35, 8, 2) == "浇了 120 格水、收了 35 个作物放进农舍门口的箱子、给动物添了 8 份干草、收了 2 个鱼塘的产物放进箱子"
-        && Text(0, 4, 0, 0) == "收了 4 个作物放进农舍门口的箱子" && Text(0, 0, 0, 0) == "农场里没什么要干的活",
+        && Text(0, 4, 0, 0) == "收了 4 个作物放进农舍门口的箱子" && Text(0, 0, 0, 0) == "农场里没什么要干的活"
+        && Text(0, 0, 0, 0, 6, 2, 1, 9, 1) == "捡了 6 个鸡舍里的产品放进箱子、挤了 2 只动物的奶、剪了 1 只羊的毛、摸了 9 只动物、捡了 1 个松露",
         "The game's message differs from what the NPC is told it did (src/agent/meetings.ts helpedText).");
     object mod = BubbleMod();
     Set(mod, "meetings", Activator.CreateInstance(modType.GetField("meetings", Fields)!.FieldType, StringComparer.OrdinalIgnoreCase)!);
