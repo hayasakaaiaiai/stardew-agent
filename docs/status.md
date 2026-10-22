@@ -150,7 +150,7 @@ GitHub 私有仓库：https://github.com/hayasakaaiaiai/stardew-agent
 | `m2c-farm-help` | 农场帮忙上游 `369788c`，Windows 四类修复与限定验收见下行 | 已推送 |
 | `codex/farm-help-windows-tests` | `78a4385` + `369788c`；221/221 Node、38/38 C#、时段修复固定原生 71/71；首次真实对话批 73/73、行动回归 5/5；原输出重放 12/12；修复 `529611b` 已推送、未合入 main | Windows：`E:\stardew-agent` |
 | `m2c-mine-companion` | 上游 `3f0118f`，已合并农场 Windows 修复；下矿限定原生验收及后续修复见下一行 | `/Users/a11/Documents/ChatGPT/stardew-agent-gifts` |
-| `codex/mine-companion-windows-tests` | 当前 Windows 功能分支，保留 `84a780e` 并纳入 `3f0118f`；229/229 Node、40/40 C#、原生下矿 122/122，真实夜间及重放各 16/16；用户授权推送，未合入 main | Windows：`E:\stardew-agent` |
+| `codex/mine-companion-windows-tests` | 保留 `84a780e` 并纳入 `3f0118f`；229/229 Node、40/40 C#、原生下矿 122/122、农场回归 71/71，真实夜间及重放各 16/16；修复 `cccd31e` 已按授权推送，未合入 main | Windows：`E:\stardew-agent` |
 | `codex/offscreen-windows-tests` | `main / 35affae` + `less-fabrication / f98222c`，上一轮组合验收与赠礼开关修复；`bda43f3` 已推送，修复已摘到 `festival-memories`，未合入 main | Windows 历史验收分支 |
 | `codex/ambient-windows-tests` | 上轮三处修复 + 慢回复、原话来源、完成动作过滤、事件语义修复；完整真实 176 项通过；`5a1ef78` 已推送，已合并进 `remember-source` | Windows：`E:\stardew-agent` |
 
