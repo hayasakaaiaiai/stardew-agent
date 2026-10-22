@@ -46,4 +46,10 @@ internal sealed class ModConfig
 
     /// <summary>Whether an NPC goes where it agreed to meet the player yesterday, changing today's schedule (docs/npc-meetings.md).</summary>
     public bool NpcMeetings { get; set; } = true;
+
+    /// <summary>
+    /// Whether a close NPC met at a dungeon door goes in with the player, fights if it is the kind to, and carries them out
+    /// if they pass out (docs/npc-mine-companion.md). Needs <see cref="NpcMeetings"/>; off, it only waits at the door.
+    /// </summary>
+    public bool NpcMineCompanion { get; set; } = true;
 }

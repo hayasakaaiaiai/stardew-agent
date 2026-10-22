@@ -17,6 +17,10 @@ export const MEET_PLACES: Readonly<Record<string, RegExp>> = {
   杂货店: /杂货店|皮埃尔的店|皮埃尔那/,
   // Not 农场主, which is how everyone calls the player.
   农场: /农场(?!主)|地里|田里/,
+  // The doors of the three dungeons; a close NPC met there goes in with the player (docs/npc-mine-companion.md).
+  矿洞: /矿洞|矿井|矿坑|下矿|矿里/,
+  骷髅洞穴: /骷髅洞|骷髅矿/,
+  火山: /火山/,
 };
 
 /** Farm chores a close NPC did on arrival (docs/npc-farm-help.md); counts from the Mod. */
@@ -31,6 +35,25 @@ export function helpedText(helped: Helped): string {
     ...(helped.ponds ? [`收了 ${helped.ponds} 个鱼塘的产物放进箱子`] : []),
   ];
   return parts.length ? parts.join('、') : '农场里没什么要干的活';
+}
+
+/** A trip into a dungeon with the player, from the Mod (docs/npc-mine-companion.md); floors as the game shows them, 0 = the entrance. */
+export interface MineTrip { floor: number; deepest: number; kills: number; fights: boolean; rescued: boolean }
+
+const floorName = (place: string, floor: number) => floor ? `${place}第 ${floor} 层` : `${place}入口`;
+
+/** "现在在矿洞第 35 层，最深到过第 40 层，你打倒了 12 只怪物"; one who does not fight is told so. */
+export function tripText(place: string, trip: MineTrip): string {
+  const deepest = trip.deepest > trip.floor ? `，最深到过第 ${trip.deepest} 层` : '';
+  const fight = !trip.fights ? '，你不会打架，只跟在后面' : trip.kills ? `，你打倒了 ${trip.kills} 只怪物` : '';
+  return `你一直陪着农场主，现在在${floorName(place, trip.floor)}${deepest}${fight}`;
+}
+
+/** The trip as the NPC remembers it afterwards, in its own voice. */
+function tripMemory(place: string, trip: MineTrip): string {
+  const went = trip.deepest ? `下到${place}第 ${trip.deepest} 层` : `进了${place}`;
+  const fight = !trip.fights ? '，我不会打架，一直跟在后面' : trip.kills ? `，打倒了 ${trip.kills} 只怪物` : '';
+  return `我陪农场主${went}${fight}${trip.rescued ? '；农场主晕倒了，我把农场主背了出来' : ''}`;
 }
 
 const TOMORROW = /明天|明早|明晚|明儿|明日/;
@@ -90,14 +113,23 @@ export function meetingLeave(time: number): number {
   return Math.min(Math.floor(minutes / 60) * 100 + minutes % 60, MEET_END);
 }
 
-/** For the NPC's own conversation that day; nothing once it has left the place. */
-export function meetingLine(meeting: Meeting | undefined, now: number, here: boolean, helped?: Helped): string | undefined {
-  if (!meeting || now > meetingLeave(meeting.time)) return undefined;
+/**
+ * For the NPC's own conversation that day; nothing once it has left the place, unless it is still with the player in a
+ * dungeon.
+ */
+export function meetingLine(meeting: Meeting | undefined, now: number, here: boolean, helped?: Helped, trip?: MineTrip): string | undefined {
+  if (!meeting || (now > meetingLeave(meeting.time) && !trip)) return undefined;
+  if (trip) return `今天 ${clock(meeting.time)} 在${meeting.place}见面；${tripText(meeting.place, trip)}`;
   return `今天 ${clock(meeting.time)} 在${meeting.place}见面${here ? '，现在就在这里碰面了' : ''}${helped ? `；你来了以后已经${helpedText(helped)}` : ''}`;
 }
 
 /** What the NPC remembers once the appointment is over. */
-export function meetingMemory(meeting: Meeting & { met: boolean; left: number; helped?: Helped }): MemoryDraft {
+export function meetingMemory(meeting: Meeting & { met: boolean; left: number; helped?: Helped; trip?: MineTrip }): MemoryDraft {
+  if (meeting.trip) {
+    // A rescue is the kind of thing one remembers for a long time.
+    return { text: `约好 ${clock(meeting.time)} 在${meeting.place}见面，农场主来了，${tripMemory(meeting.place, meeting.trip)}。`,
+      importance: meeting.trip.rescued ? 4 : 3, kind: 'observation', subjects: ['player'], visibility: 'private' };
+  }
   const agreed = `约好 ${clock(meeting.time)} 在${meeting.place}见面${meeting.helped ? `，我${helpedText(meeting.helped)}` : ''}`;
   return meeting.met
     ? { text: `${agreed}，农场主来了。`, importance: 2, kind: 'observation', subjects: ['player'], visibility: 'private' }

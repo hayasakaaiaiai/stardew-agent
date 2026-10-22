@@ -40,6 +40,10 @@ internal sealed partial class ModEntry
         ["杂货店"] = new[] { ("SeedShop", 13, 20, 0), ("SeedShop", 10, 20, 0) },
         // Worked out when needed: the schedule only reaches the bus stop by the farm gate (FarmVisits.cs).
         [FarmPlace] = Array.Empty<(string, int, int, int)>(),
+        // Outside each dungeon's door (MineCompanion.cs); the desert one is where Abigail stands at the Desert Festival.
+        ["矿洞"] = new[] { ("Mountain", 56, 6, 3), ("Mountain", 52, 7, 1) },
+        ["骷髅洞穴"] = new[] { ("Desert", 8, 10, 0), ("Desert", 9, 10, 0) },
+        ["火山"] = new[] { ("IslandNorth", 38, 26, 1), ("IslandNorth", 43, 26, 3) },
     };
 
     private sealed class Meeting
@@ -66,11 +70,17 @@ internal sealed partial class ModEntry
         public bool Met;
         public bool Reported;
         public bool Farm => this.Place == FarmPlace;
-        /// <summary>Lives on the farm already, so its schedule is left alone (FarmVisits.cs).</summary>
+        public bool Dungeon => DungeonExits.ContainsKey(this.Place);
+        /// <summary>Lives on the farm already, so its schedule is left alone (FarmVisits.cs), or it is fetched (MineCompanion.cs).</summary>
         public bool Spouse;
         /// <summary>Close enough to do the farm chores.</summary>
         public bool Helps;
         public FarmHelp.Done? Helped;
+        /// <summary>Goes into the dungeon with the player once they have met at the door (MineCompanion.cs).</summary>
+        public bool Companion;
+        /// <summary>Where the original schedule has the NPC when it leaves, i.e. where the way back goes.</summary>
+        public ScheduleStop Back;
+        public readonly Trip Trip = new();
         /// <summary>A farm visit: 0 on the way, 1 on the farm, 2 walking out, 3 gone.</summary>
         public int Stage;
         /// <summary>Which of the place's spots, counting others meeting there today.</summary>
@@ -80,12 +90,25 @@ internal sealed partial class ModEntry
         public ApproachController? Hold;
     }
 
+    /// <summary>Where a schedule has an NPC at some time: the end of a route, with how it stands there.</summary>
+    private readonly record struct ScheduleStop(string Map, Point Tile, int Facing, string? Behavior, string? Message);
+
+    /// <summary>The end of the last route that sets off before (or at) a time; where the NPC is now if none has set off yet.</summary>
+    private static ScheduleStop StopBefore(NPC npc, int time, bool inclusive)
+    {
+        SchedulePathDescription? last = npc.Schedule.Where(pair => inclusive ? pair.Key <= time : pair.Key < time)
+            .OrderBy(pair => pair.Key).Select(pair => pair.Value).LastOrDefault();
+        return last is null ? new(npc.currentLocation.NameOrUniqueName, npc.TilePoint, npc.FacingDirection, null, null)
+            : new(last.targetLocationName, last.targetTile, last.facingDirection, last.endOfRouteBehavior, last.endOfRouteMessage);
+    }
+
     /// <summary>Game name → today's appointment.</summary>
     private readonly Dictionary<string, Meeting> meetings = new(StringComparer.OrdinalIgnoreCase);
 
     private void ClearMeetings()
     {
         this.ReleaseFarmVisitors();
+        this.ReleaseCompanions();
         this.meetings.Clear();
     }
 
@@ -144,7 +167,7 @@ internal sealed partial class ModEntry
         string relation = npc is null ? "stranger" : GameState.Relation(npc);
         bool spouse = relation is "married" or "roommate";
         string? why = npc is null || npc.IsInvisible ? "今天不在"
-            : spouse && !m.Farm ? "配偶和室友的日程不改"
+            : spouse && !m.Farm && !m.Dungeon ? "配偶和室友的日程不改"
             : !spouse && (npc.Schedule is null || npc.ignoreScheduleToday) ? "今天没有原版日程"
             : Utility.ModifyTime(Game1.timeOfDay, MeetEarlyMinutes) >= m.Time ? "收到时已经来不及"
             : null;
@@ -154,9 +177,17 @@ internal sealed partial class ModEntry
         if (why is null)
         {
             m.Slot = taken;
-            m.Helps = m.Farm && (spouse || relation is "dating" or "engaged" || GameState.Hearts(npc!) >= FarmHelpHearts);
+            bool close = spouse || relation is "dating" or "engaged" || GameState.Hearts(npc!) >= FarmHelpHearts;
+            m.Helps = m.Farm && close;
+            m.Companion = m.Dungeon && close && this.config.NpcMineCompanion;
             m.Spouse = spouse;
-            if (spouse)
+            if (spouse && m.Dungeon)
+            {
+                // Spouses' days are vanilla's own; they are fetched from home unseen instead (MineCompanion.cs).
+                m.Spot = MeetPlaces[m.Place][taken];
+                m.Depart = MeetingDeparture(m.Time, SpouseHeadStartMinutes, Game1.timeOfDay);
+            }
+            else if (spouse)
                 m.Depart = m.Time;
             else
             {
@@ -185,35 +216,27 @@ internal sealed partial class ModEntry
     {
         Dictionary<int, SchedulePathDescription> schedule = npc.Schedule;
         int now = Game1.timeOfDay;
-        // The end of the last route that sets off before (or at) a time; where the NPC is now if none has set off yet.
-        (string Map, Point Tile, int Facing, string? Behavior, string? Message) StopBefore(int time, bool inclusive)
-        {
-            SchedulePathDescription? last = schedule.Where(pair => inclusive ? pair.Key <= time : pair.Key < time)
-                .OrderBy(pair => pair.Key).Select(pair => pair.Value).LastOrDefault();
-            return last is null ? (npc.currentLocation.NameOrUniqueName, npc.TilePoint, npc.FacingDirection, null, null)
-                : (last.targetLocationName, last.targetTile, last.facingDirection, last.endOfRouteBehavior, last.endOfRouteMessage);
-        }
         string key = npc.dayScheduleName.Value ?? "meeting";
         (string Map, int X, int Y, int Facing) spot = m.Spot;
-        SchedulePathDescription Go((string Map, Point Tile, int Facing, string? Behavior, string? Message) from)
+        SchedulePathDescription Go(ScheduleStop from)
             => npc.pathfindToNextScheduleLocation(key, from.Map, from.Tile.X, from.Tile.Y, spot.Map, spot.X, spot.Y, spot.Facing, null, null);
 
         // Setting off earlier can mean setting off from an earlier stop; settle in at most two more rounds.
         int farmSteps = m.Farm ? FarmWalkSteps() : 0;
-        var from = StopBefore(m.Time, inclusive: false);
+        ScheduleStop from = StopBefore(npc, m.Time, inclusive: false);
         SchedulePathDescription go = Go(from);
         int depart = MeetingDeparture(m.Time, TravelMinutes(go.route, farmSteps), now);
-        for (int round = 0; round < 2 && StopBefore(depart, inclusive: false) != from; round++)
+        for (int round = 0; round < 2 && StopBefore(npc, depart, inclusive: false) != from; round++)
         {
-            from = StopBefore(depart, inclusive: false);
+            from = StopBefore(npc, depart, inclusive: false);
             go = Go(from);
             depart = MeetingDeparture(m.Time, TravelMinutes(go.route, farmSteps), now);
         }
-        if (StopBefore(depart, inclusive: false) != from)
+        if (StopBefore(npc, depart, inclusive: false) != from)
             return "出发的位置算不准";
         if (depart >= m.Leave)
             return "来不及在约定时间到";
-        var back = StopBefore(m.Leave, inclusive: true);
+        ScheduleStop back = StopBefore(npc, m.Leave, inclusive: true);
         SchedulePathDescription ret = npc.pathfindToNextScheduleLocation(key, spot.Map, spot.X, spot.Y, back.Map, back.Tile.X, back.Tile.Y,
             back.Facing, back.Behavior, back.Message);
         if (go.route is not { Count: > 0 } || ret.route is not { Count: > 0 })
@@ -223,6 +246,7 @@ internal sealed partial class ModEntry
         go.time = depart;
         ret.time = m.Leave;
         m.Depart = depart;
+        m.Back = back;
         schedule[depart] = go;
         schedule[m.Leave] = ret;
         this.Monitor.Log($"{m.Npc} 今天 {depart} 从{from.Map}出发，{m.Time} 前到{m.Place}（{spot.Map} {spot.X},{spot.Y}），{m.Leave} 回{back.Map}。", LogLevel.Info);
@@ -247,8 +271,11 @@ internal sealed partial class ModEntry
     /// <summary>Whether this NPC is waiting at its appointment right now.</summary>
     private bool AtMeeting(NPC npc)
     {
-        if (!this.meetings.TryGetValue(npc.Name, out Meeting? m) || !m.Applied || m.Reported || Game1.timeOfDay < m.Depart
-            || Game1.timeOfDay > m.Leave)
+        if (!this.meetings.TryGetValue(npc.Name, out Meeting? m) || !m.Applied || m.Reported)
+            return false;
+        if (m.Trip.Following)
+            return true;
+        if (Game1.timeOfDay < m.Depart || Game1.timeOfDay > m.Leave)
             return false;
         if (m.Farm)
             return m.Stage == 1 && (npc.currentLocation is Farm || (m.Spouse && npc.currentLocation is StardewValley.Locations.FarmHouse));
@@ -264,6 +291,14 @@ internal sealed partial class ModEntry
         if (m.Farm)
         {
             this.WatchFarm(m, npc);
+            return;
+        }
+        // Underground it is the player's company until they come out (MineCompanion.cs).
+        if (m.Trip.Joined)
+            return;
+        if (m.Dungeon && m.Spouse)
+        {
+            this.WatchSpouseCompanion(m, npc);
             return;
         }
         if (!m.Arrived && npc.controller is null && !npc.isMoving() && this.AtMeeting(npc))
@@ -302,7 +337,7 @@ internal sealed partial class ModEntry
     private void EndMeetings()
     {
         foreach (Meeting m in this.meetings.Values.Where(m => m.Applied && !m.Reported && Game1.timeOfDay >= m.Time))
-            this.ReportMeeting(m, Math.Min(Game1.timeOfDay, m.Leave));
+            this.ReportMeeting(m, m.Trip.Joined ? Game1.timeOfDay : Math.Min(Game1.timeOfDay, m.Leave));
     }
 
     /// <summary>Only an NPC that got there remembers waiting; one held up on the way says nothing.</summary>
@@ -320,6 +355,8 @@ internal sealed partial class ModEntry
         };
         if (m.Helped is FarmHelp.Done done)
             fields["helped"] = HelpedFields(done);
+        if (m.Trip.Joined)
+            fields["mine"] = m.Trip.Fields(Fighters.Contains(m.Npc));
         this.Send("meet.ended", fields);
     }
 }

@@ -9,7 +9,7 @@ import { connect, harness, openTalk, sleep, WORLD } from './helpers/bridge.ts';
 const HELPED = { watered: 120, harvested: 35, fed: 8, ponds: 2 };
 
 test('the farm is a meeting place, but “农场主” in a line is the player, not the place', () => {
-  assert.match(NIGHTLY_RULES, /杂货店、农场之一/);
+  assert.match(NIGHTLY_RULES, /杂货店、农场、/);
   const sources = [
     { id: 't1', speaker: '玩家' as const, text: '明天上午来农场帮我浇浇水好吗？' },
     { id: 't2', speaker: 'NPC' as const, text: '好啊，明天上午我去帮农场主的忙。' },

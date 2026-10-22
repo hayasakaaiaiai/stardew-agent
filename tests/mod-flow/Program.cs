@@ -559,5 +559,46 @@ Test("farm chores are worded like the backend, and the farm is a place an appoin
     Check(((System.Collections.IDictionary)Get(mod, "meetings")!).Contains("Abigail"), "A farm appointment was dropped.");
 });
 
+Test("dungeon floors are read from location names, each dungeon its own, and its door is where the trip ends", () =>
+{
+    int? Floor(string place, string? location) => (int?)modType.GetMethod("DungeonFloor", BindingFlags.Static | BindingFlags.NonPublic)!
+        .Invoke(null, new object?[] { place, location });
+    Check(Floor("矿洞", "Mine") == 0 && Floor("矿洞", "UndergroundMine35") == 35 && Floor("矿洞", "UndergroundMine120") == 120
+        && Floor("矿洞", "UndergroundMine20:3") == 20, "Mine floors are wrong.");
+    Check(Floor("矿洞", "UndergroundMine121") is null && Floor("矿洞", "UndergroundMine77377") is null && Floor("矿洞", "Mountain") is null
+        && Floor("矿洞", "SkullCave") is null && Floor("矿洞", null) is null, "Something outside the mines counted as inside.");
+    Check(Floor("骷髅洞穴", "SkullCave") == 0 && Floor("骷髅洞穴", "UndergroundMine121") == 1 && Floor("骷髅洞穴", "UndergroundMine245") == 125
+        && Floor("骷髅洞穴", "UndergroundMine77377") is null && Floor("骷髅洞穴", "UndergroundMine50") is null && Floor("骷髅洞穴", "Desert") is null,
+        "Skull Cavern floors are wrong, or the quarry mine counted.");
+    Check(Floor("火山", "VolcanoDungeon0") == 0 && Floor("火山", "VolcanoDungeon9") == 9 && Floor("火山", "Caldera") == 10
+        && Floor("火山", "IslandNorth") is null && Floor("火山", "Mine") is null, "Volcano floors are wrong.");
+    var exits = (System.Collections.IDictionary)modType.GetField("DungeonExits", BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null)!;
+    var places = (System.Collections.IDictionary)modType.GetField("MeetPlaces", BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null)!;
+    foreach (string place in new[] { "矿洞", "骷髅洞穴", "火山" })
+    {
+        object exit = exits[place]!;
+        string map = (string)exit.GetType().GetField("Item1")!.GetValue(exit)!;
+        Check(places.Contains(place), $"{place} is not a place an appointment can be at.");
+        foreach (object spot in (Array)places[place]!)
+            Check((string)spot.GetType().GetField("Item1")!.GetValue(spot)! == map, $"{place}'s waiting spot is not outside its door.");
+    }
+    object mod = BubbleMod();
+    Set(mod, "meetings", Activator.CreateInstance(modType.GetField("meetings", Fields)!.FieldType, StringComparer.OrdinalIgnoreCase)!);
+    using JsonDocument packet = JsonDocument.Parse(JsonSerializer.Serialize(new { type = "day.meetings", lineageId = "farm", loadNonce = "current", seq = 0,
+        meetings = new[] { new { npc = "abigail", time = 1000, place = "矿洞" }, new { npc = "kent", time = 1000, place = "骷髅洞穴" },
+            new { npc = "sebastian", time = 1200, place = "火山" } } }));
+    Invoke(mod, "HandleMeetings", "day.meetings", packet.RootElement);
+    Check(((System.Collections.IDictionary)Get(mod, "meetings")!).Count == 3, "A dungeon appointment was dropped.");
+});
+Test("a trip is reported in the shape the backend accepts", () =>
+{
+    Type tripType = modType.GetNestedType("Trip", BindingFlags.NonPublic)!;
+    object trip = Activator.CreateInstance(tripType, nonPublic: true)!;
+    Set(trip, "Floor", 35); Set(trip, "Deepest", 40); Set(trip, "Kills", 12); Set(trip, "Rescued", true);
+    var fields = (Dictionary<string, object?>)tripType.GetMethod("Fields")!.Invoke(trip, new object[] { true })!;
+    Check(JsonSerializer.Serialize(fields) == """{"floor":35,"deepest":40,"kills":12,"fights":true,"rescued":true}""",
+        "The trip fields differ from src/bridge/protocol.ts (mine).");
+});
+
 Console.WriteLine($"Mod flow checks: {checks - failures}/{checks} passed.");
 return failures == 0 ? 0 : 1;
