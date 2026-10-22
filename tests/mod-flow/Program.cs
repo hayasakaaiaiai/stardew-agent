@@ -594,6 +594,18 @@ Test("a called-off appointment is marked for undoing, never added, and one not y
     Check((bool)Get(leah, "Failed")! && (bool)Get(leah, "Reported")! && (bool)Get(leah, "CalledOff")!, "One never applied could still be applied or reported.");
 });
 
+Test("an appointment moves friendship by the backend's tiers: one step up when kept, one down when stood up", () =>
+{
+    (int, int) Step(int hearts, string relation) => ((int, int))modType.GetMethod("FriendshipStep", BindingFlags.Static | BindingFlags.NonPublic)!
+        .Invoke(null, new object[] { hearts, relation })!;
+    // src/agent/friendship.ts STEPS: gain and loss per mood step.
+    Check(Step(0, "stranger") == (5, 20) && Step(1, "friend") == (5, 20) && Step(2, "friend") == (10, 15) && Step(4, "friend") == (10, 15)
+        && Step(5, "friend") == (15, 10) && Step(7, "friend") == (15, 10) && Step(8, "friend") == (20, 5) && Step(14, "friend") == (20, 5),
+        "The tiers differ from the backend's (src/agent/friendship.ts STEPS).");
+    Check(Step(3, "dating") == (20, 5) && Step(0, "married") == (20, 5) && Step(2, "roommate") == (20, 5) && Step(6, "engaged") == (20, 5),
+        "A close relation is not on the top tier.");
+});
+
 Test("farm chores are worded like the backend, and the farm is a place an appointment can be at", () =>
 {
     Type doneType = modAssembly.GetType("StardewAgentBridge.FarmHelp+Done", throwOnError: true)!;

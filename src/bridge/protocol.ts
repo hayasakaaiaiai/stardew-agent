@@ -3,6 +3,7 @@ import type { AmbientLine } from '../agent/ambient.ts';
 import type { Bubble } from '../agent/bubbles.ts';
 import type { Emotion, Season } from '../agent/dialogue.ts';
 import { type Festival, FESTIVALS, type GrangeResult, SOUP_LEVELS } from '../agent/festivals.ts';
+import { FRIENDSHIP_DAY_MAX, FRIENDSHIP_DAY_MIN } from '../agent/friendship.ts';
 import { GIFT_TASTES, type GiftTaste } from '../agent/gifts.ts';
 import { MAX_STOPS, type ScheduleStop } from '../agent/schedule.ts';
 import type { DeliveredLetter } from '../agent/letters.ts';
@@ -112,8 +113,12 @@ export type ModMessage =
   | ({ type: 'ambient.request'; npcs: AmbientNpc[]; world: WorldSnapshot } & Envelope)
   /** What happened at a festival the player just left (docs/festival-memories.md); game names. Reliable, acknowledged. */
   | ({ type: 'festival.ended' } & FestivalEnded & Envelope)
-  /** An appointment the NPC went to is over (docs/npc-meetings.md); `left` is HHMM. Reliable, acknowledged. */
-  | ({ type: 'meet.ended'; npc: string; place: string; time: number; left: number; met: boolean; helped?: Helped; mine?: MineTrip; date: GameDate } & Envelope);
+  /**
+   * An appointment the NPC went to is over (docs/npc-meetings.md); `left` is HHMM. `friendship` is what the Mod changed for
+   * it, within the day's range shared with conversations (docs/npc-meeting-friendship.md). Reliable, acknowledged.
+   */
+  | ({ type: 'meet.ended'; npc: string; place: string; time: number; left: number; met: boolean; helped?: Helped; mine?: MineTrip;
+    friendship?: number; date: GameDate } & Envelope);
 
 export interface FestivalEnded {
   festival: Festival;
@@ -302,6 +307,10 @@ export function parseModMessage(raw: string): ModMessage {
         if (time < 0 || time > 2600 || time % 100 > 59) fail(`${key} is invalid`);
       }
       if (typeof data.met !== 'boolean') fail('met must be a boolean');
+      if (data.friendship !== undefined) {
+        const points = int(data.friendship, 'friendship');
+        if (points < FRIENDSHIP_DAY_MIN || points > FRIENDSHIP_DAY_MAX) fail('friendship is out of range');
+      }
       helped(data.helped);
       mine(data.mine);
       date(data.date);

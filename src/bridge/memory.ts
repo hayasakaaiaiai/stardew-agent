@@ -429,9 +429,10 @@ export class GameSave {
       const note = fits && !(same?.calledOff && !same.sentHome) ? meetingMemory({ ...agreed, place: message.place, met: message.met, left: message.left,
         ...(same?.sentHome ? { calledOff: same.calledOff! } : {}), ...(message.helped ? { helped: message.helped } : {}), ...(trip ? { trip } : {}) })
         : undefined;
+      // The Mod's change counts against the day's range like a conversation's (docs/npc-meeting-friendship.md).
       if (note) await this.scope!.agent(npcId).record({ seq: message.seq, gameTime: gameMinutes(message.date),
         log: { meeting: { place: message.place, time: message.time, left: message.left, met: message.met, ...(message.helped ? { helped: { ...message.helped } } : {}),
-          ...(trip ? { mine: trip } : {}) }, bridgeReceipt: JSON.parse(canonical(receipt)) },
+          ...(trip ? { mine: trip } : {}) }, ...(message.friendship ? { friendship: message.friendship } : {}), bridgeReceipt: JSON.parse(canonical(receipt)) },
         memories: [note] });
       this.addReceipt(receipt);
       await this.persist();

@@ -54,9 +54,15 @@ internal sealed partial class ModEntry
         {
             this.Npc = npc;
             this.Time = time;
+            this.Agreed = time;
             this.Place = place;
             this.SameDay = sameDay;
         }
+
+        /// <summary>The time as agreed, before any putting off.</summary>
+        public int Agreed { get; }
+        /// <summary>Agreed today for a time it could not make: the player leaving before it came is not standing it up.</summary>
+        public bool ComesLate;
 
         /// <summary>The game name.</summary>
         public string Npc { get; }
@@ -201,6 +207,7 @@ internal sealed partial class ModEntry
 
     private void ApplyMeeting(Meeting m)
     {
+        int received = Game1.timeOfDay;
         NPC? npc = Game1.getCharacterFromName(m.Npc);
         string relation = npc is null ? "stranger" : GameState.Relation(npc);
         bool spouse = relation is "married" or "roommate";
@@ -254,6 +261,7 @@ internal sealed partial class ModEntry
             return;
         }
         m.Applied = true;
+        m.ComesLate = m.SameDay && m.Agreed > received && m.Time > m.Agreed;
         if (m.SameDay && npc is not null)
             Game1.addHUDMessage(new HUDMessage($"和{npc.displayName}约好 {m.Time / 100}:{m.Time % 100:00} 在{m.Place}见", HUDMessage.newQuest_type));
     }
@@ -510,6 +518,16 @@ internal sealed partial class ModEntry
             fields["helped"] = HelpedFields(done);
         if (m.Trip.Joined)
             fields["mine"] = m.Trip.Fields(Fighters.Contains(m.Npc));
+        // Kept, it warms the NPC like a kind word; stood up, it stings like a slight (docs/npc-meeting-friendship.md).
+        // Called off beforehand, the NPC itself late, a spouse at home or chores done on the farm: nobody was stood up.
+        if (this.config.MeetingsChangeFriendship && (m.Trip.Actor ?? Game1.getCharacterFromName(m.Npc)) is NPC npc
+            && (m.Met || !m.CalledOff && !m.ComesLate && !m.Spouse && m.Helped is null))
+        {
+            (int gain, int loss) = FriendshipStep(GameState.Hearts(npc), GameState.Relation(npc));
+            int changed = this.ChangeFriendshipToday(npc, m.Met ? gain : -loss, m.Met ? $"和{npc.displayName}赴约" : $"{npc.displayName}在{m.Place}没等到农场主");
+            if (changed != 0)
+                fields["friendship"] = changed;
+        }
         this.Send("meet.ended", fields);
     }
 }
