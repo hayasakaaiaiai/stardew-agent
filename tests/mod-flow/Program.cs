@@ -609,13 +609,42 @@ Test("today's wait follows observed arrival, while tomorrow's keeps the agreed d
     Check(Leave(today) == 2200, "An observed arrival kept the NPC after 22:00.");
 });
 
+Test("an appointment moves friendship by the backend's tiers: one step up when kept, one down when stood up", () =>
+{
+    (int, int) Step(int hearts, string relation) => ((int, int))modType.GetMethod("FriendshipStep", BindingFlags.Static | BindingFlags.NonPublic)!
+        .Invoke(null, new object[] { hearts, relation })!;
+    // src/agent/friendship.ts STEPS: gain and loss per mood step.
+    Check(Step(0, "stranger") == (5, 20) && Step(1, "friend") == (5, 20) && Step(2, "friend") == (10, 15) && Step(4, "friend") == (10, 15)
+        && Step(5, "friend") == (15, 10) && Step(7, "friend") == (15, 10) && Step(8, "friend") == (20, 5) && Step(14, "friend") == (20, 5),
+        "The tiers differ from the backend's (src/agent/friendship.ts STEPS).");
+    Check(Step(3, "dating") == (20, 5) && Step(0, "married") == (20, 5) && Step(2, "roommate") == (20, 5) && Step(6, "engaged") == (20, 5),
+        "A close relation is not on the top tier.");
+});
+
+Test("only an observed late arrival excuses a same-day no-show, independent of the estimated clock", () =>
+{
+    Type meetingType = modType.GetNestedType("Meeting", BindingFlags.NonPublic)!;
+    object m = Activator.CreateInstance(meetingType, "Abigail", 1500, "海滩", true)!;
+    bool Late() => (bool)meetingType.GetProperty("ComesLate")!.GetValue(m)!;
+    Set(m, "ReceivedAt", 1000);
+    Check(!Late(), "A route estimate counted as an observed late arrival.");
+    meetingType.GetProperty("Time")!.SetValue(m, 1740); Set(m, "ArrivedAt", 1500);
+    Check(!Late(), "An on-time arrival inherited its late estimate.");
+    meetingType.GetProperty("Time")!.SetValue(m, 1500); Set(m, "ArrivedAt", 1600);
+    Check(Late(), "An actually late arrival inherited its on-time estimate.");
+    Set(m, "ReceivedAt", 1500);
+    Check(!Late(), "An immediate invitation was treated as a missed future clock.");
+});
+
 Test("farm chores are worded like the backend, and the farm is a place an appointment can be at", () =>
 {
     Type doneType = modAssembly.GetType("StardewAgentBridge.FarmHelp+Done", throwOnError: true)!;
-    string Text(int watered, int harvested, int fed, int ponds) => (string)modType.GetMethod("FarmHelpText", BindingFlags.Static | BindingFlags.NonPublic)!
-        .Invoke(null, new[] { Activator.CreateInstance(doneType, watered, harvested, fed, ponds) })!;
+    string Text(int watered, int harvested, int fed, int ponds, int collected = 0, int milked = 0, int sheared = 0, int petted = 0, int truffles = 0)
+        => (string)modType.GetMethod("FarmHelpText", BindingFlags.Static | BindingFlags.NonPublic)!
+        .Invoke(null, new[] { Activator.CreateInstance(doneType, watered, harvested, fed, ponds, collected, milked, sheared, petted, truffles) })!;
     Check(Text(120, 35, 8, 2) == "浇了 120 格水、收了 35 个作物放进农舍门口的箱子、给动物添了 8 份干草、收了 2 个鱼塘的产物放进箱子"
-        && Text(0, 4, 0, 0) == "收了 4 个作物放进农舍门口的箱子" && Text(0, 0, 0, 0) == "农场里没什么要干的活",
+        && Text(0, 4, 0, 0) == "收了 4 个作物放进农舍门口的箱子" && Text(0, 0, 0, 0) == "农场里没什么要干的活"
+        && Text(0, 0, 0, 0, 6, 2, 1, 9, 1) == "捡了 6 个鸡舍里的产品放进箱子、挤了 2 只动物的奶、剪了 1 只羊的毛、摸了 9 只动物、捡了 1 个松露",
         "The game's message differs from what the NPC is told it did (src/agent/meetings.ts helpedText).");
     object mod = BubbleMod();
     Set(mod, "meetings", Activator.CreateInstance(modType.GetField("meetings", Fields)!.FieldType, StringComparer.OrdinalIgnoreCase)!);

@@ -101,3 +101,18 @@ export async function sleep(wire: Awaited<ReturnType<typeof connect>>, commitId 
   wire.send({ type: 'day.started', date: { ...WORLD.date, day: dayEnded + 1 }, weather: 'sunny' }); await wire.until('ack');
   return commit;
 }
+
+/**
+ * The latest list of appointments sent since `from`, waiting until one equals `expected`: a list read before a change may
+ * still arrive after it (the Mod then gets the newer one too), so the first list after a change is not the one to check.
+ */
+export async function meetingsSent(wire: Awaited<ReturnType<typeof connect>>, from: number, expected: unknown): Promise<unknown> {
+  let last: unknown;
+  for (let i = 0; i < 400; i++) {
+    const lists = wire.inbox.slice(from).filter(item => item.type === 'day.meetings') as { meetings: unknown }[];
+    last = lists.at(-1)?.meetings;
+    if (lists.some(list => JSON.stringify(list.meetings) === JSON.stringify(expected))) return expected;
+    await new Promise(resolve => setTimeout(resolve, 10));
+  }
+  return last;
+}

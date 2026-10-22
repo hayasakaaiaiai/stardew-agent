@@ -3,6 +3,7 @@ import type { AmbientLine } from '../agent/ambient.ts';
 import type { Bubble } from '../agent/bubbles.ts';
 import type { Emotion, Season } from '../agent/dialogue.ts';
 import { type Festival, FESTIVALS, type GrangeResult, SOUP_LEVELS } from '../agent/festivals.ts';
+import { FRIENDSHIP_DAY_MAX, FRIENDSHIP_DAY_MIN } from '../agent/friendship.ts';
 import { GIFT_TASTES, type GiftTaste } from '../agent/gifts.ts';
 import { MAX_STOPS, type ScheduleStop } from '../agent/schedule.ts';
 import type { DeliveredLetter } from '../agent/letters.ts';
@@ -112,8 +113,12 @@ export type ModMessage =
   | ({ type: 'ambient.request'; npcs: AmbientNpc[]; world: WorldSnapshot } & Envelope)
   /** What happened at a festival the player just left (docs/festival-memories.md); game names. Reliable, acknowledged. */
   | ({ type: 'festival.ended' } & FestivalEnded & Envelope)
-  /** An appointment the NPC went to is over (docs/npc-meetings.md); `left` is HHMM. Reliable, acknowledged. */
-  | ({ type: 'meet.ended'; npc: string; place: string; time: number; arrived?: number; left: number; met: boolean; helped?: Helped; mine?: MineTrip; date: GameDate } & Envelope);
+  /**
+   * An appointment the NPC went to is over (docs/npc-meetings.md); `left` is HHMM. `friendship` is what the Mod changed for
+   * it, within the day's range shared with conversations (docs/npc-meeting-friendship.md). Reliable, acknowledged.
+   */
+  | ({ type: 'meet.ended'; npc: string; place: string; time: number; arrived?: number; left: number; met: boolean; helped?: Helped; mine?: MineTrip;
+    friendship?: number; date: GameDate } & Envelope);
 
 export interface FestivalEnded {
   festival: Festival;
@@ -222,7 +227,10 @@ export function parseModMessage(raw: string): ModMessage {
   const helped = (value: unknown) => {
     const h = value as Record<string, unknown> | null | undefined;
     if (h !== undefined && (!h || typeof h !== 'object' || Array.isArray(h)
-      || ['watered', 'harvested', 'fed', 'ponds'].some(key => !Number.isSafeInteger(h[key]) || (h[key] as number) < 0 || (h[key] as number) > 100000))) fail('helped is invalid');
+      || ['watered', 'harvested', 'fed', 'ponds'].some(key => !Number.isSafeInteger(h[key]) || (h[key] as number) < 0 || (h[key] as number) > 100000)
+      // The animals tended, from a Mod that does them (docs/npc-farm-animals.md).
+      || ['collected', 'milked', 'sheared', 'petted', 'truffles'].some(key => h[key] !== undefined
+        && (!Number.isSafeInteger(h[key]) || (h[key] as number) < 0 || (h[key] as number) > 100000)))) fail('helped is invalid');
   };
   const mine = (value: unknown) => {
     const m = value as Record<string, unknown> | null | undefined;
@@ -303,6 +311,10 @@ export function parseModMessage(raw: string): ModMessage {
       }
       if (data.arrived !== undefined && (data.arrived as number) > (data.left as number)) fail('arrived is after left');
       if (typeof data.met !== 'boolean') fail('met must be a boolean');
+      if (data.friendship !== undefined) {
+        const points = int(data.friendship, 'friendship');
+        if (points < FRIENDSHIP_DAY_MIN || points > FRIENDSHIP_DAY_MAX) fail('friendship is out of range');
+      }
       helped(data.helped);
       mine(data.mine);
       date(data.date);

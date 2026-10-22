@@ -5,6 +5,7 @@ using Microsoft.Xna.Framework;
 using StardewValley;
 using StardewValley.Buildings;
 using StardewValley.Characters;
+using StardewValley.GameData.FarmAnimals;
 using StardewValley.Objects;
 using StardewValley.TerrainFeatures;
 
@@ -12,8 +13,10 @@ namespace StardewAgentBridge;
 
 /// <summary>
 /// The farm chores a close NPC does when it comes to help (docs/npc-farm-help.md): water, harvest into a chest by the
-/// farmhouse, fill the troughs from the silos and empty the fish ponds. All through vanilla's own paths, so the changes
-/// are saved, or lost on a reload, with the farm.
+/// farmhouse, fill the troughs from the silos and empty the fish ponds; then the animals (docs/npc-farm-animals.md):
+/// pick up what they laid, milk and shear, pet them as the player would, and pick up the truffles the pigs dug up. All
+/// through vanilla's own paths, so the changes are saved, or lost on a reload, with the farm. The player gains no
+/// experience, as from an auto-grabber or an auto-petter.
 /// </summary>
 internal static class FarmHelp
 {
@@ -24,7 +27,11 @@ internal static class FarmHelp
     private const int RoomPerHarvest = 3;
     private const int ChestSearchRadius = 6;
 
-    public readonly record struct Done(int Watered, int Harvested, int Fed, int Ponds);
+    /// <summary>Farm animals sleep from seven; vanilla will not let the player pet them then either.</summary>
+    private const int AnimalBedtime = 1900;
+    private const string Truffle = "(O)430";
+
+    public readonly record struct Done(int Watered, int Harvested, int Fed, int Ponds, int Collected, int Milked, int Sheared, int Petted, int Truffles);
 
     /// <summary>Vanilla warps spouses onto the porch, but NPC pathing cannot cross the farmhouse footprint.</summary>
     public static Point VisitorStand(Farm farm)
@@ -83,7 +90,93 @@ internal static class FarmHelp
             if (left is null)
                 ponds++;
         }
-        return new Done(watered, harvested, fed, ponds);
+        (int collected, int milked, int sheared, int petted) = TendAnimals(farm);
+        int truffles = PickUp(farm, obj => obj.QualifiedItemId == Truffle);
+        return new Done(watered, harvested, fed, ponds, collected, milked, sheared, petted, truffles);
+    }
+
+    /// <summary>What the animals left on the floor, then the ones that need a tool, then a pat for each one not yet petted today.</summary>
+    private static (int Collected, int Milked, int Sheared, int Petted) TendAnimals(Farm farm)
+    {
+        int collected = 0, milked = 0, sheared = 0, petted = 0;
+        foreach (Building building in farm.buildings)
+            if (building.GetIndoors() is AnimalHouse house)
+                collected += PickUp(house, obj => !obj.bigCraftable.Value);
+        foreach (FarmAnimal animal in farm.getAllFarmAnimals())
+        {
+            // As vanilla's auto-grabber does, with the friendship of milking by hand (Tools.MilkPail).
+            if (animal.isAdult() && animal.currentProduce.Value is string produce
+                && animal.GetHarvestType() == FarmAnimalHarvestType.HarvestWithTool && HasRoom(farm, 1))
+            {
+                StardewValley.Object item = ItemRegistry.Create<StardewValley.Object>("(O)" + produce);
+                item.CanBeSetDown = false;
+                item.Quality = animal.produceQuality.Value;
+                if (animal.hasEatenAnimalCracker.Value)
+                    item.Stack = 2;
+                int stack = item.Stack;
+                if (Store(farm, item) is null)
+                {
+                    animal.HandleStatsOnProduceCollected(item, (uint)stack);
+                    animal.currentProduce.Value = null;
+                    animal.friendshipTowardFarmer.Value = Math.Min(1000, animal.friendshipTowardFarmer.Value + 5);
+                    animal.ReloadTextureIfNeeded();
+                    if (animal.GetAnimalData()?.HarvestTool == "Shears")
+                        sheared++;
+                    else
+                        milked++;
+                }
+            }
+            if (Game1.timeOfDay < AnimalBedtime && !animal.wasPet.Value)
+            {
+                Pet(animal);
+                petted++;
+            }
+        }
+        return (collected, milked, sheared, petted);
+    }
+
+    /// <summary>The player's own pat (FarmAnimal.pet), less the experience; after an auto-petter it adds what is left.</summary>
+    private static void Pet(FarmAnimal animal)
+    {
+        animal.wasPet.Value = true;
+        animal.friendshipTowardFarmer.Value = Math.Min(1000, animal.friendshipTowardFarmer.Value + (animal.wasAutoPet.Value ? 7 : 15));
+        FarmAnimalData? data = animal.GetAnimalData();
+        int drain = data?.HappinessDrain ?? 0;
+        if (data is not null && data.ProfessionForHappinessBoost >= 0 && Game1.player.professions.Contains(data.ProfessionForHappinessBoost))
+        {
+            animal.friendshipTowardFarmer.Value = Math.Min(1000, animal.friendshipTowardFarmer.Value + 15);
+            animal.happiness.Value = (byte)Math.Min(255, animal.happiness.Value + Math.Max(5, 30 + drain));
+        }
+        animal.happiness.Value = (byte)Math.Min(255, animal.happiness.Value + Math.Max(5, 30 + drain));
+        animal.doEmote(Character.heartEmote);
+    }
+
+    /// <summary>
+    /// Vanilla's spawned items in a location, as the player picks them up (GameLocation.checkAction): a fresh copy into the
+    /// chests, counted as foraged, at the quality they lie at. Stops once no chest has room.
+    /// </summary>
+    private static int PickUp(GameLocation location, Func<StardewValley.Object, bool> wanted)
+    {
+        Farm farm = Game1.getFarm();
+        int count = 0;
+        foreach ((Vector2 tile, StardewValley.Object obj) in location.objects.Pairs.ToList())
+        {
+            if (!obj.IsSpawnedObject || !wanted(obj))
+                continue;
+            Item copy = obj.getOne();
+            copy.Stack = obj.Stack;
+            Item? left = Store(farm, copy);
+            int stored = obj.Stack - (left?.Stack ?? 0);
+            if (left is null)
+                location.objects.Remove(tile);
+            else
+                obj.Stack = left.Stack;
+            Game1.stats.ItemsForaged += (uint)stored;
+            count += stored;
+            if (left is not null)
+                break;
+        }
+        return count;
     }
 
     /// <summary>Like a spouse watering in the morning: only dry soil whose crop still needs it, in the ground or in pots.</summary>

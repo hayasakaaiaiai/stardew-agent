@@ -52,4 +52,10 @@ internal sealed class ModConfig
     /// if they pass out (docs/npc-mine-companion.md). Needs <see cref="NpcMeetings"/>; off, it only waits at the door.
     /// </summary>
     public bool NpcMineCompanion { get; set; } = true;
+
+    /// <summary>
+    /// Whether keeping an appointment raises vanilla friendship and being stood up lowers it, within the same daily range
+    /// as conversations (docs/npc-meeting-friendship.md).
+    /// </summary>
+    public bool MeetingsChangeFriendship { get; set; } = true;
 }

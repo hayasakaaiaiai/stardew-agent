@@ -360,7 +360,8 @@ internal sealed partial class ModEntry
                     this.WorldWait("capture"); break;
                 default:
                     if (!this.ActionCommand(this.worldTestOperation, args) && !this.FarmTestCommand(this.worldTestOperation, args)
-                        && !this.MineTestCommand(this.worldTestOperation, args)) throw new InvalidOperationException("未知世界测试命令：" + this.worldTestOperation);
+                        && !this.MineTestCommand(this.worldTestOperation, args) && !this.AnimalTestCommand(this.worldTestOperation, args))
+                        throw new InvalidOperationException("未知世界测试命令：" + this.worldTestOperation);
                     break;
             }
         }
