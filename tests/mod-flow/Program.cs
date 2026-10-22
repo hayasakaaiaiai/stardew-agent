@@ -606,6 +606,28 @@ Test("an appointment moves friendship by the backend's tiers: one step up when k
         "A close relation is not on the top tier.");
 });
 
+Test("one that walking cannot get there in time may appear there half an hour early, never in the past", () =>
+{
+    int Warp(int time, int now) => (int)modType.GetMethod("WarpDeparture", BindingFlags.Static | BindingFlags.NonPublic)!.Invoke(null, new object[] { time, now })!;
+    Check(Warp(1400, 600) == 1330, "Not half an hour before the agreed time (docs/npc-meeting-warp.md).");
+    Check(Warp(1000, 1030) == 1040 && Warp(1500, 1450) == 1500, "Right away, or too late to wait: not the next tick.");
+});
+
+Test("today's wait follows observed arrival, while tomorrow's keeps the agreed deadline and neither passes 22:00", () =>
+{
+    Type meetingType = modType.GetNestedType("Meeting", BindingFlags.NonPublic)!;
+    object Meeting(bool sameDay) => Activator.CreateInstance(meetingType, "Abigail", 1740, "海滩", sameDay)!;
+    int Leave(object m) => (int)meetingType.GetProperty("Leave")!.GetValue(m)!;
+    object today = Meeting(true), tomorrow = Meeting(false);
+    Check(Leave(today) == 1910, "Before arrival the estimate is still needed for planning.");
+    Set(today, "ArrivedAt", 1600); Set(tomorrow, "ArrivedAt", 1600);
+    Check(Leave(today) == 1730 && Leave(tomorrow) == 1910, "Observed arrival did not control only today's wait.");
+    Set(today, "ArrivedAt", 1800);
+    Check(Leave(today) == 1930, "A late arrival lost part of its wait.");
+    Set(today, "ArrivedAt", 2150);
+    Check(Leave(today) == 2200, "An observed arrival kept the NPC after 22:00.");
+});
+
 Test("farm chores are worded like the backend, and the farm is a place an appointment can be at", () =>
 {
     Type doneType = modAssembly.GetType("StardewAgentBridge.FarmHelp+Done", throwOnError: true)!;

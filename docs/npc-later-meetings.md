@@ -75,7 +75,7 @@
 
 ## 4. 做法
 
-- `meeting-agreement.ts`：把“谁答应去哪”抽成 `agreedPlace`，今天的 `agreedIn`、后天以内的 `agreedLater` 共用；`namedDays` 按日历换算；`quotedLater`、`quotedLaterCallOff`；`quotedToday`、`quotedCallOff` 多一个 `today`，说的是别的日子就不碰今天的。
+- `meeting-agreement.ts`：把“谁答应去哪”抽成 `agreedPlace`，今天的 `agreedIn`、后天以内的 `agreedLater` 共用（2026-10-22 合并 Windows 修复后，两边共用它的钟点读法 `readClocks`：只有没说时段的钟点跟着说出的时段走，“周六晚上八点 / 八点见”是 20:00；它的“改到明天就撤销”在约到后天时看说的是不是同一天，“后天再去”不算改）；`namedDays` 按日历换算；`quotedLater`、`quotedLaterCallOff`；`quotedToday`、`quotedCallOff` 多一个 `today`，说的是别的日子就不碰今天的。
 - `meetings.ts`：`laterNote`、`laterCallOffNote`、`laterMeetings`（按标签读回，同一天最后一条记录说了算）、`dayLabel`、`upcomingLine`、`farInvitation` 和那一行的写法。
 - `memory.ts`：`talk.close` 时一次记下今天的约定、改口，以及后天以内的新约定和取消（同一条日志）；`meeting()` 在没有昨晚的约定时读当天的那条记录；记了谁有这类记录（每次读档扫一次，之后随记随加），日常的约定列表不用每次查 34 位 NPC。
 - `server.ts`：聊天那一轮按玩家的话加婉拒行；对话开场没有今天的约定时写最近的一个；约定列表按读取顺序发，慢的旧列表不会盖掉刚改的新列表（读得早的旧列表仍可能先到，Mod 随后会收到新列表；端到端测试因此改为等内容正确的那份，2026-10-22 连跑 6 次通过）。

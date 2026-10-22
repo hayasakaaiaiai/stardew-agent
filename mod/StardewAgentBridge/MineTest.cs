@@ -202,6 +202,9 @@ internal sealed partial class ModEntry
                 }
                 Game1.activeClickableMenu = new GameMenu(); this.WorldWait("mine-timed", Number("ticks", 120)); break;
             case "mine-inspect": this.WorldComplete(); break;
+            case "mine-hud":
+                this.worldTestNative = new { hud = Game1.hudMessages.Select(message => message.message).ToArray() };
+                this.WorldComplete(); break;
             default: throw new InvalidOperationException("Unknown mine fixture command: " + operation);
         }
         return true;

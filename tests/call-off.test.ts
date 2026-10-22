@@ -65,6 +65,7 @@ test('a later conversation calls the appointment off at once; sending company ho
   };
   const server = await h.start();
   const wire = await connect(server);
+  await wire.until('day.meetings', 0);
   const at = (time: number) => ({ ...WORLD.date, time });
   const converse = async (npc: string, time: number, lines: string[], atMeeting = false) => {
     wire.send({ ...openTalk(1, npc), world: { ...WORLD, date: at(time) }, ...(atMeeting ? { atMeeting: true } : {}) });
@@ -74,7 +75,7 @@ test('a later conversation calls the appointment off at once; sending company ho
     wire.send({ type: 'talk.close', npc }); await wire.until('ack', from);
     return from;
   };
-  await converse('Abigail', 1000, ['现在陪我下矿吧？']);
+  await wire.until('day.meetings', await converse('Abigail', 1000, ['现在陪我下矿吧？']));
   const from = await converse('Abigail', 1030, ['今天不去矿洞了。']);
   const expected = [{ npc: 'abigail', time: 1000, place: '矿洞', sameDay: true, calledOff: true }];
   assert.deepEqual(await meetingsSent(wire, from, expected), expected);
@@ -84,10 +85,10 @@ test('a later conversation calls the appointment off at once; sending company ho
   assert.equal(h.logs.filter(line => line.startsWith('阿比盖尔答应了')).length, 1, 'called off for today means none again today');
 
   // Together at the place: the first “go home” is refused, the second taken; the Mod then reports the meeting.
-  await converse('Sam', 1100, ['现在一起去海边吧？']);
+  await wire.until('day.meetings', await converse('Sam', 1100, ['现在一起去海边吧？']));
   await converse('Sam', 1230, ['你先回去吧。'], true);
   assert.ok(!h.logs.some(line => line.startsWith('山姆被农场主送回去了')), 'sent home though it said it was staying');
-  await converse('Sam', 1240, ['你先回去吧。', '真的，你先回去吧。'], true);
+  await wire.until('day.meetings', await converse('Sam', 1240, ['你先回去吧。', '真的，你先回去吧。'], true));
   assert.ok(h.logs.includes('山姆被农场主送回去了（海滩）'));
   assert.ok(!h.logs.some(line => line.startsWith('山姆记下了')), 'remembered before the Mod said how it went');
   wire.send({ type: 'meet.ended', npc: 'Sam', place: '海滩', time: 1220, left: 1240, met: true, date: at(1240) });

@@ -24,6 +24,8 @@ internal sealed partial class ModEntry
     private const int MeetsPerDay = 3;
     /// <summary>Arrive this much before the agreed time.</summary>
     private const int MeetEarlyMinutes = 10;
+    /// <summary>One that walking cannot get there in time may appear there this long before the agreed time.</summary>
+    private const int WarpLeadMinutes = 30;
     private const float MeetGreetRange = 6;
 
     /// <summary>
@@ -61,15 +63,21 @@ internal sealed partial class ModEntry
 
         /// <summary>The time as agreed, before any putting off.</summary>
         public int Agreed { get; }
-        /// <summary>Agreed today for a time it could not make: the player leaving before it came is not standing it up.</summary>
-        public bool ComesLate;
+        /// <summary>When the Mod got it; one agreed today at or before this is "right away".</summary>
+        public int Received;
+        /// <summary>
+        /// Walking cannot get there in time, so it appears there once the player cannot see it go
+        /// (docs/npc-meeting-warp.md); `Warped` once it has.
+        /// </summary>
+        public bool Warp;
+        public bool Warped;
 
         /// <summary>The game name.</summary>
         public string Npc { get; }
-        /// <summary>Put off to when it can get there, for one agreed today that cannot make it in time.</summary>
+        /// <summary>The agreed time; a spouse fetched for one agreed today may be given a later one.</summary>
         public int Time { get; set; }
         public string Place { get; }
-        public int Leave => MeetingLeave(this.Time);
+        public int Leave => MeetingLeave(this.SameDay && this.ArrivedAt is int arrived ? arrived : this.Time);
         /// <summary>Agreed in a conversation today: "right away" comes as the time it was agreed.</summary>
         public bool SameDay { get; }
         public (string Map, int X, int Y, int Facing) Spot;
@@ -78,6 +86,8 @@ internal sealed partial class ModEntry
         public bool Applied;
         public bool Failed;
         public bool Arrived;
+        /// <summary>The observed game clock on arrival, separate from the route's estimate.</summary>
+        public int? ArrivedAt;
         public bool Met;
         public bool Reported;
         public bool Farm => this.Place == FarmPlace;
@@ -91,6 +101,12 @@ internal sealed partial class ModEntry
         public bool Companion;
         /// <summary>Where the original schedule has the NPC when it leaves, i.e. where the way back goes.</summary>
         public ScheduleStop Back;
+        /// <summary>The original standing position, before any appointment route has moved the NPC.</summary>
+        public ScheduleStop Origin;
+        public readonly Dictionary<int, SchedulePathDescription> Original = new();
+        /// <summary>The inserted way back; actual arrival may move it to a different ten-minute tick.</summary>
+        public int ReturnAt;
+        public bool ReturnManually;
         public readonly Trip Trip = new();
         /// <summary>A farm visit: 0 on the way, 1 on the farm, 2 walking out, 3 gone.</summary>
         public int Stage;
@@ -115,6 +131,14 @@ internal sealed partial class ModEntry
         SchedulePathDescription? last = npc.Schedule.Where(pair => inclusive ? pair.Key <= time : pair.Key < time)
             .OrderBy(pair => pair.Key).Select(pair => pair.Value).LastOrDefault();
         return last is null ? new(npc.currentLocation.NameOrUniqueName, npc.TilePoint, npc.FacingDirection, null, null)
+            : new(last.targetLocationName, last.targetTile, last.facingDirection, last.endOfRouteBehavior, last.endOfRouteMessage);
+    }
+
+    /// <summary>The original day, with its original standing position before the first stop.</summary>
+    private static ScheduleStop OriginalStop(Meeting m, int time)
+    {
+        SchedulePathDescription? last = m.Original.Where(pair => pair.Key <= time).OrderBy(pair => pair.Key).Select(pair => pair.Value).LastOrDefault();
+        return last is null ? m.Origin
             : new(last.targetLocationName, last.targetTile, last.facingDirection, last.endOfRouteBehavior, last.endOfRouteMessage);
     }
 
@@ -207,7 +231,7 @@ internal sealed partial class ModEntry
 
     private void ApplyMeeting(Meeting m)
     {
-        int received = Game1.timeOfDay;
+        m.Received = Game1.timeOfDay;
         NPC? npc = Game1.getCharacterFromName(m.Npc);
         string relation = npc is null ? "stranger" : GameState.Relation(npc);
         bool spouse = relation is "married" or "roommate";
@@ -261,9 +285,9 @@ internal sealed partial class ModEntry
             return;
         }
         m.Applied = true;
-        m.ComesLate = m.SameDay && m.Agreed > received && m.Time > m.Agreed;
         if (m.SameDay && npc is not null)
-            Game1.addHUDMessage(new HUDMessage($"和{npc.displayName}约好 {m.Time / 100}:{m.Time % 100:00} 在{m.Place}见", HUDMessage.newQuest_type));
+            Game1.addHUDMessage(new HUDMessage(m.Agreed <= m.Received ? $"和{npc.displayName}约好马上在{m.Place}见"
+                : $"和{npc.displayName}约好 {m.Time / 100}:{m.Time % 100:00} 在{m.Place}见", HUDMessage.newQuest_type));
     }
 
     /// <summary>
@@ -303,45 +327,98 @@ internal sealed partial class ModEntry
             // Keep the earlier departure when an earlier stop is nearer; moving it forward can alternate between stops.
             depart = Math.Min(depart, BeforePendingStop(MeetingDeparture(m.Time, TravelMinutes(go.route, farmSteps), now)));
         }
+        // Walking cannot get there by the time, or there is no telling where it would set off from: it appears there
+        // instead, once the player cannot see it go (docs/npc-meeting-warp.md). "Right away" is always that.
         bool late = depart < NextTick(now) || Utility.ModifyTime(depart, TravelMinutes(go.route, farmSteps) + MeetEarlyMinutes) > m.Time;
-        int replaceFrom = depart;
-        if (late && m.SameDay)
+        bool warp = late || StopBefore(npc, depart, inclusive: false) != from || go.route is not { Count: > 0 };
+        if (warp)
         {
-            // Agreed today: set off at the next tick, or once the walk it is on is over, and come late.
-            var walking = schedule.Where(pair => pair.Key <= now).OrderBy(pair => pair.Key).LastOrDefault();
-            bool onTheWay = walking.Value is not null && npc.controller is { pathToEndPoint.Count: > 0 };
-            from = StopBefore(npc, NextTick(now), inclusive: false);
-            go = Go(from);
-            (depart, int arrive) = SoonestMeeting(now, onTheWay ? Utility.ModifyTime(walking.Key, TravelMinutes(walking.Value!.route)) : now,
-                TravelMinutes(go.route, farmSteps));
-            if (arrive > 2100)
+            depart = WarpDeparture(m.Time, now);
+            if (depart > 2100)
                 return "21:00 前赶不到";
-            m.Time = arrive;
-            // No later stop may slip in before it sets off: the way there starts where it is going now.
-            replaceFrom = NextTick(now);
         }
-        else if (StopBefore(npc, depart, inclusive: false) != from)
-            return "出发的位置算不准";
-        else if (late)
-            return "来不及在约定时间到";
+        int replaceFrom = depart;
         ScheduleStop back = StopBefore(npc, m.Leave, inclusive: true);
         SchedulePathDescription ret = npc.pathfindToNextScheduleLocation(key, spot.Map, spot.X, spot.Y, back.Map, back.Tile.X, back.Tile.Y,
             back.Facing, back.Behavior, back.Message);
-        if (go.route is not { Count: > 0 } || ret.route is not { Count: > 0 })
+        if (ret.route is not { Count: > 0 })
             return "原版寻路找不到路";
         foreach (int replaced in schedule.Keys.Where(time => time >= replaceFrom && time <= m.Leave).ToList())
         {
             m.Replaced[replaced] = schedule[replaced];
             schedule.Remove(replaced);
         }
-        go.time = depart;
         ret.time = m.Leave;
         m.Depart = depart;
+        m.Warp = warp;
         m.Back = back;
-        schedule[depart] = go;
+        m.Origin = new(npc.currentLocation.NameOrUniqueName, npc.TilePoint, npc.FacingDirection, null, null);
+        // Replaced stops have already been removed above; retain the whole original day for later return times.
+        foreach ((int time, SchedulePathDescription stop) in schedule.Concat(m.Replaced))
+            m.Original[time] = stop;
+        m.ReturnAt = m.Leave;
+        if (!warp)
+        {
+            go.time = depart;
+            schedule[depart] = go;
+        }
         schedule[m.Leave] = ret;
-        this.Monitor.Log($"{m.Npc} 今天 {depart} 从{from.Map}出发，{m.Time} 前到{m.Place}（{spot.Map} {spot.X},{spot.Y}），{m.Leave} 回{back.Map}。", LogLevel.Info);
+        this.Monitor.Log(warp ? $"{m.Npc} 走路赶不上，今天 {depart} 起趁玩家看不见时直接到{m.Place}（{spot.Map} {spot.X},{spot.Y}），{m.Leave} 回{back.Map}。"
+            : $"{m.Npc} 今天 {depart} 从{from.Map}出发，{m.Time} 前到{m.Place}（{spot.Map} {spot.X},{spot.Y}），{m.Leave} 回{back.Map}。", LogLevel.Info);
         return null;
+    }
+
+    /// <summary>
+    /// When one that walking cannot get there in time may appear there: half an hour before the agreed time, or at the
+    /// next tick if that has gone (right away, or too far to walk).
+    /// </summary>
+    private static int WarpDeparture(int time, int now) => Math.Max(NextTick(now), Utility.ModifyTime(time, -WarpLeadMinutes));
+
+    /// <summary>
+    /// Once the player cannot see it go, it is there (docs/npc-meeting-warp.md): straight onto its spot, or, when the
+    /// player is already on that map, in by one of the map's ways in, out of sight if one is, and on foot from there.
+    /// </summary>
+    private void WarpToMeeting(Meeting m, NPC npc)
+    {
+        if (Game1.timeOfDay < m.Depart || Game1.eventUp || Game1.isWarping || Game1.currentLocation is not GameLocation here
+            || npc.currentLocation == here || npc.temporaryController is not null || this.talk?.Npc == npc
+            || Game1.getLocationFromName(m.Spot.Map) is not GameLocation there)
+            return;
+        Point spot = new(m.Spot.X, m.Spot.Y);
+        Point? entry = here == there ? WayIn(there, spot, npc) : spot;
+        if (entry is not Point tile)
+            return;
+        npc.controller = null;
+        npc.queuedSchedulePaths.Clear();
+        npc.Halt();
+        Game1.warpCharacter(npc, there, Utility.PointToVector2(tile));
+        if (tile == spot)
+            npc.faceDirection(m.Spot.Facing);
+        else
+            npc.controller = new PathFindController(npc, there, spot, m.Spot.Facing);
+        // Its own stops until it leaves were taken out when this was planned; nothing due now may set off elsewhere.
+        npc.lastAttemptedSchedule = Game1.timeOfDay;
+        m.Warped = true;
+        this.Monitor.Log($"{m.Npc} {Game1.timeOfDay} 直接到了{m.Place}{(tile == spot ? "" : "的入口，走过去")}。", LogLevel.Info);
+    }
+
+    /// <summary>A tile by one of the map's ways in with a path to the spot, preferring one the player cannot see.</summary>
+    private static Point? WayIn(GameLocation location, Point spot, NPC npc)
+    {
+        Point? seen = null;
+        foreach (Warp way in location.warps)
+        {
+            if (OpenTileNear(location, new Point(way.X, way.Y)) is not Vector2 near)
+                continue;
+            Point tile = Utility.Vector2ToPoint(near);
+            if (PathFindController.findPath(tile, spot, PathFindController.isAtEndPoint, location, npc, FarmPathLimit) is null)
+                continue;
+            if (!Utility.isOnScreen(near * 64f + new Vector2(32f, 32f), 64))
+                return tile;
+            seen ??= tile;
+        }
+        // In through a door in sight is how anyone comes in.
+        return seen;
     }
 
     /// <summary>
@@ -407,11 +484,50 @@ internal sealed partial class ModEntry
         if (npc.Schedule is not { } schedule)
             return;
         schedule.Remove(m.Depart);
-        schedule.Remove(m.Leave);
+        schedule.Remove(m.ReturnAt);
         foreach ((int time, SchedulePathDescription stop) in m.Replaced)
             schedule[time] = stop;
         if (Game1.timeOfDay >= m.Depart)
-            this.RouteTo(m, npc, StopBefore(npc, Game1.timeOfDay, inclusive: true));
+            this.RouteTo(m, npc, OriginalStop(m, Game1.timeOfDay));
+    }
+
+    /// <summary>Observe arrival once. Today's ninety-minute wait follows this clock, not a path-length estimate.</summary>
+    private void RecordArrival(Meeting m, NPC npc)
+    {
+        if (m.Arrived)
+            return;
+        m.ArrivedAt = Game1.timeOfDay;
+        m.Arrived = true;
+        if (!m.SameDay || m.Spouse || m.Leave == m.ReturnAt || npc.Schedule is not { } schedule)
+            return;
+        ScheduleStop back = OriginalStop(m, m.Leave);
+        SchedulePathDescription? ret = null;
+        try
+        {
+            ret = npc.pathfindToNextScheduleLocation(npc.dayScheduleName.Value ?? "meeting", m.Spot.Map, m.Spot.X, m.Spot.Y,
+                back.Map, back.Tile.X, back.Tile.Y, back.Facing, back.Behavior, back.Message);
+            if (ret.route is not { Count: > 0 })
+                ret = null;
+        }
+        catch (Exception ex) { this.Monitor.Log($"{m.Npc} 抵达后暂时算不出归程，离开时重算：{ex.Message}", LogLevel.Warn); }
+        schedule.Remove(m.ReturnAt);
+        // An earlier arrival releases later original stops; a later one must hold them until the new leaving time.
+        foreach ((int time, SchedulePathDescription stop) in m.Replaced.Where(pair => pair.Key > m.Leave))
+            schedule[time] = stop;
+        foreach ((int time, SchedulePathDescription stop) in m.Original.Where(pair => pair.Key > m.Depart && pair.Key <= m.Leave))
+        {
+            m.Replaced[time] = stop;
+            schedule.Remove(time);
+        }
+        m.Back = back;
+        m.ReturnAt = m.Leave;
+        m.ReturnManually = ret is null;
+        if (ret is not null)
+        {
+            ret.time = m.Leave;
+            schedule[m.Leave] = ret;
+        }
+        this.Monitor.Log($"{m.Npc} 实际 {m.ArrivedAt} 抵达{m.Place}，等到 {m.Leave} 再回原日程。", LogLevel.Info);
     }
 
     /// <summary>The same estimate as vanilla's arrival-time schedules (NPC.parseMasterScheduleImpl): two pixels a tick.</summary>
@@ -449,6 +565,8 @@ internal sealed partial class ModEntry
     {
         if (Game1.getCharacterFromName(m.Npc) is not NPC npc)
             return;
+        if (m.Warp && !m.Warped && !m.Arrived)
+            this.WarpToMeeting(m, npc);
         if (m.Farm)
         {
             this.WatchFarm(m, npc);
@@ -463,10 +581,14 @@ internal sealed partial class ModEntry
             return;
         }
         if (!m.Arrived && npc.controller is null && !npc.isMoving() && this.AtMeeting(npc))
-            m.Arrived = true;
+            this.RecordArrival(m, npc);
         this.GreetAtMeeting(m, npc);
         if (Game1.timeOfDay >= m.Leave)
+        {
+            if (m.ReturnManually)
+                this.RouteTo(m, npc, m.Back);
             this.ReportMeeting(m, m.Leave);
+        }
     }
 
     /// <summary>Once, when the player comes within a few tiles of the NPC waiting there.</summary>
@@ -497,7 +619,7 @@ internal sealed partial class ModEntry
     /// <summary>When the day ends before the NPC leaves: report what happened so far, if the agreed time has come.</summary>
     private void EndMeetings()
     {
-        foreach (Meeting m in this.meetings.Values.Where(m => m.Applied && !m.Reported && Game1.timeOfDay >= m.Time))
+        foreach (Meeting m in this.meetings.Values.Where(m => m.Applied && !m.Reported && (m.SameDay && m.Arrived || Game1.timeOfDay >= m.Time)))
             this.ReportMeeting(m, m.Trip.Joined ? Game1.timeOfDay : Math.Min(Game1.timeOfDay, m.Leave));
     }
 
@@ -514,14 +636,18 @@ internal sealed partial class ModEntry
         {
             ["npc"] = m.Npc, ["place"] = m.Place, ["time"] = m.Time, ["left"] = left, ["met"] = m.Met, ["date"] = GameState.Date(),
         };
+        if (m.ArrivedAt is int arrived)
+            fields["arrived"] = arrived;
         if (m.Helped is FarmHelp.Done done)
             fields["helped"] = HelpedFields(done);
         if (m.Trip.Joined)
             fields["mine"] = m.Trip.Fields(Fighters.Contains(m.Npc));
         // Kept, it warms the NPC like a kind word; stood up, it stings like a slight (docs/npc-meeting-friendship.md).
-        // Called off beforehand, the NPC itself late, a spouse at home or chores done on the farm: nobody was stood up.
+        // Called off beforehand, the NPC itself got there after the time agreed, a spouse at home or chores done on the
+        // farm: nobody was stood up.
+        bool cameLate = m.SameDay && m.Agreed > m.Received && m.ArrivedAt > m.Agreed;
         if (this.config.MeetingsChangeFriendship && (m.Trip.Actor ?? Game1.getCharacterFromName(m.Npc)) is NPC npc
-            && (m.Met || !m.CalledOff && !m.ComesLate && !m.Spouse && m.Helped is null))
+            && (m.Met || !m.CalledOff && !cameLate && !m.Spouse && m.Helped is null))
         {
             (int gain, int loss) = FriendshipStep(GameState.Hearts(npc), GameState.Relation(npc));
             int changed = this.ChangeFriendshipToday(npc, m.Met ? gain : -loss, m.Met ? $"和{npc.displayName}赴约" : $"{npc.displayName}在{m.Place}没等到农场主");

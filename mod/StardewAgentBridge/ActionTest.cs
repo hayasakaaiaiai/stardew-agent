@@ -31,7 +31,7 @@ internal sealed partial class ModEntry
         },
         meetings = this.meetings.Values.Select(m => new
         {
-            m.Npc, m.Time, m.Place, m.Leave, m.Depart, m.Applied, m.Failed, m.Arrived, m.Met, m.Reported,
+            m.Npc, m.Time, m.Place, m.Leave, m.Depart, m.Applied, m.Failed, m.Arrived, m.ArrivedAt, m.ReturnAt, m.Met, m.Reported,
             m.Stage, m.Helps, m.Spouse, m.Helped, m.Destroys,
             spot = new { map = m.Spot.Map, x = m.Spot.X, y = m.Spot.Y },
         }).ToArray(),

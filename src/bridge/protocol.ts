@@ -114,10 +114,11 @@ export type ModMessage =
   /** What happened at a festival the player just left (docs/festival-memories.md); game names. Reliable, acknowledged. */
   | ({ type: 'festival.ended' } & FestivalEnded & Envelope)
   /**
-   * An appointment the NPC went to is over (docs/npc-meetings.md); `left` is HHMM. `friendship` is what the Mod changed for
-   * it, within the day's range shared with conversations (docs/npc-meeting-friendship.md). Reliable, acknowledged.
+   * An appointment the NPC went to is over (docs/npc-meetings.md); `left` is HHMM, `arrived` when it got there (Windows
+   * call-off acceptance). `friendship` is what the Mod changed for it, within the day's range shared with conversations
+   * (docs/npc-meeting-friendship.md). Reliable, acknowledged.
    */
-  | ({ type: 'meet.ended'; npc: string; place: string; time: number; left: number; met: boolean; helped?: Helped; mine?: MineTrip;
+  | ({ type: 'meet.ended'; npc: string; place: string; time: number; arrived?: number; left: number; met: boolean; helped?: Helped; mine?: MineTrip;
     friendship?: number; date: GameDate } & Envelope);
 
 export interface FestivalEnded {
@@ -305,10 +306,11 @@ export function parseModMessage(raw: string): ModMessage {
       envelope();
       text('npc', 50);
       text('place', 20);
-      for (const key of ['time', 'left']) {
+      for (const key of ['time', 'left', ...(data.arrived === undefined ? [] : ['arrived'])]) {
         const time = int(data[key], key);
         if (time < 0 || time > 2600 || time % 100 > 59) fail(`${key} is invalid`);
       }
+      if (data.arrived !== undefined && (data.arrived as number) > (data.left as number)) fail('arrived is after left');
       if (typeof data.met !== 'boolean') fail('met must be a boolean');
       if (data.friendship !== undefined) {
         const points = int(data.friendship, 'friendship');

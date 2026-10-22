@@ -110,7 +110,7 @@ internal sealed partial class ModEntry
         m.Hold = new ApproachController(path, farm, npc, 2) { Hold = true };
         npc.temporaryController = m.Hold;
         m.Stage = 1;
-        m.Arrived = true;
+        this.RecordArrival(m, npc);
         this.Monitor.Log($"{m.Npc} 到农场了（{path.Count - 1} 步走到门廊）。", LogLevel.Info);
         if (m.Helps)
             this.DoFarmChores(m, npc, farm);
@@ -143,7 +143,7 @@ internal sealed partial class ModEntry
         m.Stage = 3;
         // The way back was computed from this very spot and has been waiting in the queue; sent home early, it is not
         // due yet, so the NPC heads back now (docs/npc-call-off.md).
-        if (m.CalledOff && Game1.timeOfDay < m.Leave)
+        if (m.ReturnManually || m.CalledOff && Game1.timeOfDay < m.Leave)
             this.RejoinSchedule(m, npc);
         else
             ResumeSchedule(npc);
@@ -158,7 +158,7 @@ internal sealed partial class ModEntry
             if (npc.currentLocation is Farm or FarmHouse)
             {
                 m.Stage = 1;
-                m.Arrived = true;
+                this.RecordArrival(m, npc);
                 this.DoFarmChores(m, npc, farm);
             }
             else

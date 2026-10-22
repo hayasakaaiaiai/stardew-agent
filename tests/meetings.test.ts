@@ -59,7 +59,9 @@ test('the Mod reports how an appointment went with valid times only', () => {
   const base = { type: 'meet.ended', lineageId: 'farm', loadNonce: 'n', seq: 3, npc: 'Abigail', place: '海滩', time: 1400, left: 1530, met: true,
     date: { year: 1, season: 'spring', day: 2, time: 1530 } };
   assert.equal(parseModMessage(JSON.stringify(base)).type, 'meet.ended');
-  for (const change of [{ time: 1475 }, { left: -10 }, { met: 'yes' }, { place: '' }, { npc: undefined }]) {
+  assert.equal((parseModMessage(JSON.stringify({ ...base, arrived: 1410 })) as { arrived?: number }).arrived, 1410);
+  for (const change of [{ time: 1475 }, { left: -10 }, { met: 'yes' }, { place: '' }, { npc: undefined },
+    { arrived: 1475 }, { arrived: -10 }, { arrived: 1540 }, { arrived: '1410' }, { arrived: 1410.5 }]) {
     assert.throws(() => parseModMessage(JSON.stringify({ ...base, ...change })), JSON.stringify(change));
   }
   assert.throws(() => parseModMessage(JSON.stringify({ ...openTalk(), lineageId: 'farm', loadNonce: 'n', seq: 4, atMeeting: 1 })));

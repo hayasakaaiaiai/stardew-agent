@@ -19,16 +19,22 @@ function number(word: string): number {
   return digits[word] ?? NaN;
 }
 
-function times(text: string, includePeriods = true): number[] {
+function clockTimes(text: string): { time: number; ambiguous: boolean }[] {
   const matches = [...text.matchAll(/(\d{1,2})[:：](\d{2})/g)].map(match => ({ hour: Number(match[1]), minute: Number(match[2]), clock: true }));
   for (const match of text.matchAll(/([零〇一二两三四五六七八九十\d]{1,3})(?:点|时)(半|一刻|三刻|[零〇一二两三四五六七八九十\d]{1,3}分)?/g)) {
     const suffix = match[2];
     matches.push({ hour: number(match[1]!), minute: suffix === '半' ? 30 : suffix === '一刻' ? 15 : suffix === '三刻' ? 45 : suffix ? number(suffix.slice(0, -1)) : 0, clock: false });
   }
-  if (matches.length) return matches.map(({ hour, minute, clock }) => {
+  return matches.map(({ hour, minute, clock }) => {
+    const ambiguous = !clock && hour > 0 && hour < 12 && !/凌晨|清晨|早上|早晨|上午|中午|下午|傍晚|晚上|明早|明晚/.test(text);
     if (hour < 12 && (/下午|傍晚|晚上|明晚/.test(text) || !clock && hour < 8 && !/凌晨|清晨|早上|早晨|上午|明早/.test(text))) hour += 12;
-    return hour * 100 + Math.floor(minute / 10) * 10;
+    return { time: hour * 100 + Math.floor(minute / 10) * 10, ambiguous };
   });
+}
+
+function times(text: string, includePeriods = true): number[] {
+  const clocks = clockTimes(text);
+  if (clocks.length) return clocks.map(clock => clock.time);
   return includePeriods ? PERIODS.filter(([words]) => words.test(text)).map(([, time]) => time) : [];
 }
 
@@ -136,6 +142,10 @@ const MEETING_CLAUSE = /见|碰面|等你|到|过去|过来|吧|怎么样|行吗
 const EARLIEST = 800;
 const LATEST = 2100;
 
+/** A change of date takes back this agreement; asking about another day does not. */
+const changesDay = (text: string) => ANOTHER_DAY.test(text) && !CONDITIONAL.test(text)
+  && /(?:改|换|推迟|挪|留)(?:到|成|在)?\s*(?:明天|明早|明晚|明儿|明日|后天|下周|下次|周末)|(?:明天|明早|明晚|明儿|明日|后天|下周|下次|周末)再(?:去|来|见|下矿)/.test(text);
+
 const agrees = (quote: TimedQuote) => ACCEPT.test(quote.text) || GOING.test(quote.text) || SEE_YOU.test(quote.text);
 
 function later(time: number, minutes: number): number {
@@ -148,7 +158,7 @@ function later(time: number, minutes: number): number {
  * `after` is everything said later, and `otherDay` tells words for a day this check does not take.
  */
 function agreedPlace(window: readonly TimedQuote[], after: readonly TimedQuote[], places: Readonly<Record<string, RegExp>>,
-  otherDay: (text: string) => boolean): { place: string; words: RegExp } | null {
+  otherDay: (text: string) => boolean, movedTo: (text: string) => boolean = changesDay): { place: string; words: RegExp } | null {
   const text = window.map(quote => quote.text).join('\n');
   const named = Object.keys(places).filter(place => places[place]!.test(text));
   if (named.length !== 1 || REFUSED.test(text) || DECLINED.test(text) || PUT_OFF.test(text) || CONDITIONAL.test(text) || otherDay(text)
@@ -160,7 +170,7 @@ function agreedPlace(window: readonly TimedQuote[], after: readonly TimedQuote[]
     || !window.some(quote => quote.speaker === 'NPC' && (agrees(quote)
       || words.test(quote.text) && /(?:一起|要不要|陪你|带你|我们|咱们).{0,10}(?:去|来|走)/.test(quote.text)))) return null;
   // The player taking it back needs no place: "还是算了，你忙吧".
-  if (after.some(quote => (REFUSED.test(quote.text) || DECLINED.test(quote.text)) && (quote.speaker === '玩家'
+  if (after.some(quote => movedTo(quote.text) || (REFUSED.test(quote.text) || DECLINED.test(quote.text)) && (quote.speaker === '玩家'
     || words.test(quote.text) || NOW_WORDS.test(quote.text) || /不去(?:了)?[。！!]?\s*$/.test(quote.text)))) return null;
   return { place, words };
 }
@@ -170,6 +180,24 @@ function timedText(window: readonly TimedQuote[], places: Readonly<Record<string
   return window.map(quote => quote.speaker === '玩家' ? quote.text.replace(/今晚/g, '今天晚上').replace(/今早/g, '今天早上')
     : quote.text.split(/[，,。！!？?；;…]+/).filter(clause => MEETING_CLAUSE.test(clause) || Object.values(places).some(words => words.test(clause)))
       .join('，').replace(/今晚/g, '今天晚上').replace(/今早/g, '今天早上'));
+}
+
+/**
+ * Concrete times in the lines (fixed in the Windows call-off acceptance): only a bare hour inherits the period said, or
+ * the same hour said outright; explicit morning and 24-hour clocks never move to the evening. `bare` settles the rest.
+ */
+function readClocks(timed: readonly string[], bare: (time: number) => number): number[] {
+  const parsed = timed.flatMap(clockTimes);
+  const periods = timed.flatMap(text => PERIODS.filter(([period]) => period.test(text)));
+  return parsed.map(clock => {
+    if (!clock.ambiguous) return clock.time;
+    const explicit = [...new Set(parsed.filter(other => !other.ambiguous && other.time % 1200 === clock.time % 1200).map(other => other.time))];
+    if (explicit.length === 1) return explicit[0]!;
+    const inPeriod = [clock.time % 1200, clock.time % 1200 + 1200].filter(time => periods.length
+      && periods.every(([, , start, end]) => time >= start && time < end));
+    if (inPeriod.length === 1) return inPeriod[0]!;
+    return bare(clock.time);
+  });
 }
 
 /** Whether a line names a day other than `today` outright; any named day counts when today is not known. */
@@ -183,8 +211,8 @@ function agreedIn(window: readonly TimedQuote[], after: readonly TimedQuote[], p
   const { place } = agreement;
   const agreed = window.at(-1)!.time;
   const timed = timedText(window, places);
-  // "八点" after "今晚八点" is the evening too: a morning hour already gone means the same hour tonight.
-  const clocks = timed.flatMap(text => times(text, false)).map(time => time <= later(agreed, 10) && time < 1200 ? time + 1200 : time);
+  // A bare morning hour already gone means the same hour tonight.
+  const clocks = readClocks(timed, time => time <= later(agreed, 10) && time < 1200 ? time + 1200 : time);
   if (clocks.length) {
     if (clocks.some(value => value !== clocks[0]) || clocks[0]! <= later(agreed, 10) || clocks[0]! < EARLIEST || clocks[0]! > LATEST) return null;
     return { time: clocks[0]!, place, soon: false };
@@ -235,12 +263,16 @@ export interface LaterAgreement { day: number; time: number; place: string }
 /** One stretch naming one later day, up to two weeks ahead, with a concrete time or a period. */
 function agreedLater(window: readonly TimedQuote[], after: readonly TimedQuote[], places: Readonly<Record<string, RegExp>>, today: number): LaterAgreement | null {
   // Tomorrow said only as "明天" is the nightly `meet`'s; named another way ("周五") the reply's "明天" is the same day.
-  const agreement = agreedPlace(window, after, places, text => VAGUE.test(text));
-  if (!agreement || !window.some(quote => DATE_WORDS.test(quote.text))) return null;
+  if (!window.some(quote => DATE_WORDS.test(quote.text))) return null;
   const days = [...new Set(window.flatMap(quote => namedDays(quote.text, today)))];
   if (days.length !== 1 || days[0]! <= today || days[0]! > today + LATER_DAYS) return null;
+  // "后天再去" after agreeing on the day after tomorrow moves nothing; "改明天吧" does.
+  const movedTo = (text: string) => changesDay(text) && (namedDays(text, today).length === 0 || namedDays(text, today).some(day => day !== days[0]));
+  const agreement = agreedPlace(window, after, places, text => VAGUE.test(text), movedTo);
+  if (!agreement) return null;
   const timed = timedText(window, places);
-  const clocks = timed.flatMap(text => times(text, false));
+  // A bare hour on a later day keeps the hour said when nothing tells morning from evening.
+  const clocks = readClocks(timed, time => time);
   const periods = timed.flatMap(text => PERIODS.filter(([period]) => period.test(text))).map(([, time]) => time);
   const found = clocks.length ? clocks : periods;
   if (!found.length || found.some(time => time !== found[0]) || found[0]! < EARLIEST || found[0]! > LATEST) return null;

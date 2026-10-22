@@ -63,6 +63,29 @@ test('replies that send the player alone, refuse, or put it off are not appointm
     'the player taking it back needs no place');
 });
 
+test('same-day clocks preserve explicit periods and clock notation when already passed', () => {
+  assert.deepEqual([
+    today(1000, '今天上午九点矿洞见？', '好啊，九点矿洞见。'),
+    today(1000, '今天09:00矿洞见？', '好啊，09:00矿洞见。'),
+    today(1000, '今天早上八点矿洞见？', '好啊，八点矿洞见。'),
+  ], [null, null, null]);
+});
+
+test('an evening agreement also works before its ambiguous hour this morning', () => {
+  assert.deepEqual(today(600, '今晚八点星之果实餐吧见？', '好啊，八点星之果实餐吧见。'), { time: 2000, place: '星之果实餐吧', soon: false });
+  assert.deepEqual(today(600, '今天晚上星之果实餐吧见？', '好啊，九点星之果实餐吧见。'), { time: 2100, place: '星之果实餐吧', soon: false });
+  assert.equal(today(600, '今晚八点星之果实餐吧见？', '好啊，早上八点星之果实餐吧见。'), null, 'explicit periods cannot inherit away a conflict');
+  assert.equal(today(600, '今晚八点星之果实餐吧见？', '好啊，08:00星之果实餐吧见。'), null, 'a 24-hour clock cannot inherit a period');
+  assert.deepEqual(today(600, '今天上午九点矿洞见？', '好啊，九点矿洞见。'), { time: 900, place: '矿洞', soon: false });
+});
+
+test('explicitly moving an accepted trip to tomorrow cancels today', () => {
+  assert.equal(today(1000, '现在陪我下矿吧？', '好啊。', '改明天吧。', '好啊，明天再去。'), null);
+  assert.equal(today(1000, '现在陪我下矿吧？', '好啊。', '推迟到后天吧。', '好啊。'), null);
+  assert.deepEqual(today(1000, '现在陪我下矿吧？', '好啊。', '那明天呢？', '明天看情况吧。'), { time: 1000, place: '矿洞', soon: true });
+  assert.deepEqual(today(1000, '现在陪我下矿吧？', '好啊。', '如果今天赶不上就改明天吧。', '我们先试试。'), { time: 1000, place: '矿洞', soon: true });
+});
+
 const turn = (seq: number, minute: number, player: string, npc: string): DayEntry =>
   ({ seq, gameTime: 1440 * 2 + minute, changes: [{ npcId: 'abigail', log: { player, npc } }] });
 
@@ -101,6 +124,7 @@ test('agreed in a conversation, the appointment reaches the Mod at once, rolls b
   };
   const server = await h.start();
   const wire = await connect(server);
+  await wire.until('day.meetings', 0);
   const at = (time: number) => ({ ...WORLD.date, time });
   const converse = async (npc: string, time: number, line: string) => {
     wire.send({ ...openTalk(1, npc), world: { ...WORLD, date: at(time) } }); await wire.until('talk.reply', wire.inbox.length);
@@ -141,4 +165,34 @@ test('agreed in a conversation, the appointment reaches the Mod at once, rolls b
   const list = await reloaded.until('day.meetings', 0) as { meetings: unknown[] };
   assert.deepEqual(list.meetings, []);
   await reloaded.close();
+});
+
+test('same-day memories use observed arrival, never the route estimate or a missing legacy timestamp', { timeout: 15000 }, async t => {
+  for (const arrived of [1600, 1800, 1450, undefined]) {
+    const h = await harness(t);
+    const originalChat = h.fake.model.chat.bind(h.fake.model);
+    h.fake.model.chat = async (...args: Parameters<typeof originalChat>) => {
+      const result = await originalChat(...args);
+      return { ...result, content: JSON.stringify({ ...JSON.parse(result.content), reply: '好啊，三点沙滩见。' }) };
+    };
+    const wire = await connect(await h.start());
+    await wire.until('day.meetings', 0);
+    const at = (time: number) => ({ ...WORLD.date, time });
+    wire.send({ ...openTalk(), world: { ...WORLD, date: at(1430) } }); await wire.until('talk.reply', wire.inbox.length);
+    wire.send({ type: 'talk.say', npc: 'Abigail', text: '今天下午三点海边见？', date: at(1430) }); await wire.until('talk.reply', wire.inbox.length);
+    const from = wire.inbox.length;
+    wire.send({ type: 'talk.close', npc: 'Abigail' }); await wire.until('day.meetings', from);
+    const left = arrived === 1800 ? 1930 : 1730;
+    const ended = { type: 'meet.ended', npc: 'Abigail', place: '海滩', time: 1740, ...(arrived === undefined ? {} : { arrived }), left, met: true, date: at(left) };
+    wire.send(ended); await wire.until('ack', wire.inbox.length);
+    const note = h.logs.find(line => line.startsWith('阿比盖尔记下了：'))!;
+    assert.match(note, /约好 15:00 在海滩见面/);
+    if (arrived !== undefined && arrived > 1500) assert.match(note, new RegExp(`我 ${Math.floor(arrived / 100)}:${String(arrived % 100).padStart(2, '0')} 才到`));
+    else assert.doesNotMatch(note, /才到/, 'an early arrival or an old client without observations must not invent lateness');
+    assert.doesNotMatch(note, /17:40 才到/, 'the estimate is not an observation');
+    wire.send({ ...openTalk(), world: { ...WORLD, date: at(left) } }); await wire.until('talk.reply', wire.inbox.length);
+    assert.ok(h.fake.sent.at(-1)![0]!.content.includes(note.slice('阿比盖尔记下了：'.length)), 'the next prompt must use the same observed fact');
+    wire.send({ type: 'talk.close', npc: 'Abigail' }); await wire.until('ack', wire.inbox.length);
+    await wire.close();
+  }
 });
