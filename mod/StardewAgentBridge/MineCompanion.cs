@@ -54,6 +54,8 @@ internal sealed partial class ModEntry
     /// <summary>A trip with the player, kept on the appointment.</summary>
     private sealed class Trip
     {
+        // Dynamic dungeon locations are no longer searched by name once the player leaves them.
+        public NPC? Actor;
         /// <summary>Went in with the player at least once; it is the player's company until it comes out.</summary>
         public bool Joined;
         public bool Following;
@@ -122,7 +124,7 @@ internal sealed partial class ModEntry
                 m.Reported = true;
                 this.Monitor.Log($"{m.Npc} 一直没能出门，这次不去{m.Place}了。", LogLevel.Info);
             }
-            else if (Game1.timeOfDay >= m.Depart && (unseen || Game1.timeOfDay >= m.Time))
+            else if (Game1.timeOfDay >= m.Depart && unseen)
             {
                 npc.controller = null;
                 npc.queuedSchedulePaths.Clear();
@@ -148,7 +150,7 @@ internal sealed partial class ModEntry
             return;
         foreach (Meeting m in this.meetings.Values.Where(m => m.Dungeon && m.Applied && !m.Reported))
         {
-            if (Game1.getCharacterFromName(m.Npc) is not NPC npc)
+            if ((m.Trip.Actor ?? Game1.getCharacterFromName(m.Npc)) is not NPC npc)
                 continue;
             bool inside = InDungeon(m.Place, e.NewLocation);
             if (!m.Trip.Following)
@@ -190,6 +192,7 @@ internal sealed partial class ModEntry
     /// <summary>Kept by a held controller, so its schedule only queues meanwhile (as on the farm).</summary>
     private void HoldCompanion(Meeting m, NPC npc, GameLocation location)
     {
+        m.Trip.Actor = npc;
         m.Trip.Hold = new ApproachController(new Stack<Point>(new[] { npc.TilePoint }), location, npc, -1) { Hold = true };
         npc.temporaryController = m.Trip.Hold;
         npc.speed = CompanionSpeed;
@@ -233,7 +236,7 @@ internal sealed partial class ModEntry
                 this.GreetAtMeeting(m, waiting);
             if (!m.Trip.Following && !m.Trip.HomeBound)
                 continue;
-            if ((Game1.currentLocation?.getCharacterFromName(m.Npc) ?? Game1.getCharacterFromName(m.Npc)) is not NPC npc)
+            if ((m.Trip.Actor ?? Game1.currentLocation?.getCharacterFromName(m.Npc) ?? Game1.getCharacterFromName(m.Npc)) is not NPC npc)
                 continue;
             if (m.Trip.HomeBound)
             {
@@ -355,16 +358,29 @@ internal sealed partial class ModEntry
         npc.faceGeneralDirection(target.getStandingPosition());
         location.playSound("swordswipe");
         int damage = Math.Max(1, (int)Math.Ceiling(target.MaxHealth * FightShare));
+        uint killedBefore = Game1.player.stats.MonstersKilled;
         location.damageMonster(target.GetBoundingBox(), damage, damage + damage / 4, isBomb: false, knockBackModifier: 1f, addedPrecision: 0,
             critChance: 0f, critMultiplier: 1f, triggerMonsterInvincibleTimer: true, Game1.player, isProjectile: true);
-        if (target.Health <= 0)
-            m.Trip.Kills++;
+        // Vanilla can hit several overlapping monsters; count every kill credited to the player.
+        m.Trip.Kills += (int)(Game1.player.stats.MonstersKilled - killedBefore);
     }
 
-    /// <summary>
-    /// Health hit zero this tick; vanilla would knock the player out next tick. Instead the NPC carries them out of the
-    /// dungeon: nothing is lost, and they wake with what vanilla leaves.
-    /// </summary>
+    /// <summary>Damage from a later update handler must be caught before vanilla checks death next frame.</summary>
+    private void RescueBeforeUpdate()
+    {
+        if (!Context.IsWorldReady || Game1.player.health > 0 || Game1.killScreen)
+            return;
+        foreach (Meeting m in this.meetings.Values)
+        {
+            if (m.Trip is { Following: true, Rescuing: false, Actor: NPC npc } && npc.currentLocation == Game1.currentLocation)
+            {
+                this.Rescue(m, npc);
+                return;
+            }
+        }
+    }
+
+    /// <summary>Carry the player out before vanilla checks death, without losing money or items.</summary>
     private void Rescue(Meeting m, NPC npc)
     {
         m.Trip.Rescuing = m.Trip.Rescued = true;
@@ -393,6 +409,7 @@ internal sealed partial class ModEntry
         trip.Hold = null;
         Game1.warpCharacter(npc, outside, tile);
         npc.Halt();
+        npc.speed = 2;
         npc.farmerPassesThrough = false;
         if (m.Destroys is bool destroys)
             npc.willDestroyObjectsUnderfoot = destroys;
@@ -468,6 +485,8 @@ internal sealed partial class ModEntry
         m.Trip.HomeBound = false;
         if (npc.temporaryController is not null)
             npc.temporaryController = null;
+        m.Trip.Hold = null;
+        npc.speed = 2;
         npc.queuedSchedulePaths.Clear();
         FarmHouse home = Utility.getHomeOfFarmer(Game1.player);
         Game1.warpCharacter(npc, home, Utility.PointToVector2(home.getKitchenStandingSpot()));
@@ -484,7 +503,7 @@ internal sealed partial class ModEntry
             return;
         foreach (Meeting m in this.meetings.Values.Where(m => m.Trip.Following))
         {
-            if (Game1.getCharacterFromName(m.Npc) is not NPC npc)
+            if ((m.Trip.Actor ?? Game1.getCharacterFromName(m.Npc)) is not NPC npc)
                 continue;
             m.Trip.Following = false;
             if (npc.temporaryController == m.Trip.Hold)

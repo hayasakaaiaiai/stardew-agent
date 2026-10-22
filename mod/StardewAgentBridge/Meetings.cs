@@ -223,9 +223,10 @@ internal sealed partial class ModEntry
             {
                 // Spouses' days are vanilla's own; they are fetched from home unseen instead (MineCompanion.cs).
                 m.Spot = MeetPlaces[m.Place][taken];
+                // Agreed today: out of the door at the next tick (Windows sets spouses off half an hour before).
                 if (m.SameDay)
-                    m.Time = Math.Max(m.Time, SoonestMeeting(Game1.timeOfDay, Game1.timeOfDay, SpouseHeadStartMinutes).Arrive);
-                m.Depart = MeetingDeparture(m.Time, SpouseHeadStartMinutes, Game1.timeOfDay);
+                    m.Time = Math.Max(m.Time, SoonestMeeting(Game1.timeOfDay, Game1.timeOfDay, SpouseHeadStartMinutes - MeetEarlyMinutes).Arrive);
+                m.Depart = Math.Max(Utility.ModifyTime(m.Time, -SpouseHeadStartMinutes), NextTick(Game1.timeOfDay));
             }
             else if (spouse)
             {
@@ -343,7 +344,8 @@ internal sealed partial class ModEntry
     private void CallOffMeeting(Meeting m)
     {
         m.CalledOff = true;
-        if (!m.Applied || m.Reported || Game1.getCharacterFromName(m.Npc) is not NPC npc)
+        // Underground it is found by the trip, not by name (MineCompanion.cs Trip.Actor).
+        if (!m.Applied || m.Reported || (m.Trip.Actor ?? Game1.getCharacterFromName(m.Npc)) is not NPC npc)
         {
             m.Failed |= !m.Applied;
             m.Reported = true;

@@ -25,6 +25,8 @@ test('an appointment agreed for today is found in the conversation, right away w
   assert.deepEqual(today(1000, '一会儿陪我去海边捡贝壳好吗？', '海边……好呀。不过我得先去给贾斯和文森特上课，十一点开始。要不……早点去，捡完我再去？'),
     { time: 1000, place: '海滩', soon: true }, 'the hour of its own lesson is not the time to meet');
   assert.deepEqual(today(1000, '现在陪我去山上湖边看看吧？', '……好。湖水今天应该很平。'), { time: 1000, place: '山上湖边', soon: true });
+  assert.deepEqual(today(1000, '现在下矿吧？', '好啊，走吧。'), { time: 1000, place: '矿洞', soon: true }, 'asked along as in the nightly check');
+  assert.equal(today(1000, '我现在自己去下矿吧？', '好啊，加油。'), null);
   assert.deepEqual(today(1000, '下午三点一起去海边拍照？', '*唉*，总算有人说了句像样的话。那三点沙滩见，别迟到了。'), { time: 1500, place: '海滩', soon: false });
   // Asked, hesitated, then went along in the next line.
   assert.deepEqual(today(1100, '陪我下矿吧？', '下矿？……上次在山洞里被石蟹划的伤还没好利索。*唉* 我这种人还是待在地面上比较合适。', '那就现在出发！',

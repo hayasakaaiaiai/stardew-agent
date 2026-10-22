@@ -50,17 +50,24 @@ function invited(text: string): boolean {
   return farmHelp || farmVisit || dungeonTrip || /(?:一起|见面?|碰面|等(?:你|我|着)|约(?:好|定)?)/.test(text);
 }
 
+/** "明天上午下矿吧？" asks along too, unless the line says who goes alone (Windows mine-companion acceptance). */
+function asksAlong(quoted: readonly Quote[], placeWords: RegExp): boolean {
+  return quoted.some(quote => placeWords.test(quote.text) && /(?:下矿|探险)(?:吧|？|\?)/.test(quote.text)
+    && !/[我你]|自己|独自|单独|一个人/.test(quote.text));
+}
+
 /** Both parties must show intent, and every quoted concrete time must agree with the proposed ten-minute slot. */
 export function quotedAgreement(quoted: readonly Quote[], all: readonly Quote[], placeWords: RegExp, time: number): boolean {
   const text = quoted.map(quote => quote.text).join('\n');
-  if (quoted.length < 2 || REFUSED.test(text) || CONDITIONAL.test(text) || /后天|下周|下个/.test(text) || !invited(text)) return false;
+  const dungeonQuestion = /矿洞|矿井|矿坑|下矿|矿里|骷髅洞|火山/.test(text) && asksAlong(quoted, placeWords);
+  if (quoted.length < 2 || REFUSED.test(text) || CONDITIONAL.test(text) || /后天|下周|下个/.test(text) || !invited(text) && !dungeonQuestion) return false;
   const concreteTimes = quoted.flatMap(quote => times(quote.text, false));
   const evidenceTimes = concreteTimes.length ? concreteTimes : quoted.flatMap(quote => times(quote.text));
   if (!evidenceTimes.length || evidenceTimes.some(value => value !== time)) return false;
   if (quoted.some(quote => !times(quote.text, false).length && PERIODS.some(([words, , start, end]) => words.test(quote.text) && (time < start || time >= end)))) return false;
   const intent = (quote: Quote) => YES.test(quote.text)
     || /(?:那就|到时|我们).{0,10}(?:见|碰面)|我(?:确定|一定|准时|会).{0,8}(?:到|去|来|参加)/.test(quote.text)
-    || TOMORROW.test(quote.text) && placeWords.test(quote.text) && times(quote.text).length > 0 && /一起|见|去|来|等|陪/.test(quote.text);
+    || TOMORROW.test(quote.text) && placeWords.test(quote.text) && times(quote.text).length > 0 && /一起|见|去|来|等|陪|带|跟|下矿|探险/.test(quote.text);
   if (!quoted.some(quote => quote.speaker === '玩家' && intent(quote)) || !quoted.some(quote => quote.speaker === 'NPC' && intent(quote))) return false;
   const end = Math.max(...quoted.map(quote => all.findIndex(source => source.id === quote.id)));
   return !all.slice(end + 1).some(quote => REFUSED.test(quote.text)
@@ -108,11 +115,11 @@ function agreedIn(window: readonly TimedQuote[], after: readonly TimedQuote[], p
   const text = window.map(quote => quote.text).join('\n');
   const named = Object.keys(places).filter(place => places[place]!.test(text));
   if (named.length !== 1 || REFUSED.test(text) || DECLINED.test(text) || PUT_OFF.test(text) || CONDITIONAL.test(text) || ANOTHER_DAY.test(text)
-    || !invited(text) && !ASKED.test(text)) return null;
+    || !invited(text) && !ASKED.test(text) && !(/矿洞|矿井|矿坑|下矿|矿里|骷髅洞|火山/.test(text) && asksAlong(window, places[named[0]!]!))) return null;
   const place = named[0]!, words = places[place]!;
   // The player's own invitation counts; an NPC naming the place and "去" may be sending the player alone.
   const player = window.filter(quote => quote.speaker === '玩家');
-  if (player.some(quote => PAST.test(quote.text)) || !player.some(quote => agrees(quote) || words.test(quote.text) && /一起|见|去|来|等|陪|走/.test(quote.text))
+  if (player.some(quote => PAST.test(quote.text)) || !player.some(quote => agrees(quote) || words.test(quote.text) && /一起|见|去|来|等|陪|带|跟|走|下矿|探险/.test(quote.text))
     || !window.some(quote => quote.speaker === 'NPC' && (agrees(quote)
       || words.test(quote.text) && /(?:一起|要不要|陪你|带你|我们|咱们).{0,10}(?:去|来|走)/.test(quote.text)))) return null;
   // The player taking it back needs no place: "还是算了，你忙吧".

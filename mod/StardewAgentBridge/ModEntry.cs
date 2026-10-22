@@ -82,6 +82,7 @@ internal sealed partial class ModEntry : Mod
         helper.Events.GameLoop.TimeChanged += (_, _) => this.OnTimeChanged();
         // Dungeon levels are dropped overnight with whoever is in them (MineCompanion.cs).
         helper.Events.GameLoop.DayEnding += (_, _) => this.ReleaseCompanions();
+        helper.Events.GameLoop.UpdateTicking += (_, _) => this.RescueBeforeUpdate();
         helper.Events.Player.Warped += (_, e) => this.OnWarped(e);
         helper.Events.GameLoop.UpdateTicked += this.OnUpdateTicked;
         helper.Events.Display.MenuChanged += this.OnMenuChanged;

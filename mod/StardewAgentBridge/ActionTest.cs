@@ -73,6 +73,7 @@ internal sealed partial class ModEntry
                     var status = friendship.GetType().GetProperty("Status")!;
                     status.SetValue(friendship, Enum.Parse(status.PropertyType, Text("relation")));
                 }
+                friendship.RoommateMarriage = Flag("roommate");
                 Game1.player.friendshipData[id] = friendship;
                 this.Helper.Reflection.GetProperty<Dictionary<int, SchedulePathDescription>>(npc, "Schedule").SetValue(new());
                 if (!Flag("noSchedule"))
@@ -134,6 +135,7 @@ internal sealed partial class ModEntry
 
     private void TickActionTestPending()
     {
+        this.TickMineTestPending();
         this.TickFarmTestPending();
         if (this.worldTestPending == "action-menu-closed")
         {

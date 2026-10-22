@@ -12,7 +12,7 @@ export interface Host { rpc(operation: string, args?: Record<string, unknown>): 
   check(label: string, passed: unknown, detail?: unknown): void;
   say(npc: string, text: string, label: string): Promise<State>; close(): Promise<void>;
   packets(type: string, from?: number): Record<string, unknown>[]; wireCount(): number;
-  latestSystem(): string; seedNight(enabled: boolean, farm?: boolean): void;
+  latestSystem(): string; seedNight(enabled: boolean, farm?: boolean, mine?: string): void;
   meetingEntries(): Promise<number>;
 }
 const npc = (state: State, id = 'Abigail') => state.npcs!.find(npc => npc.id === id)!;

@@ -27,6 +27,9 @@ test('asking for company into a dungeon counts as plainly as “一起”, and n
   const keep = (place: string, player: string, npc: string) => checkMeet(meetDraft({ time: '10:00', place, sources: ['t1', 't2'] }), said(player, npc));
   assert.deepEqual(keep('矿洞', '明天上午陪我下矿吧？', '好啊，明天上午我去找你。'), { time: 1000, place: '矿洞' });
   assert.deepEqual(keep('骷髅洞穴', '明天上午陪我去沙漠的骷髅洞穴吧？', '好。明天上午我带上家伙。'), { time: 1000, place: '骷髅洞穴' });
+  assert.deepEqual(keep('矿洞', '明天上午带我下矿吧？', '好啊，明天上午我去找你。'), { time: 1000, place: '矿洞' });
+  assert.deepEqual(keep('矿洞', '明天上午跟我下矿吧？', '好啊，明天上午我去找你。'), { time: 1000, place: '矿洞' });
+  assert.deepEqual(keep('火山', '明天上午去姜岛的火山探险？', '好啊，说定了。'), { time: 1000, place: '火山' });
   for (const [player, npc] of [
     ['我明天上午去下矿。', '好啊，加油。'],
     ['明天上午陪我下矿吧？', '矿里太黑了，我明天不去了。'],
@@ -35,6 +38,27 @@ test('asking for company into a dungeon counts as plainly as “一起”, and n
     ['后天上午陪我下矿吧？', '好啊。'],
     ['明天上午陪我下矿吧？', '明天下午我去找你。'],
   ]) assert.equal(keep('矿洞', player!, npc!), null, `${player} / ${npc}`);
+});
+
+test('dungeon invitations still require both parties, an unconditional agreement and matching time', () => {
+  const quotes = (player: string, npc: string) => [{ id: 't1', speaker: '玩家' as const, text: player }, { id: 't2', speaker: 'NPC' as const, text: npc }];
+  const proposal = (sources = ['t1', 't2']) => meetDraft({ time: '09:00', place: '矿洞', sources });
+  assert.deepEqual(checkMeet(proposal(), quotes('明天上午下矿吧？', '好啊，明天上午矿洞门口见。')), { time: 1000, place: '矿洞' });
+  for (const [player, npc] of [
+    ['明天上午陪我去矿洞吧？', '不行，我明天不去矿洞。'],
+    ['如果明天上午有空，陪我去矿洞吧。', '好啊。'],
+    ['明天上午陪我去矿洞吧？', '我还没决定。'],
+    ['明天陪我去矿洞吧，几点还没定。', '好啊。'],
+    ['明天上午十点一起下矿吧？', '好啊，十点矿洞见。'],
+    ['明天上午一起下矿吧？', '好啊，明天下午矿洞见。'],
+    ['明天上午我自己去矿洞探险？', '好啊，加油。'],
+    ['明天上午我去矿洞探险吧？', '好啊，加油。'],
+    ['明天上午一个人去矿洞探险吧？', '好啊。'],
+    ['你明天上午自己下矿吧？', '好啊。'],
+  ]) assert.equal(checkMeet(proposal(), quotes(player!, npc!)), null, `${player} / ${npc}`);
+  const agreed = quotes('明天上午一起下矿吧？', '好啊，明天上午矿洞见。');
+  assert.equal(checkMeet(proposal(['t1']), agreed), null);
+  assert.equal(checkMeet(proposal(), [...agreed, { id: 't3', speaker: '玩家', text: '明天我不去矿洞了。' }]), null);
 });
 
 test('a companion is told where it is and what it did; one who does not fight is told so', () => {
@@ -87,7 +111,7 @@ test('a mine appointment reaches the Mod, the talk underground knows the trip, a
   const originalChat = h.fake.model.chat.bind(h.fake.model);
   h.fake.model.chat = async (...args: Parameters<typeof originalChat>) => {
     const result = await originalChat(...args);
-    return { ...result, content: JSON.stringify({ ...JSON.parse(result.content), reply: '好啊，明天上午矿洞门口见。' }) };
+    return { ...result, content: JSON.stringify({ ...JSON.parse(result.content), reply: '好啊，明天上午我陪你下矿，矿洞门口见。' }) };
   };
   const server = await h.start(nightlyConsolidator({ roster: h.roster, model: nightly }));
   const wire = await connect(server);
