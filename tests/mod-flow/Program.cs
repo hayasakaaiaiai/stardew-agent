@@ -547,6 +547,68 @@ Test("appointments leave ninety minutes later but by 22:00, and set off early en
     Check(Depart(1400, 120, 1235) == 1240 && Depart(1400, 120, 1240) == 1250, "Set off in the past or at a tick already checked.");
 });
 
+Test("an appointment agreed today may be from 6:00, is put off to when the NPC can get there, and stays given up", () =>
+{
+    object mod = BubbleMod();
+    Set(mod, "meetings", Activator.CreateInstance(modType.GetField("meetings", Fields)!.FieldType, StringComparer.OrdinalIgnoreCase)!);
+    var meetings = (System.Collections.IDictionary)Get(mod, "meetings")!;
+    JsonDocument Packet(params object[] rows) => JsonDocument.Parse(JsonSerializer.Serialize(new { type = "day.meetings", lineageId = "farm",
+        loadNonce = "current", seq = 0, meetings = rows }));
+    using (JsonDocument packet = Packet(new { npc = "abigail", time = 640, place = "矿洞", sameDay = true }, new { npc = "sam", time = 640, place = "海滩" }))
+        Invoke(mod, "HandleMeetings", "day.meetings", packet.RootElement);
+    Check(meetings.Contains("Abigail") && !meetings.Contains("Sam"), "Only one agreed today may be before 8:00 (src/bridge/memory.ts wire).");
+    object abigail = meetings["Abigail"]!;
+    Check((bool)abigail.GetType().GetProperty("SameDay")!.GetValue(abigail)!, "The appointment lost that it was agreed today.");
+    abigail.GetType().GetProperty("Time")!.SetValue(abigail, 1150);
+    Check((int)abigail.GetType().GetProperty("Leave")!.GetValue(abigail)! == 1320, "Leaving was not put off with the appointment.");
+    (int, int) Soonest(int now, int walkEnds, int travel) => ((int, int))modType.GetMethod("SoonestMeeting", BindingFlags.Static | BindingFlags.NonPublic)!
+        .Invoke(null, new object[] { now, walkEnds, travel })!;
+    Check(Soonest(1000, 1000, 90) == (1010, 1150), "Not setting off at the next tick, or not arriving ten minutes early.");
+    Check(Soonest(1000, 1035, 30) == (1040, 1120), "Set off before the walk it was on was over.");
+    Check(Soonest(640, 640, 20) == (650, 800), "Came before 8:00.");
+    Set(abigail, "Failed", true);
+    using (JsonDocument later = Packet(new { npc = "abigail", time = 640, place = "矿洞", sameDay = true }, new { npc = "leah", time = 1500, place = "海滩", sameDay = true }))
+        Invoke(mod, "HandleMeetings", "day.meetings", later.RootElement);
+    Check(meetings["Abigail"] == abigail && meetings.Contains("Leah"), "A resend tried again one given up, or dropped a new one.");
+});
+
+Test("a called-off appointment is marked for undoing, never added, and one not yet in a schedule is simply given up", () =>
+{
+    object mod = BubbleMod();
+    Set(mod, "meetings", Activator.CreateInstance(modType.GetField("meetings", Fields)!.FieldType, StringComparer.OrdinalIgnoreCase)!);
+    var meetings = (System.Collections.IDictionary)Get(mod, "meetings")!;
+    JsonDocument Packet(params object[] rows) => JsonDocument.Parse(JsonSerializer.Serialize(new { type = "day.meetings", lineageId = "farm",
+        loadNonce = "current", seq = 0, meetings = rows }));
+    using (JsonDocument packet = Packet(new { npc = "abigail", time = 1000, place = "矿洞" }, new { npc = "leah", time = 1400, place = "海滩" }))
+        Invoke(mod, "HandleMeetings", "day.meetings", packet.RootElement);
+    object abigail = meetings["Abigail"]!, leah = meetings["Leah"]!;
+    Set(abigail, "Applied", true);
+    using (JsonDocument later = Packet(new { npc = "abigail", time = 1000, place = "矿洞", calledOff = true },
+        new { npc = "leah", time = 1400, place = "海滩", calledOff = true }, new { npc = "sam", time = 1500, place = "海滩", calledOff = true }))
+        Invoke(mod, "HandleMeetings", "day.meetings", later.RootElement);
+    Check(meetings["Abigail"] == abigail && (bool)Get(abigail, "CallOff")!, "One under way was not marked to be undone (src/bridge/memory.ts wire).");
+    Check(!meetings.Contains("Leah") && !meetings.Contains("Sam"), "One not yet in a schedule, or one never sent, came back called off.");
+    Check(((System.Collections.IDictionary)Get(abigail, "Replaced")!).Count == 0, "Nothing was replaced, so nothing should be put back.");
+    Set(leah, "CallOff", true);
+    Invoke(mod, "CallOffMeeting", leah);
+    Check((bool)Get(leah, "Failed")! && (bool)Get(leah, "Reported")! && (bool)Get(leah, "CalledOff")!, "One never applied could still be applied or reported.");
+});
+
+Test("today's wait follows observed arrival, while tomorrow's keeps the agreed deadline and neither passes 22:00", () =>
+{
+    Type meetingType = modType.GetNestedType("Meeting", BindingFlags.NonPublic)!;
+    object Meeting(bool sameDay) => Activator.CreateInstance(meetingType, "Abigail", 1740, "海滩", sameDay)!;
+    int Leave(object m) => (int)meetingType.GetProperty("Leave")!.GetValue(m)!;
+    object today = Meeting(true), tomorrow = Meeting(false);
+    Check(Leave(today) == 1910, "Before arrival the estimate is still needed for planning.");
+    Set(today, "ArrivedAt", 1600); Set(tomorrow, "ArrivedAt", 1600);
+    Check(Leave(today) == 1730 && Leave(tomorrow) == 1910, "Observed arrival did not control only today's wait.");
+    Set(today, "ArrivedAt", 1800);
+    Check(Leave(today) == 1930, "A late arrival lost part of its wait.");
+    Set(today, "ArrivedAt", 2150);
+    Check(Leave(today) == 2200, "An observed arrival kept the NPC after 22:00.");
+});
+
 Test("farm chores are worded like the backend, and the farm is a place an appointment can be at", () =>
 {
     Type doneType = modAssembly.GetType("StardewAgentBridge.FarmHelp+Done", throwOnError: true)!;

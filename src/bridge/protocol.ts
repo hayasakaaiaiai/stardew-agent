@@ -113,7 +113,7 @@ export type ModMessage =
   /** What happened at a festival the player just left (docs/festival-memories.md); game names. Reliable, acknowledged. */
   | ({ type: 'festival.ended' } & FestivalEnded & Envelope)
   /** An appointment the NPC went to is over (docs/npc-meetings.md); `left` is HHMM. Reliable, acknowledged. */
-  | ({ type: 'meet.ended'; npc: string; place: string; time: number; left: number; met: boolean; helped?: Helped; mine?: MineTrip; date: GameDate } & Envelope);
+  | ({ type: 'meet.ended'; npc: string; place: string; time: number; arrived?: number; left: number; met: boolean; helped?: Helped; mine?: MineTrip; date: GameDate } & Envelope);
 
 export interface FestivalEnded {
   festival: Festival;
@@ -147,8 +147,13 @@ export type BackendMessage =
   | ({ type: 'day.bubbles'; npcs: Record<string, Bubble[]> } & Envelope)
   /** NPCs who walk over to the player today, by id, with the fewest hearts each needs (docs/npc-approach.md); seq is 0. */
   | ({ type: 'day.approach'; npcs: Record<string, number> } & Envelope)
-  /** Today's appointments with the player, by NPC id; HHMM and a place the Mod knows (docs/npc-meetings.md); seq is 0. */
-  | ({ type: 'day.meetings'; meetings: { npc: string; time: number; place: string }[] } & Envelope)
+  /**
+   * Today's appointments with the player, by NPC id; HHMM and a place the Mod knows (docs/npc-meetings.md); seq is 0.
+   * `sameDay` ones were agreed today and may come late; resent when a conversation settles one
+   * (docs/npc-same-day-meetings.md). `calledOff` ones were taken back, or the NPC sent home, in a later conversation
+   * (docs/npc-call-off.md).
+   */
+  | ({ type: 'day.meetings'; meetings: { npc: string; time: number; place: string; sameDay?: true; calledOff?: true }[] } & Envelope)
   /** At most one letter for the mailbox this morning (docs/npc-mail.md); seq is 0. */
   | ({ type: 'day.letters'; letters: DeliveredLetter[] } & Envelope)
   | ({ type: 'talk.delta'; npc: string; text: string } & Envelope)
@@ -292,10 +297,11 @@ export function parseModMessage(raw: string): ModMessage {
       envelope();
       text('npc', 50);
       text('place', 20);
-      for (const key of ['time', 'left']) {
+      for (const key of ['time', 'left', ...(data.arrived === undefined ? [] : ['arrived'])]) {
         const time = int(data[key], key);
         if (time < 0 || time > 2600 || time % 100 > 59) fail(`${key} is invalid`);
       }
+      if (data.arrived !== undefined && (data.arrived as number) > (data.left as number)) fail('arrived is after left');
       if (typeof data.met !== 'boolean') fail('met must be a boolean');
       helped(data.helped);
       mine(data.mine);

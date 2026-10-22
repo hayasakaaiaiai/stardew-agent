@@ -3,7 +3,7 @@ import type { State } from './test-game-world.ts';
 import type { Host } from './game-actions.ts';
 
 interface Actor { map: string; x: number; y: number; speed: number; pass: boolean; destroys: boolean; temporary: boolean; controller: boolean }
-interface Trip { Npc: string; Place: string; Companion: boolean; Time: number; Depart: number; Leave: number; Arrived: boolean; Met: boolean; Reported: boolean;
+export interface Trip { Npc: string; Place: string; Companion: boolean; Time: number; Depart: number; Leave: number; Arrived: boolean; Met: boolean; Reported: boolean;
   Joined: boolean; Following: boolean; HomeBound: boolean; Floor: number; Deepest: number; Kills: number; Rescued: boolean; Rescuing: boolean; Bye: number; actor: Actor }
 export interface MineState { player: { health: number; maxHealth: number; Money: number; killScreen: boolean; kills: number; guild: number; experience: number; unconscious: number; items: unknown[] };
   meetings: Trip[]; targets: { Health: number; MaxHealth: number }[]; actualKills: number; guildDelta: number; experienceDelta: number; debris: number; travel: { X: number; Y: number }[];

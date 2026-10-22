@@ -289,7 +289,7 @@ internal sealed partial class ModEntry
                     this.SocialActor(Text("npc")).ignoreScheduleToday = Flag("ignore", true); this.WorldComplete(); break;
                 case "talk-open":
                     this.CloseSocialMenu(); NPC speaker = this.SocialActor(Text("npc"));
-                    Game1.player.friendshipData[speaker.Name] = new Friendship(2000);
+                    if (!Flag("keepFriendship")) Game1.player.friendshipData[speaker.Name] = new Friendship(2000);
                     this.StartTalk(speaker); this.WorldWait("talk-open"); break;
                 case "talk-say":
                     if (!this.MemoryTestHasReply()) throw new InvalidOperationException("还没有可继续的原版对话。");

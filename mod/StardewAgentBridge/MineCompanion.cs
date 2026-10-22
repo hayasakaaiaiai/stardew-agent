@@ -131,7 +131,7 @@ internal sealed partial class ModEntry
                 Game1.warpCharacter(npc, map, new Vector2(x, y));
                 npc.faceDirection(facing);
                 this.HoldCompanion(m, npc, npc.currentLocation);
-                m.Arrived = true;
+                this.RecordArrival(m, npc);
                 this.Monitor.Log($"{m.Npc} 从家里出发，到{m.Place}门口了。", LogLevel.Info);
             }
             return;
@@ -443,10 +443,22 @@ internal sealed partial class ModEntry
     {
         if (npc.Schedule is not { } schedule)
             return;
+        if (m.CalledOff)
+        {
+            this.RestoreSchedule(m, npc);
+            return;
+        }
         int now = Game1.timeOfDay;
-        ScheduleStop target = now < m.Leave ? m.Back : StopBefore(npc, now, inclusive: true);
+        ScheduleStop target = now < m.Leave ? m.Back : OriginalStop(m, now);
         if (now < m.Leave)
-            schedule.Remove(m.Leave);
+            schedule.Remove(m.ReturnAt);
+        this.RouteTo(m, npc, target);
+    }
+
+    /// <summary>From where it stands to a stop of its schedule through vanilla's schedule pathing, setting off now.</summary>
+    private void RouteTo(Meeting m, NPC npc, ScheduleStop target)
+    {
+        int now = Game1.timeOfDay;
         try
         {
             SchedulePathDescription route = npc.pathfindToNextScheduleLocation(npc.dayScheduleName.Value ?? "meeting", npc.currentLocation.NameOrUniqueName,
