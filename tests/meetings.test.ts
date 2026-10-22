@@ -69,16 +69,33 @@ const nightly = {
   async chat(messages: ChatMessage[]): Promise<Completion> {
     const abigail = messages[1]!.content.includes('- 阿比盖尔，');
     const output = { memories: [{ sources: ['t2'], importance: 3 }], retire: [], impression: '', plan: '明天下午海边钓鱼', bubbles: [], letter: '',
-      gift: false, share: '', meet: abigail ? { time: '14:00', place: '海滩', sources: ['t2'] } : { time: '14:00', place: '海滩', sources: ['t1'] } };
+      gift: false, share: '', meet: abigail ? { time: '14:00', place: '海滩', sources: ['t2', 't3'] } : { time: '14:00', place: '海滩', sources: ['t1'] } };
     return { content: JSON.stringify(output), reasoning: '', finishReason: 'stop', usage: null, timing: { firstReasoningMs: null, firstContentMs: 1, totalMs: 1 } };
   },
 } as unknown as ModelClient;
 
 type Meetings = Extract<BackendMessage, { type: 'day.meetings' }>;
 
+test('inherited place names are acknowledged without recording a fictional meeting', async t => {
+  const h = await harness(t), server = await h.start(), wire = await connect(server);
+  try {
+    for (const place of ['constructor', 'toString', '__proto__', '你家']) {
+      const cursor = wire.inbox.length;
+      wire.send({ type: 'meet.ended', npc: 'Abigail', place, time: 1400, left: 1530, met: false, date: { ...WORLD.date, time: 1530 } });
+      await wire.until('ack', cursor);
+    }
+    assert.equal(h.logs.filter(line => line.includes('记下了：约好')).length, 0);
+  } finally { await wire.close(); }
+});
+
 test('an appointment reaches the Mod and the talk, and how it went is remembered with the day', { timeout: 15000 }, async t => {
   const h = await harness(t);
-  const server = await h.start(nightlyConsolidator({ roster: h.roster, model: nightly }));
+  const agreement = { async chat(messages: ChatMessage[]): Promise<Completion> {
+    h.fake.sent.push(messages);
+    return { content: JSON.stringify({ reply: '好啊，那就明天下午海边见。', emotion: 'happy', options: ['一', '二', '三'], remember: [], mood: 0, end: false }),
+      reasoning: '', finishReason: 'stop', usage: null, timing: { firstReasoningMs: null, firstContentMs: 1, totalMs: 1 } };
+  } };
+  const server = await h.start(nightlyConsolidator({ roster: h.roster, model: nightly }), undefined, undefined, { model: agreement });
   let wire = await connect(server);
   for (const npc of ['Abigail', 'Sam']) {
     wire.send(openTalk(1, npc)); await wire.until('talk.reply');

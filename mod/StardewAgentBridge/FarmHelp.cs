@@ -26,6 +26,15 @@ internal static class FarmHelp
 
     public readonly record struct Done(int Watered, int Harvested, int Fed, int Ponds);
 
+    /// <summary>Vanilla warps spouses onto the porch, but NPC pathing cannot cross the farmhouse footprint.</summary>
+    public static Point VisitorStand(Farm farm)
+    {
+        Point stand = Utility.getHomeOfFarmer(Game1.player).getPorchStandingSpot();
+        if (farm.GetMainFarmHouse() is Building home && stand.X >= home.tileX.Value && stand.X < home.tileX.Value + home.tilesWide.Value)
+            stand.Y = Math.Max(stand.Y, home.tileY.Value + home.tilesHigh.Value);
+        return stand;
+    }
+
     /// <summary>Hands what a harvest yields to the helper chests, like a Junimo hands it to its hut.</summary>
     private sealed class Harvester : JunimoHarvester
     {
@@ -104,7 +113,7 @@ internal static class FarmHelp
         Harvester harvester = new(farm, item => Store(farm, item));
         foreach ((Vector2 tile, TerrainFeature feature) in farm.terrainFeatures.Pairs.ToList())
         {
-            if (feature is not HoeDirt dirt || dirt.crop is not Crop crop || !dirt.readyForHarvest() || crop.forageCrop.Value
+            if (feature is not HoeDirt dirt || dirt.crop is not Crop crop || !dirt.readyForHarvest() || crop.forageCrop.Value || crop.isWildSeedCrop()
                 || ItemRegistry.GetData(crop.indexOfHarvest.Value)?.Category == FlowerCategory)
                 continue;
             if (!HasRoom(farm, RoomPerHarvest))
@@ -147,7 +156,7 @@ internal static class FarmHelp
     private static Vector2? FreeTile(Farm farm)
     {
         Point door = farm.GetMainFarmHouseEntry();
-        Point porch = Utility.getHomeOfFarmer(Game1.player).getPorchStandingSpot();
+        Point porch = VisitorStand(farm);
         for (int radius = 2; radius <= ChestSearchRadius; radius++)
         {
             for (int dx = -radius; dx <= radius; dx++)

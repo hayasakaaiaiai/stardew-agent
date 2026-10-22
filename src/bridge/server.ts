@@ -8,7 +8,7 @@ import { OPENING_LINE, runTurn, type Standing, type WorldState } from '../agent/
 import { meetingLine } from '../agent/meetings.ts';
 import { newsFor } from '../agent/news.ts';
 import { parseScene, type SceneLine, type SceneNews, SCENES_PER_DAY, SCENE_GAP_MINUTES, scenePrompt } from '../agent/scene.ts';
-import { nextStop, restOfDay, type ScheduleStop } from '../agent/schedule.ts';
+import { nextStop, restOfDay, scheduleReplies, type ScheduleStop } from '../agent/schedule.ts';
 import type { ChatModel } from '../services/model/client.ts';
 import type { ModelGateway } from '../services/model/gateway.ts';
 import type { Roster } from '../services/roster/index.ts';
@@ -42,6 +42,7 @@ export interface BridgeOptions {
 }
 
 interface OpenTalk { npcId: string; standing: Standing; world: WorldState; inPersonGifts: boolean }
+interface BackstageBudget { day: number; calls: number; joined: Set<string>; lastMinute: number }
 
 /** An NPC's schedule from the Mod's map of game names (docs/npc-schedules.md); none when the Mod sent none. */
 function scheduleOf(schedules: Schedules | undefined, id: string): ScheduleStop[] {
@@ -59,8 +60,6 @@ class Session {
   scenes = { day: 0, pairs: new Set<string>(), lastMinute: -1 };
   /** Calls on this game day and who has greeted the player, for docs/ambient-lines.md. */
   ambient = { day: 0, calls: 0, greeted: new Set<string>() };
-  /** Backstage scenes on this game day, everyone who had one, and the last hour that could start one (docs/scheduler.md §4.2). */
-  backstage = { day: 0, calls: 0, joined: new Set<string>(), lastMinute: -1 };
 }
 
 export class BridgeServer {
@@ -69,6 +68,8 @@ export class BridgeServer {
   private readonly memory: GameMemory;
   private readonly sessions = new Set<Session>();
   private readonly owners = new Map<string, Session>();
+  /** The same load keeps its backstage budget when its WebSocket reconnects. A new load gets a new GameSave. */
+  private readonly backstageBudgets = new WeakMap<GameSave, BackstageBudget>();
 
   private constructor(options: BridgeOptions, server: WebSocketServer, memory: GameMemory) {
     this.options = options; this.server = server; this.memory = memory;
@@ -199,8 +200,10 @@ export class BridgeServer {
     const { roster, backstageModel } = this.options;
     const day = absoluteDay(message.date);
     if (!backstageModel || !message.hearts || save.closed || day !== save.day || !backstageHour(message.date.time)) return;
-    if (session.backstage.day !== save.day) session.backstage = { day: save.day, calls: 0, joined: new Set(), lastMinute: -1 };
-    const budget = session.backstage;
+    const previous = this.backstageBudgets.get(save);
+    const budget: BackstageBudget = previous?.day === save.day ? previous
+      : { day: save.day, calls: 0, joined: new Set(), lastMinute: -1 };
+    this.backstageBudgets.set(save, budget);
     // A resent hour, or one older than the last, starts nothing: at most one scene per hour.
     const minute = gameMinutes(message.date);
     if (minute <= budget.lastMinute || budget.calls >= BACKSTAGE_PER_DAY) return;
@@ -214,10 +217,12 @@ export class BridgeServer {
       const gossip = await save.gossip(groups.flatMap(group => group.ids));
       const pick = pickBackstage(groups.map(group => ({ place: group.place,
         people: group.ids.map(id => ({ id, hearts: hearts[id] ?? 0, hasNews: (gossip[id]?.tellable.length ?? 0) > 0 })) })), budget.joined);
-      if (!pick || session.save !== save || budget.calls >= BACKSTAGE_PER_DAY || pick.ids.some(id => budget.joined.has(id))) return;
+      if (!pick || session.save !== save || save.closed || save.day !== day
+        || budget.calls >= BACKSTAGE_PER_DAY || pick.ids.some(id => budget.joined.has(id))) return;
       budget.calls++;
       for (const id of pick.ids) budget.joined.add(id);
       const festivals = await save.festivalsFor(pick.ids, minute);
+      if (session.save !== save || save.closed || save.day !== day) return;
       const people: BackstagePerson[] = pick.ids.map(id => {
         const next = nextStop(scheduleOf(message.schedules, id), message.date.time);
         return { id, news: gossip[id]?.tellable ?? [], festivals: festivals[id] ?? [], ...(next ? { next } : {}) };
@@ -313,7 +318,6 @@ export class BridgeServer {
       if (session.save !== previousSave) {
         session.scenes = { day: session.save.day, pairs: new Set(), lastMinute: -1 };
         session.ambient = { day: session.save.day, calls: 0, greeted: new Set() };
-        session.backstage = { day: session.save.day, calls: 0, joined: new Set(), lastMinute: -1 };
       }
       const previous = this.owners.get(message.lineageId);
       if (previous && previous !== session) {
@@ -343,7 +347,9 @@ export class BridgeServer {
       const meeting = meetingLine(await save.meeting(npcId), message.world.date.time, message.atMeeting === true, message.helped, message.mine);
       const talk: OpenTalk = { npcId, inPersonGifts: message.inPersonGifts !== false,
         standing: { hearts: message.hearts, relation: message.relation, seenEvents: new Set(message.seenEvents) },
-        world: { ...worldState(message.world, save.player, this.cardName), ...(schedule ? { schedule } : {}), ...(meeting ? { meeting } : {}) } };
+        world: { ...worldState(message.world, save.player, this.cardName),
+          ...(schedule ? { schedule, scheduleFacts: scheduleReplies(message.schedule!, message.world.date.time)! } : {}),
+          ...(meeting ? { meeting } : {}) } };
       session.open.set(message.npc, talk);
       void this.turn(session, talk, message, OPENING_LINE, send);
       return;

@@ -114,6 +114,14 @@ internal sealed partial class ModEntry
         this.Send("day.started", new() { ["date"] = GameState.Date(), ["weather"] = GameState.Weather() });
     }
 
+    private void OnDayEnding()
+    {
+        if (!this.activeLoad || this.initialSave is null || this.syncFailed)
+            return;
+        // Saving runs after vanilla resets the clock and date to the next morning.
+        this.EndMeetings();
+    }
+
     private void OnSaving()
     {
         if (!this.activeLoad || this.initialSave is null || this.syncFailed)

@@ -68,7 +68,10 @@ export class ModelGateway {
     const tally = this.tally;
     this.tally = empty();
     const number = (value: number) => value.toLocaleString('en-US');
-    const parts = TIERS.filter(tier => tally[tier].calls > 0).map(tier => {
+    const parts = TIERS.filter(tier => {
+      const t = tally[tier];
+      return t.calls > 0 || t.inputTokens > 0 || t.cachedInputTokens > 0 || t.outputTokens > 0;
+    }).map(tier => {
       const t = tally[tier];
       return `${tier === 'nightly' ? '夜间（前一晚）' : `${TIER_NAMES[tier]} `}${t.calls} 次 输入 ${number(t.inputTokens)}（缓存 ${number(t.cachedInputTokens)}）输出 ${number(t.outputTokens)}`;
     });
@@ -82,10 +85,11 @@ export class ModelGateway {
   private async run(tier: Tier, call: () => Promise<Completion>, signal: AbortSignal | undefined): Promise<Completion> {
     signal?.throwIfAborted();
     await this.slot(tier, signal);
-    const tally = this.tally[tier];
-    tally.calls++;
+    this.tally[tier].calls++;
     try {
       const completion = await call();
+      // A save may have reported and reset the counters while this request was in flight.
+      const tally = this.tally[tier];
       if (completion.usage) {
         tally.inputTokens += completion.usage.inputTokens;
         tally.cachedInputTokens += completion.usage.cachedInputTokens ?? 0;
@@ -93,7 +97,7 @@ export class ModelGateway {
       }
       return completion;
     } catch (error) {
-      tally.failed++;
+      this.tally[tier].failed++;
       throw error;
     } finally {
       this.running--;

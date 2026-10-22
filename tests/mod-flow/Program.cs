@@ -84,7 +84,7 @@ void Test(string name, Action body)
     catch (Exception error)
     {
         failures++;
-        Console.WriteLine("FAIL " + name + ": " + error.Message);
+        Console.WriteLine("FAIL " + name + ": " + error.GetBaseException());
     }
 }
 
@@ -439,7 +439,7 @@ Test("a festival's results are packed once it ends, wait for the conversation to
     ((List<string>)Get(watch, "Npcs")!).AddRange(new[] { "Penny", "Lewis" });
     Set(watch, "SantaRecipient", "Penny");
     Check(!(bool)watchType.GetProperty("HasResult")!.GetValue(watch)!, "A drawn name counted as a gift handed over.");
-    Set(watch, "SantaGiven", true); Set(watch, "SantaGiver", "Lewis");
+    Set(watch, "SantaGiven", true); Set(watch, "SantaGiver", "Lewis"); Set(watch, "SantaReceived", true);
     Check((bool)watchType.GetProperty("HasResult")!.GetValue(watch)!, "A handed-over gift was not a result.");
     var fields = (Dictionary<string, object?>)Invoke(watch, "Message")!;
     using (JsonDocument packed = JsonDocument.Parse(JsonSerializer.Serialize(fields)))
@@ -470,6 +470,8 @@ Test("a festival's results are packed once it ends, wait for the conversation to
         "A new load/day kept an old festival.");
 });
 
+FestivalReadChecks.Run(modAssembly, gameAssembly, Test);
+ScheduleReadChecks.Run(modAssembly, gameAssembly, Test);
 Test("who walks over today comes from the current load only, skips bad values, and resets with the day", () =>
 {
     object mod = BubbleMod();
@@ -514,7 +516,9 @@ Test("today's appointments come from the current load only, skip bad rows, and k
     var meetings = (System.Collections.IDictionary)Get(mod, "meetings")!;
     JsonDocument Packet(string nonce, params object?[] rows) => JsonDocument.Parse(JsonSerializer.Serialize(new { type = "day.meetings",
         lineageId = "farm", loadNonce = nonce, seq = 0, meetings = rows }));
-    object?[] rows = { new { npc = "abigail", time = 1400, place = "海滩" }, new { npc = "sam", time = 1900, place = "星之果实餐吧" },
+    object?[] rows = { new { npc = "elliott", time = 700, place = "海滩" }, new { npc = "alex", time = 1405, place = "海滩" },
+        new { npc = "sebastian", time = 2110, place = "海滩" },
+        new { npc = "abigail", time = 1400, place = "海滩" }, new { npc = "sam", time = 1900, place = "星之果实餐吧" },
         new { npc = "penny", time = 1475, place = "海滩" }, new { npc = "haley", time = 1400, place = "你家" }, new { npc = "nobody", time = 1400, place = "海滩" },
         new { npc = 7, time = 1400, place = "海滩" }, new { npc = "leah", time = "1400", place = "海滩" }, null, "bad" };
     foreach (string nonce in new[] { "old", "current" })

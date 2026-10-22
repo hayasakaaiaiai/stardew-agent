@@ -31,13 +31,28 @@ internal sealed partial class ModEntry
         Point entry = toFarm == Point.Zero ? Point.Zero : bus.getWarpPointTarget(toFarm);
         if (arrival == Point.Zero || entry == Point.Zero)
             throw new InvalidOperationException("找不到农场和巴士站之间的出入口");
-        // The farm-side warp sits past the map edge; the last tile inside is where to walk to.
+        // Farmer warps land outside the NPCBarrier strip. NPCs must start and stop on its farm side.
         int width = farm.map.Layers[0].LayerWidth, height = farm.map.Layers[0].LayerHeight;
-        return (arrival, entry, new Point(Math.Clamp(exit.X, 0, width - 1), Math.Clamp(exit.Y, 0, height - 1)));
+        Point InsideGate(Point tile)
+        {
+            Point inside = new(Math.Clamp(tile.X, 0, width - 1), Math.Clamp(tile.Y, 0, height - 1));
+            Point inward = inside.X == 0 ? new Point(1, 0) : inside.X == width - 1 ? new Point(-1, 0)
+                : inside.Y == 0 ? new Point(0, 1) : inside.Y == height - 1 ? new Point(0, -1) : Point.Zero;
+            if (inward == Point.Zero) return inside;
+            inside += inward;
+            while (farm.doesTileHaveProperty(inside.X, inside.Y, "NPCBarrier", "Back") is not null)
+            {
+                inside += inward;
+                if (inside.X < 0 || inside.Y < 0 || inside.X >= width || inside.Y >= height)
+                    throw new InvalidOperationException("农场出入口的 NPC 障碍带没有内侧落点");
+            }
+            return inside;
+        }
+        return (arrival, InsideGate(entry), InsideGate(exit));
     }
 
-    /// <summary>The porch spot spouses stand on; a second visitor stands one tile further from the house.</summary>
-    private static Point FarmStand(int slot) => Utility.getHomeOfFarmer(Game1.player).getPorchStandingSpot() + new Point(0, slot);
+    /// <summary>A reachable spot in front of the porch; the second visitor stands one tile further out.</summary>
+    private static Point FarmStand(int slot) => FarmHelp.VisitorStand(Game1.getFarm()) + new Point(0, slot);
 
     /// <summary>Extra walking from the farm gate to the porch, counted in tiles like a schedule route.</summary>
     private static int FarmWalkSteps()

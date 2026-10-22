@@ -3,6 +3,7 @@
  * The model only names the time, the place and the quoted lines; code checks the quotes and the Mod walks the NPC there.
  */
 import { clock } from './schedule.ts';
+import { quotedAgreement, quotedPeriodTime } from './meeting-agreement.ts';
 import type { MemoryDraft, NpcState } from '../types.ts';
 
 /** The places the Mod has a standing tile for (Meetings.cs), with how people say them. */
@@ -87,21 +88,23 @@ export function meetDraft(value: unknown): MeetDraft | null {
  * the place; the time must fall between 8:00 and 21:00.
  */
 export function checkMeet(draft: MeetDraft | null, sources: readonly { id: string; speaker: '玩家' | 'NPC'; text: string }[]): Meeting | null {
-  const words = draft && MEET_PLACES[draft.place];
+  const words = draft && Object.hasOwn(MEET_PLACES, draft.place) && MEET_PLACES[draft.place];
   const match = draft && /^(\d{1,2})[:：](\d{2})$/.exec(draft.time.trim());
   if (!draft || !words || !match || Number(match[2]) > 59) return null;
   const quoted = draft.sources.map(id => sources.find(source => source.id === id));
   if (quoted.some(source => !source) || !quoted.some(source => source!.speaker === '玩家')) return null;
   const text = quoted.map(source => source!.text).join('\n');
   if (!TOMORROW.test(text) || !TIME_WORDS.test(text) || !words.test(text)) return null;
-  const time = Number(match[1]) * 100 + Math.floor(Number(match[2]) / 10) * 10;
-  return time >= EARLIEST && time <= LATEST ? { time, place: draft.place } : null;
+  const proposed = Number(match[1]) * 100 + Math.floor(Number(match[2]) / 10) * 10;
+  if (proposed < EARLIEST || proposed > LATEST) return null;
+  const time = quotedPeriodTime(quoted as typeof sources, proposed);
+  return time >= EARLIEST && time <= LATEST && quotedAgreement(quoted as typeof sources, sources, words, time) ? { time, place: draft.place } : null;
 }
 
 /** Today's appointment, written the night before; a stored one is checked again, like bubbles. */
 export function meetingFor(state: NpcState, today: number): Meeting | undefined {
   const meet = state.meet as Record<string, unknown> | null | undefined;
-  if (state.day !== today - 1 || !meet || typeof meet !== 'object' || typeof meet.place !== 'string' || !(meet.place in MEET_PLACES)
+  if (state.day !== today - 1 || !meet || typeof meet !== 'object' || typeof meet.place !== 'string' || !Object.hasOwn(MEET_PLACES, meet.place)
     || !Number.isSafeInteger(meet.time) || (meet.time as number) < EARLIEST || (meet.time as number) > LATEST
     || (meet.time as number) % 10 !== 0 || (meet.time as number) % 100 > 59) return undefined;
   return { time: meet.time as number, place: meet.place };

@@ -11,15 +11,30 @@ const FOLLOWER = { floor: 12, deepest: 12, kills: 0, fights: false, rescued: fal
 
 test('the three dungeon doors are meeting places, each by its own words', () => {
   assert.match(NIGHTLY_RULES, /农场、矿洞、骷髅洞穴、火山之一/);
-  const said = (text: string) => [{ id: 't1', speaker: '玩家' as const, text }, { id: 't2', speaker: 'NPC' as const, text: '好啊，说定了。' }];
-  const keep = (place: string, text: string) => checkMeet(meetDraft({ time: '10:00', place, sources: ['t1', 't2'] }), said(text));
+  const said = (text: string, npc = '好啊，说定了。') => [{ id: 't1', speaker: '玩家' as const, text }, { id: 't2', speaker: 'NPC' as const, text: npc }];
+  const keep = (place: string, text: string, npc?: string) => checkMeet(meetDraft({ time: '10:00', place, sources: ['t1', 't2'] }), said(text, npc));
   assert.deepEqual(keep('矿洞', '明天上午一起下矿吧？'), { time: 1000, place: '矿洞' });
   assert.deepEqual(keep('矿洞', '明天上午矿洞门口见'), { time: 1000, place: '矿洞' });
-  assert.deepEqual(keep('骷髅洞穴', '明天上午陪我去骷髅洞穴吧'), { time: 1000, place: '骷髅洞穴' });
-  assert.deepEqual(keep('火山', '明天上午去姜岛的火山探险？'), { time: 1000, place: '火山' });
+  assert.deepEqual(keep('骷髅洞穴', '明天上午一起去骷髅洞穴吧'), { time: 1000, place: '骷髅洞穴' });
+  assert.deepEqual(keep('火山', '明天上午一起去姜岛的火山探险？'), { time: 1000, place: '火山' });
   assert.equal(keep('矿洞', '明天上午山上湖边见'), null, 'the lake is not the mine door');
   assert.equal(keep('火山', '明天上午一起下矿吧？'), null);
   assert.ok(!MEET_PLACES['矿洞']!.test('骷髅洞穴') && !MEET_PLACES['骷髅洞穴']!.test('矿洞'));
+});
+
+test('asking for company into a dungeon counts as plainly as “一起”, and nothing else is loosened', () => {
+  const said = (player: string, npc: string) => [{ id: 't1', speaker: '玩家' as const, text: player }, { id: 't2', speaker: 'NPC' as const, text: npc }];
+  const keep = (place: string, player: string, npc: string) => checkMeet(meetDraft({ time: '10:00', place, sources: ['t1', 't2'] }), said(player, npc));
+  assert.deepEqual(keep('矿洞', '明天上午陪我下矿吧？', '好啊，明天上午我去找你。'), { time: 1000, place: '矿洞' });
+  assert.deepEqual(keep('骷髅洞穴', '明天上午陪我去沙漠的骷髅洞穴吧？', '好。明天上午我带上家伙。'), { time: 1000, place: '骷髅洞穴' });
+  for (const [player, npc] of [
+    ['我明天上午去下矿。', '好啊，加油。'],
+    ['明天上午陪我下矿吧？', '矿里太黑了，我明天不去了。'],
+    ['如果明天上午有空，陪我下矿吧。', '好啊。'],
+    ['明天上午陪我下矿吧？', '我想想再说。'],
+    ['后天上午陪我下矿吧？', '好啊。'],
+    ['明天上午陪我下矿吧？', '明天下午我去找你。'],
+  ]) assert.equal(keep('矿洞', player!, npc!), null, `${player} / ${npc}`);
 });
 
 test('a companion is told where it is and what it did; one who does not fight is told so', () => {
@@ -59,8 +74,9 @@ test('the Mod reports a trip only as whole, consistent counts', () => {
 
 const nightly = {
   async chat(messages: ChatMessage[]): Promise<Completion> {
+    // 09:00 for “上午”: the stored time follows the period said, as in the farm test.
     const output = { memories: [{ sources: ['t2'], importance: 3 }], retire: [], impression: '', plan: '明天上午陪农场主下矿', bubbles: [], letter: '',
-      gift: false, share: '', meet: { time: '10:00', place: '矿洞', sources: ['t2'] } };
+      gift: false, share: '', meet: { time: '09:00', place: '矿洞', sources: ['t2', 't3'] } };
     void messages;
     return { content: JSON.stringify(output), reasoning: '', finishReason: 'stop', usage: null, timing: { firstReasoningMs: null, firstContentMs: 1, totalMs: 1 } };
   },
@@ -68,6 +84,11 @@ const nightly = {
 
 test('a mine appointment reaches the Mod, the talk underground knows the trip, and the memory keeps it', { timeout: 15000 }, async t => {
   const h = await harness(t);
+  const originalChat = h.fake.model.chat.bind(h.fake.model);
+  h.fake.model.chat = async (...args: Parameters<typeof originalChat>) => {
+    const result = await originalChat(...args);
+    return { ...result, content: JSON.stringify({ ...JSON.parse(result.content), reply: '好啊，明天上午矿洞门口见。' }) };
+  };
   const server = await h.start(nightlyConsolidator({ roster: h.roster, model: nightly }));
   const wire = await connect(server);
   wire.send(openTalk(1)); await wire.until('talk.reply');

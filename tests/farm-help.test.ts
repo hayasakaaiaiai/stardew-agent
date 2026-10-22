@@ -20,6 +20,35 @@ test('the farm is a meeting place, but “农场主” in a line is the player, 
     [{ ...sources[0]!, text: '明天上午来帮农场主吧' }, sources[1]!]), null);
 });
 
+test('farm chore requests still need both parties, a time, and an unconditional agreement', () => {
+  const proposal = meetDraft({ time: '10:00', place: '农场', sources: ['t1', 't2'] });
+  const quotes = (player: string, npc: string) => [{ id: 't1', speaker: '玩家' as const, text: player }, { id: 't2', speaker: 'NPC' as const, text: npc }];
+  assert.deepEqual(checkMeet(proposal, quotes('明天上午来田里帮我收成熟的作物吧？', '没问题，明天上午我来帮忙。')), { time: 1000, place: '农场' });
+  for (const [player, npc] of [
+    ['明天上午来农场帮我浇水好吗？', '不行，我明天不去农场。'],
+    ['如果明天上午有空，来农场帮我浇水吧。', '好啊。'],
+    ['明天上午来农场帮我浇水好吗？', '我还没决定，想想再说。'],
+    ['明天来农场帮忙，几点还没想好。', '好啊。'],
+    ['明天上午来农场帮我浇水好吗？', '明天下午我来帮忙。'],
+    ['今天的天气真不错。', '我明天上午去农场帮忙。'],
+  ]) assert.equal(checkMeet(proposal, quotes(player!, npc!)), null, `${player} / ${npc}`);
+  assert.equal(checkMeet(meetDraft({ time: '10:00', place: '农场', sources: ['t1'] }),
+    quotes('明天上午来农场帮我浇水好吗？', '我不去。')), null);
+});
+
+test('an invitation to come to the player’s farm counts, with the same checks on time and answer', () => {
+  const quotes = (player: string, npc: string) => [{ id: 't1', speaker: '玩家' as const, text: player }, { id: 't2', speaker: 'NPC' as const, text: npc }];
+  const keep = (player: string, npc: string) => checkMeet(meetDraft({ time: '14:00', place: '农场', sources: ['t1', 't2'] }), quotes(player, npc));
+  assert.deepEqual(keep('明天下午来我农场看看鸡吧。', '好呀！明天下午我过去。'), { time: 1400, place: '农场' });
+  for (const [player, npc] of [
+    ['明天下午来我农场看看鸡吧。', '明天下午我没空。'],
+    ['明天下午来我农场看看鸡吧。', '我想想再说。'],
+    ['要是明天下午有空，来我农场看看鸡吧。', '好呀。'],
+    ['明天上午来我农场看看鸡吧。', '好呀！明天下午我过去。'],
+    ['我明天下午在农场看鸡。', '好呀。'],
+  ]) assert.equal(keep(player!, npc!), null, `${player} / ${npc}`);
+});
+
 test('what a helper did is said in the talk and remembered, leaving out what there was none of', () => {
   assert.equal(helpedText(HELPED), '浇了 120 格水、收了 35 个作物放进农舍门口的箱子、给动物添了 8 份干草、收了 2 个鱼塘的产物放进箱子');
   assert.equal(helpedText({ watered: 0, harvested: 4, fed: 0, ponds: 0 }), '收了 4 个作物放进农舍门口的箱子');
@@ -45,7 +74,7 @@ test('the Mod reports the chores only as whole counts', () => {
 const nightly = {
   async chat(messages: ChatMessage[]): Promise<Completion> {
     const output = { memories: [{ sources: ['t2'], importance: 3 }], retire: [], impression: '', plan: '明天上午去农场帮忙', bubbles: [], letter: '',
-      gift: false, share: '', meet: { time: '10:00', place: '农场', sources: ['t2'] } };
+      gift: false, share: '', meet: { time: '09:00', place: '农场', sources: ['t2', 't3'] } };
     void messages;
     return { content: JSON.stringify(output), reasoning: '', finishReason: 'stop', usage: null, timing: { firstReasoningMs: null, firstContentMs: 1, totalMs: 1 } };
   },
@@ -53,6 +82,11 @@ const nightly = {
 
 test('a farm appointment reaches the Mod, the talk there knows the chores, and the memory keeps them', { timeout: 15000 }, async t => {
   const h = await harness(t);
+  const originalChat = h.fake.model.chat.bind(h.fake.model);
+  h.fake.model.chat = async (...args: Parameters<typeof originalChat>) => {
+    const result = await originalChat(...args);
+    return { ...result, content: JSON.stringify({ ...JSON.parse(result.content), reply: '好啊，明天上午我去农场帮你浇水。' }) };
+  };
   const server = await h.start(nightlyConsolidator({ roster: h.roster, model: nightly }));
   const wire = await connect(server);
   wire.send(openTalk(1)); await wire.until('talk.reply');

@@ -175,10 +175,12 @@ test('at most one scene an hour and six a day, a fresh count for every load', { 
     await wire.until('ack', from); await settle();
   };
   await hour(1100, [pairs[0]!, pairs[1]!]);
+  await until(() => calls === 1);
   assert.equal(calls, 1, 'one group an hour');
   for (let i = 1; i <= 5; i++) { await hour(1100 + i * 100, [pairs[i]!]); await until(() => calls === i + 1); }
   await hour(1700, [pairs[6]!]);
   assert.equal(calls, 6, 'the seventh pair waits for tomorrow');
+  await until(() => h.logs.filter(line => line.startsWith('后台场景：镇上，')).length === 6);
   assert.equal(h.logs.filter(line => line.startsWith('后台场景：镇上，')).length, 6);
 
   wire.send({ type: 'title.returned' }); await wire.until('ack', wire.inbox.length); await wire.close();
@@ -186,6 +188,7 @@ test('at most one scene an hour and six a day, a fresh count for every load', { 
   await hour(600, [pairs[6]!]);
   assert.equal(calls, 6, 'not before 07:00');
   await hour(2300, [pairs[6]!]);
+  await until(() => calls === 7);
   assert.equal(calls, 7, 'the reload replays the day with a fresh count; 23:00 is the last hour');
   await hour(2400, [pairs[5]!]);
   assert.equal(calls, 7, 'none after 23:00');

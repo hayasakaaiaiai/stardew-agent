@@ -137,7 +137,8 @@ internal sealed partial class ModEntry
         foreach (JsonElement item in list.EnumerateArray())
         {
             if (item.ValueKind != JsonValueKind.Object || !item.TryGetProperty("npc", out JsonElement id) || id.ValueKind != JsonValueKind.String
-                || !item.TryGetProperty("time", out JsonElement time) || time.ValueKind != JsonValueKind.Number || !time.TryGetInt32(out int hhmm) || hhmm is < 600 or > 2200 || hhmm % 100 > 59
+                || !item.TryGetProperty("time", out JsonElement time) || time.ValueKind != JsonValueKind.Number || !time.TryGetInt32(out int hhmm)
+                || hhmm is < 800 or > 2100 || hhmm % 100 > 59 || hhmm % 10 != 0
                 || !item.TryGetProperty("place", out JsonElement place) || place.ValueKind != JsonValueKind.String || !MeetPlaces.ContainsKey(place.GetString()!))
                 continue;
             string? name = SocialNpcs.FirstOrDefault(npc => npc.Equals(id.GetString(), StringComparison.OrdinalIgnoreCase));
@@ -221,20 +222,33 @@ internal sealed partial class ModEntry
         SchedulePathDescription Go(ScheduleStop from)
             => npc.pathfindToNextScheduleLocation(key, from.Map, from.Tile.X, from.Tile.Y, spot.Map, spot.X, spot.Y, spot.Facing, null, null);
 
+        int BeforePendingStop(int departure)
+        {
+            while (true)
+            {
+                var previous = schedule.Where(pair => pair.Key < departure).OrderBy(pair => pair.Key).LastOrDefault();
+                if (previous.Value is null || Utility.ModifyTime(Math.Max(now, previous.Key), TravelMinutes(previous.Value.route)) <= departure)
+                    return departure;
+                // Replace a stop whose incoming path would still own the NPC when this appointment sets off.
+                departure = previous.Key;
+            }
+        }
+
         // Setting off earlier can mean setting off from an earlier stop; settle in at most two more rounds.
         int farmSteps = m.Farm ? FarmWalkSteps() : 0;
         ScheduleStop from = StopBefore(npc, m.Time, inclusive: false);
         SchedulePathDescription go = Go(from);
-        int depart = MeetingDeparture(m.Time, TravelMinutes(go.route, farmSteps), now);
+        int depart = BeforePendingStop(MeetingDeparture(m.Time, TravelMinutes(go.route, farmSteps), now));
         for (int round = 0; round < 2 && StopBefore(npc, depart, inclusive: false) != from; round++)
         {
             from = StopBefore(npc, depart, inclusive: false);
             go = Go(from);
-            depart = MeetingDeparture(m.Time, TravelMinutes(go.route, farmSteps), now);
+            // Keep the earlier departure when an earlier stop is nearer; moving it forward can alternate between stops.
+            depart = Math.Min(depart, BeforePendingStop(MeetingDeparture(m.Time, TravelMinutes(go.route, farmSteps), now)));
         }
         if (StopBefore(npc, depart, inclusive: false) != from)
             return "出发的位置算不准";
-        if (depart >= m.Leave)
+        if (depart < Utility.ModifyTime(now - now % 10, 10) || Utility.ModifyTime(depart, TravelMinutes(go.route, farmSteps) + MeetEarlyMinutes) > m.Time)
             return "来不及在约定时间到";
         ScheduleStop back = StopBefore(npc, m.Leave, inclusive: true);
         SchedulePathDescription ret = npc.pathfindToNextScheduleLocation(key, spot.Map, spot.X, spot.Y, back.Map, back.Tile.X, back.Tile.Y,

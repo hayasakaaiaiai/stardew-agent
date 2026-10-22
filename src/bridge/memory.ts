@@ -377,7 +377,7 @@ export class GameSave {
       const receipt: Receipt = { seq: message.seq, hash: digest(canonical(message)) };
       const npcId = message.npc.toLowerCase();
       const fits = this.state.phase === 'open' && absoluteDay(message.date) === this.day
-        && (SOCIAL_NPCS as readonly string[]).includes(npcId) && message.place in MEET_PLACES;
+        && (SOCIAL_NPCS as readonly string[]).includes(npcId) && Object.hasOwn(MEET_PLACES, message.place);
       // Only one who came along can have been in the dungeon with the player.
       const trip = message.mine && message.met ? { ...message.mine } : undefined;
       const note = fits ? meetingMemory({ time: message.time, place: message.place, met: message.met, left: message.left,
