@@ -15,7 +15,8 @@ import { type Gossip, gossipOf, heardMemory, heardToday, shareFor, spread, type 
 import { type DeliveredLetter, type Letter, letterFor, letterKey } from '../agent/letters.ts';
 import { callOffIn, changeIn, LATER_TOPIC, laterCallOffNote, laterIn, type LaterMeeting, laterMeetings, laterMovedNote, laterNote, type Meeting, meetingFor,
   meetingMemory, MEET_PLACES, movedLabel, movedNote,
-  MEETS_PER_DAY, invitedIn, openedAtMeeting, todayAgreement, todayMeeting } from '../agent/meetings.ts';
+  MEETS_PER_DAY, declinedIn, invitedIn, MOOD_TOPIC, moodLine, openedAtMeeting, stoodUpTopics, todayAgreement, todayMeeting,
+  turnedDownNote } from '../agent/meetings.ts';
 import type { CallOff } from '../agent/meeting-agreement.ts';
 import { Nightly } from '../agent/nightly.ts';
 import { withMorningPlan } from '../agent/morning.ts';
@@ -373,6 +374,8 @@ export class GameSave {
         settled = { npc: npcId, ...wire(meeting), ...(meeting.soon ? { soon: meeting.soon } : {}) };
       }
     }
+    // Turned down when it asked: it minds a day (docs/npc-meetings-more.md §2).
+    if (opening && !invitation && declinedIn(entries, npcId)) memories.push(turnedDownNote(today));
     if (!change) {
       const later = laterIn(entries, npcId, upcoming, today, opening);
       for (const { meeting, by } of later.calledOff) memories.push(laterCallOffNote(meeting, by));
@@ -389,6 +392,16 @@ export class GameSave {
       log: { ...log, bridgeReceipt: JSON.parse(canonical(receipt)) }, memories });
     return { ...(settled ? { today: settled } : {}),
       later: memories.filter(memory => memory.topics?.includes(LATER_TOPIC)).map(memory => memory.text) };
+  }
+
+  /** Lately stood up or turned down by the player, for this NPC's talk (docs/npc-meetings-more.md §2). */
+  async mood(npcId: string): Promise<string | undefined> {
+    const overlay = this.scope?.ledger.currentDay?.overlay(npcId);
+    const found = await this.runtime.ctx.store.call('context', {
+      scope: { lineageId: this.initial.lineageId, headCommitId: this.state.head, npcId },
+      options: { topics: [MOOD_TOPIC], nowGameTime: this.state.day * 1440, limit: 10, maxChars: 4000 },
+      overlay: { memories: overlay?.memories ?? [], retired: [...(overlay?.retired ?? [])] } });
+    return moodLine(found.memories, this.state.day);
   }
 
   /** This NPC's notes for later days, as they stand (docs/npc-later-meetings.md). */
@@ -541,9 +554,12 @@ export class GameSave {
       const same = known?.place === message.place ? known : undefined;
       const agreed = same?.sameDay ? { time: same.time, ...(same.soon ? { soon: same.soon } : {}),
         ...(!same.soon && message.arrived !== undefined && message.arrived > same.time ? { arrived: message.arrived } : {}) } : { time: message.time };
-      const note = fits && !(same?.calledOff && !same.sentHome) ? meetingMemory({ ...agreed, place: message.place, met: message.met, left: message.left,
+      const kept = fits && !(same?.calledOff && !same.sentHome) ? meetingMemory({ ...agreed, place: message.place, met: message.met, left: message.left,
         ...(same?.sentHome ? { calledOff: same.calledOff! } : {}), ...(message.helped ? { helped: message.helped } : {}), ...(trip ? { trip } : {}), ...(outing ? { outing } : {}) })
         : undefined;
+      // Stood up, as the Mod judges it: it minds for a few days (docs/npc-meetings-more.md §2).
+      const note = kept && message.stoodUp === true && !message.met
+        ? { ...kept, topics: stoodUpTopics(this.day, { time: agreed.time, place: message.place }, message.left) } : kept;
       // The Mod's change counts against the day's range like a conversation's (docs/npc-meeting-friendship.md).
       if (note) await this.scope!.agent(npcId).record({ seq: message.seq, gameTime: gameMinutes(message.date),
         log: { meeting: { place: message.place, time: message.time, ...(message.arrived !== undefined ? { arrived: message.arrived } : {}), left: message.left, met: message.met, ...(message.helped ? { helped: { ...message.helped } } : {}),

@@ -123,7 +123,7 @@ export type ModMessage =
    * (docs/npc-meeting-friendship.md). Reliable, acknowledged.
    */
   | ({ type: 'meet.ended'; npc: string; place: string; time: number; arrived?: number; left: number; met: boolean; helped?: Helped; mine?: MineTrip;
-    outing?: Outing; friendship?: number; date: GameDate } & Envelope);
+    outing?: Outing; friendship?: number; stoodUp?: boolean; date: GameDate } & Envelope);
 
 export interface FestivalEnded {
   festival: Festival;
@@ -332,6 +332,7 @@ export function parseModMessage(raw: string): ModMessage {
       helped(data.helped);
       mine(data.mine);
       outing(data.outing);
+      if (data.stoodUp !== undefined && typeof data.stoodUp !== 'boolean') fail('stoodUp must be a boolean');
       date(data.date);
       break;
     }

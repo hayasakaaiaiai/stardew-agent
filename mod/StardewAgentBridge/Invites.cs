@@ -19,6 +19,9 @@ internal sealed partial class ModEntry
     private const int InviteEveryDays = 3;
     /// <summary>The player's modData key, plus the NPC's name: the absolute day it last asked.</summary>
     private const string InvitedKey = "StardewAgent/invited/";
+    /// <summary>The same for the day the player last stood it up (docs/npc-meetings-more.md §2).</summary>
+    private const string StoodUpKey = "StardewAgent/stoodUp/";
+    private const int StoodUpDays = 3;
 
     /// <summary>Today's, once worked out after the day's appointments arrived: the NPC that asks, or null for nobody.</summary>
     private string? inviter;
@@ -60,13 +63,18 @@ internal sealed partial class ModEntry
     /// <summary>Asked within the last week, by the day kept in the save.</summary>
     internal static bool AskedLately(int? lastAsked, int today) => lastAsked is int last && today - last < InviteGapDays;
 
-    private static int? LastAsked(string npc)
-        => Game1.player.modData.TryGetValue(InvitedKey + npc, out string? value) && int.TryParse(value, out int day) ? day : null;
+    private static int? LastAsked(string npc) => DayKept(InvitedKey + npc);
+
+    private static int? DayKept(string key) => Game1.player.modData.TryGetValue(key, out string? value) && int.TryParse(value, out int day) ? day : null;
+
+    /// <summary>Stood up within the last three days: it does not ask, or come on its own.</summary>
+    private static bool StoodUpLately(string npc, int today) => DayKept(StoodUpKey + npc) is int day && today - day <= StoodUpDays;
 
     /// <summary>Close but not living together, free today, and not one who asked this past week.</summary>
     private bool MayInvite(string name, int today)
     {
-        if (Game1.getCharacterFromName(name) is not NPC npc || npc.IsInvisible || this.meetings.ContainsKey(name) || AskedLately(LastAsked(name), today))
+        if (Game1.getCharacterFromName(name) is not NPC npc || npc.IsInvisible || this.meetings.ContainsKey(name) || AskedLately(LastAsked(name), today)
+            || StoodUpLately(name, today))
             return false;
         string relation = GameState.Relation(npc);
         return relation is not ("married" or "roommate") && (GameState.Hearts(npc) >= InviteHearts || relation is "dating" or "engaged");

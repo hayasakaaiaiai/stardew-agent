@@ -4,7 +4,8 @@
  */
 import { clock } from './schedule.ts';
 import { OPENING_LINE, SEASONS } from './dialogue.ts';
-import { asksToMeet, type CallOff, type Change, type Invitation, type Kept, type LaterAgreement, namedDays, quotedAgreement, quotedCallOff, quotedChange, quotedInvite,
+import { asksToMeet, type CallOff, type Change, type Invitation, type Kept, type LaterAgreement, namedDays, quotedAgreement, quotedCallOff, quotedChange, quotedDecline,
+  quotedInvite,
   quotedLater, quotedLaterCallOff,
   quotedPeriodTime, quotedToday,
   type TimedQuote } from './meeting-agreement.ts';
@@ -332,6 +333,45 @@ const laterText = (meeting: LaterMeeting) => `约好${dayLabel(meeting.day)}${cl
 export function laterNote(agreement: LaterAgreement): MemoryDraft {
   return { text: `${laterText(agreement)}。`, importance: 3, kind: 'observation', subjects: ['player'], visibility: 'private',
     topics: [LATER_TOPIC, dayTopic(agreement.day), `约定:${agreement.time}:${agreement.place}`] };
+}
+
+/**
+ * Being stood up stays with the NPC three days, being turned down one (docs/npc-meetings-more.md §2): the memory of it
+ * carries this topic and what happened, so the NPC's talks those days can say so.
+ */
+export const MOOD_TOPIC = '约定心情';
+const STOOD_UP_DAYS = 3;
+const TURNED_DOWN_DAYS = 1;
+const AGO = ['今天', '昨天', '前天', '大前天'];
+
+/** Tags for the memory of waiting in vain: "失约:41:1400:海滩:1530". */
+export const stoodUpTopics = (day: number, meeting: Pick<Meeting, 'time' | 'place'>, left: number) =>
+  [MOOD_TOPIC, `失约:${day}:${meeting.time}:${meeting.place}:${left}`];
+
+/** "我约农场主出去，农场主没答应。" */
+export function turnedDownNote(day: number): MemoryDraft {
+  return { text: '我约农场主出去，农场主没答应。', importance: 2, kind: 'observation', subjects: ['player'], visibility: 'private',
+    topics: [MOOD_TOPIC, `被拒:${day}`] };
+}
+
+/** The line for the NPC's talks while it still minds: the latest time it was stood up, or else turned down. */
+export function moodLine(notes: readonly Pick<Memory, 'topics'>[], today: number): string | undefined {
+  let stood: { day: number; time: number; place: string; left: number } | undefined;
+  let declined: number | undefined;
+  for (const topic of notes.flatMap(note => note.topics)) {
+    const up = /^失约:(\d+):(\d+):(.+):(\d+)$/.exec(topic);
+    if (up && today - Number(up[1]) <= STOOD_UP_DAYS && today >= Number(up[1]) && (!stood || Number(up[1]) > stood.day))
+      stood = { day: Number(up[1]), time: Number(up[2]), place: up[3]!, left: Number(up[4]) };
+    const down = /^被拒:(\d+)$/.exec(topic);
+    if (down && today - Number(down[1]) <= TURNED_DOWN_DAYS && today >= Number(down[1])) declined = Math.max(declined ?? 0, Number(down[1]));
+  }
+  if (stood) return `- ${AGO[today - stood.day]}${agreedText(stood)}，农场主没来（你等到 ${clock(stood.left)}），你还记着；这几天农场主再约你，答不答应看你自己。`;
+  return declined === undefined ? undefined : `- ${AGO[today - declined]}你开口约农场主出去，农场主当场说不行，没约成。`;
+}
+
+/** Whether the conversation that just ended turned the NPC's invitation down (docs/npc-meetings-more.md §2). */
+export function declinedIn(entries: readonly DayEntry[], npcId: string): boolean {
+  return quotedDecline(lastConversation(entries, npcId));
 }
 
 /** Where an appointment moved, as said to the NPC and shown by the Mod: "明天（周五）15:00 在镇广场". */

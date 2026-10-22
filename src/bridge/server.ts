@@ -384,11 +384,12 @@ export class BridgeServer {
       const invitation = message.invite === true && !meeting && (await save.meetings()).length < MEETS_PER_DAY
         ? invitationLine(message.world.date.time) : undefined;
       if (invitation) this.log(`${this.options.roster.get(npcId).name}开口约农场主`);
+      const mood = await save.mood(npcId);
       const talk: OpenTalk = { npcId, inPersonGifts: message.inPersonGifts !== false,
         standing: { hearts: message.hearts, relation: message.relation, seenEvents: new Set(message.seenEvents) },
         world: { ...worldState(message.world, save.player, this.cardName),
           ...(schedule ? { schedule, scheduleFacts: scheduleReplies(message.schedule!, message.world.date.time)! } : {}),
-          ...(meeting ? { meeting } : {}), ...(invitation ? { invitation } : {}) } };
+          ...(meeting ? { meeting } : {}), ...(invitation ? { invitation } : {}), ...(mood ? { mood } : {}) } };
       session.open.set(message.npc, talk);
       void this.turn(session, talk, message, OPENING_LINE, send);
       return;

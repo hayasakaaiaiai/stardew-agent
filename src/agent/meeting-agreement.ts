@@ -351,6 +351,15 @@ export function quotedInvite(lines: readonly TimedQuote[], places: Readonly<Reco
 /** Who took today's appointment back, or sent the other home: the player or the NPC (docs/npc-call-off.md). */
 export type CallOff = '玩家' | 'NPC';
 
+// A plain no to being asked out; "我考虑一下", "我得看看" are no answer yet.
+const PLAIN_NO = /不行|不了|不去|不要|不方便|没空|没时间|下次吧|改天吧|算了|不太行|去不了|来不了/;
+
+/** The player turned the NPC's invitation down outright on its opening (docs/npc-meetings-more.md §2). */
+export function quotedDecline(lines: readonly TimedQuote[]): boolean {
+  const [ask, answer] = lines;
+  return ask?.speaker === 'NPC' && answer?.speaker === '玩家' && PLAIN_NO.test(answer.text) && !HEDGE.test(answer.text) && !/考虑|想想/.test(answer.text);
+}
+
 /** An appointment kept as it is now: absolute `day`, HHMM `time`, the place. */
 export interface Kept { day: number; time: number; place: string }
 /** It moved to another day, time or place, at whose asking (docs/npc-meetings-more.md §1). */

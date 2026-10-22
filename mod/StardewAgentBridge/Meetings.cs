@@ -755,6 +755,13 @@ internal sealed partial class ModEntry
             fields["mine"] = m.Trip.Fields(Fighters.Contains(m.Npc));
         if (m.Out.Started)
             fields["outing"] = m.Out.Fields();
+        // Stood up, as the friendship below judges it but whatever the setting: the NPC minds for a few days
+        // (docs/npc-meetings-more.md §2), and does not ask the player out meanwhile.
+        if (!m.Met && !m.CalledOff && !m.ComesLate && !m.Spouse && m.Helped is null)
+        {
+            fields["stoodUp"] = true;
+            Game1.player.modData[StoodUpKey + m.Npc] = ((int)Game1.Date.TotalDays).ToString();
+        }
         // Kept, it warms the NPC like a kind word; stood up, it stings like a slight (docs/npc-meeting-friendship.md).
         // Spouses and roommates never gain or lose appointment friendship, even when the player comes.
         // Called off beforehand, the NPC itself late or chores done on the farm: nobody was stood up.

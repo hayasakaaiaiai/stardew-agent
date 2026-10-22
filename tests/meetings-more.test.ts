@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { type TimedQuote, quotedChange, quotedToday } from '../src/agent/meeting-agreement.ts';
-import { MEET_PLACES } from '../src/agent/meetings.ts';
+import { type TimedQuote, quotedChange, quotedDecline, quotedToday } from '../src/agent/meeting-agreement.ts';
+import { MEET_PLACES, moodLine, stoodUpTopics, turnedDownNote } from '../src/agent/meetings.ts';
 import { connect, harness, meetingsSent, openTalk, WORLD } from './helpers/bridge.ts';
 
 const at = (time: number) => (speaker: '玩家' | 'NPC', text: string, id = speaker + text): TimedQuote => ({ id, speaker, text, time });
@@ -95,5 +95,45 @@ test('one kept for the day after tomorrow moved to tomorrow: the old day is hidd
   // The talk the next day knows tomorrow's: the old day is gone.
   wire.send({ ...openTalk(1, 'Sam'), world: { ...WORLD, date: { ...WORLD.date, time: 1300 } } }); await wire.until('talk.reply', wire.inbox.length);
   assert.match(h.fake.sent.at(-1)![0]!.content, /- 和农场主的约定：明天（周二）10:00 在海滩见面/);
+  await wire.close();
+});
+
+test('stood up, the NPC minds three days, turned down one; only a plain no counts as turning it down (docs/npc-meetings-more.md §2)', () => {
+  const stood = { topics: stoodUpTopics(39, { time: 1400, place: '海滩' }, 1530) };
+  assert.equal(moodLine([stood], 41), '- 前天约好 14:00 在海滩见面，农场主没来（你等到 15:30），你还记着；这几天农场主再约你，答不答应看你自己。');
+  assert.equal(moodLine([stood], 43), undefined, 'over after three days');
+  const down = { topics: turnedDownNote(41).topics! };
+  assert.equal(moodLine([down], 42), '- 昨天你开口约农场主出去，农场主当场说不行，没约成。');
+  assert.equal(moodLine([down], 43), undefined);
+  assert.match(moodLine([down, stood], 41)!, /^- 前天约好/, 'being stood up weighs more');
+  const answer = (text: string) => quotedDecline([at(1000)('NPC', '下午三点一起去海滩吧？'), at(1000)('玩家', text)]);
+  assert.ok(answer('今天不太行，下次吧。') && answer('不了，我要忙农场。') && answer('没空。'));
+  assert.ok(!answer('嗯……我得看看农场的活儿。') && !answer('我考虑一下。') && !answer('好啊！'));
+});
+
+test('the talks after being stood up or turned down carry that line', { timeout: 15000 }, async t => {
+  const h = await harness(t);
+  const originalChat = h.fake.model.chat.bind(h.fake.model);
+  h.fake.model.chat = async (...args: Parameters<typeof originalChat>) => {
+    const result = await originalChat(...args);
+    const asking = args[0][0]!.content.includes('你今天想主动约农场主') ? '下午三点一起去海滩走走吧？' : undefined;
+    return asking ? { ...result, content: JSON.stringify({ ...JSON.parse(result.content), reply: asking }) } : result;
+  };
+  const server = await h.start();
+  const wire = await connect(server);
+  await wire.until('day.meetings', 0);
+  const day = (time: number) => ({ ...WORLD.date, time });
+  const system = () => h.fake.sent.at(-1)![0]!.content;
+  wire.send({ type: 'meet.ended', npc: 'Abigail', place: '海滩', time: 1400, left: 1530, met: false, stoodUp: true, date: day(1530) });
+  await wire.until('ack', wire.inbox.length);
+  wire.send({ ...openTalk(1), world: { ...WORLD, date: day(1600) } }); await wire.until('talk.reply', wire.inbox.length);
+  assert.match(system(), /- 今天约好 14:00 在海滩见面，农场主没来（你等到 15:30），你还记着/);
+  wire.send({ type: 'talk.close', npc: 'Abigail' }); await wire.until('ack', wire.inbox.length);
+  wire.send({ ...openTalk(1, 'Sam'), world: { ...WORLD, date: day(1000) }, invite: true }); await wire.until('talk.reply', wire.inbox.length);
+  wire.send({ type: 'talk.say', npc: 'Sam', text: '今天不太行，下次吧。', date: day(1010) }); await wire.until('talk.reply', wire.inbox.length);
+  wire.send({ type: 'talk.close', npc: 'Sam' }); await wire.until('ack', wire.inbox.length);
+  wire.send({ ...openTalk(1, 'Sam'), world: { ...WORLD, date: day(1100) } }); await wire.until('talk.reply', wire.inbox.length);
+  assert.match(system(), /- 今天你开口约农场主出去，农场主当场说不行，没约成。/);
+  assert.doesNotMatch(system(), /农场主没来/, 'only the one stood up minds that');
   await wire.close();
 });

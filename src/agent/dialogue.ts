@@ -28,6 +28,8 @@ export interface WorldState {
   farInvitation?: string;
   /** The opening turn's line when the NPC asks the player out (docs/npc-invites.md). */
   invitation?: string;
+  /** Lately stood up or turned down by the player (docs/npc-meetings-more.md §2). */
+  mood?: string;
   player: { name: string; gender: 'male' | 'female'; farm: string };
   /** Facts the cards' natural-language conditions depend on, e.g. 肯特 → 还在前线. */
   facts: Record<string, string>;
@@ -173,6 +175,7 @@ function situation({ npcName, world, standing, memory }: PromptInput): string {
     ...(world.meeting ? [`- 和农场主的约定：${world.meeting}`] : []),
     ...(world.farInvitation ? [world.farInvitation] : []),
     ...(world.invitation ? [world.invitation] : []),
+    ...(world.mood ? [world.mood] : []),
     `- 玩家：${player.name}（${player.gender === 'female' ? '女' : '男'}），经营${player.farm}农场`,
     `- 你对玩家的好感：${standing.hearts} 心；关系：${RELATIONS[standing.relation]}`,
     ...(facts.length ? ['- 世界事实：', ...facts] : []),
