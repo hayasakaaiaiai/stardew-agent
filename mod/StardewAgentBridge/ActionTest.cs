@@ -18,6 +18,7 @@ internal sealed partial class ModEntry
     private Point actionTestTile;
     private int actionTestSpeed = 2;
     private bool actionTestClockRunning;
+    private readonly List<(string Map, int X, int Y, int Speed)> actionTestMeetingTravel = new();
 
     private object ActionSnapshot() => new
     {
@@ -32,7 +33,7 @@ internal sealed partial class ModEntry
         meetings = this.meetings.Values.Select(m => new
         {
             m.Npc, m.Time, m.Place, m.Leave, m.Depart, m.Applied, m.Failed, m.Arrived, m.ArrivedAt, m.ReturnAt, m.Met, m.Reported,
-            m.Stage, m.Helps, m.Spouse, m.Helped, m.Destroys,
+            m.Stage, m.Helps, m.Spouse, m.Helped, m.Destroys, m.Warp, m.Warped,
             spot = new { map = m.Spot.Map, x = m.Spot.X, y = m.Spot.Y },
         }).ToArray(),
         routes = this.actionTestNpc.Length == 0 || Game1.getCharacterFromName(this.actionTestNpc) is not NPC npc ? null
@@ -120,6 +121,40 @@ internal sealed partial class ModEntry
                     lineageId = this.lineageId, loadNonce = this.loadNonce, seq = 0, meetings = args.GetProperty("meetings"),
                 })); this.TickMeetings(); this.WorldComplete(); break;
             case "action-observe": this.actionTestNpc = id; this.WorldComplete(); break;
+            case "action-meeting-wait":
+                this.actionTestNpc = id; this.actionTestSpeed = Number("speed", 8);
+                this.actionTestClockRunning = Flag("natural"); this.actionTestMeetingTravel.Clear();
+                this.WorldWait("action-meeting-arrival"); break;
+            case "action-position-wait":
+                this.actionTestNpc = id; this.actionTestMap = Text("map");
+                this.actionTestTile = new Point(Number("x"), Number("y")); this.actionTestSpeed = Number("speed", 8);
+                this.WorldWait("action-route"); break;
+            case "action-event-skip":
+                Game1.CurrentEvent?.skipEvent(); this.WorldWait("ticks", 60); break;
+            case "action-entrances":
+                GameLocation room = Game1.currentLocation;
+                var target = MeetPlaces[Text("place")][0];
+                Point aim = new(target.X, target.Y);
+                this.worldTestNative = new
+                {
+                    map = room.NameOrUniqueName,
+                    choice = WayIn(room, aim, this.SocialActor(id)) is Point chosen ? new { x = chosen.X, y = chosen.Y } : null,
+                    doors = room.doors.Pairs.Select(p => new { x = p.Key.X, y = p.Key.Y, to = p.Value }).ToArray(),
+                    warps = room.warps.Select(way =>
+                    {
+                        var paths = new List<object>();
+                        for (int dy = -3; dy <= 3; dy++) for (int dx = -3; dx <= 3; dx++)
+                        {
+                            Vector2 tile = new(way.X + dx, way.Y + dy);
+                            if (!room.CanSpawnCharacterHere(tile) || room.isWaterTile((int)tile.X, (int)tile.Y)) continue;
+                            paths.Add(new { x = tile.X, y = tile.Y, path = PathFindController.findPath(Utility.Vector2ToPoint(tile), aim,
+                                PathFindController.isAtEndPoint, room, this.SocialActor(id), FarmPathLimit)?.Count });
+                        }
+                        Vector2? first = OpenTileNear(room, new Point(way.X, way.Y));
+                        return new { x = way.X, y = way.Y, first = first is Vector2 f ? new { x = f.X, y = f.Y } : null, paths };
+                    }).ToArray(),
+                };
+                this.WorldComplete(); break;
             case "action-camera":
                 Game1.forceSnapOnNextViewportUpdate = true;
                 Game1.UpdateViewPort(true, Game1.player.StandingPixel);
@@ -137,6 +172,21 @@ internal sealed partial class ModEntry
     {
         this.TickMineTestPending();
         this.TickFarmTestPending();
+        if (this.worldTestPending == "action-meeting-arrival")
+        {
+            NPC actor = this.SocialActor(this.actionTestNpc);
+            var tile = (actor.currentLocation.NameOrUniqueName, actor.TilePoint.X, actor.TilePoint.Y, actor.speed);
+            if (this.actionTestMeetingTravel.Count == 0 || this.actionTestMeetingTravel[^1] != tile)
+                this.actionTestMeetingTravel.Add(tile);
+            if (!this.actionTestClockRunning) actor.speed = Math.Max(actor.speed, this.actionTestSpeed);
+            if (this.meetings[actor.Name].Arrived)
+            {
+                if (!this.actionTestClockRunning) actor.speed = 2;
+                this.actionTestClockRunning = false;
+                this.worldTestNative = new { speed = actor.speed, travel = this.actionTestMeetingTravel.Select(p => new { map = p.Map, x = p.X, y = p.Y, speed = p.Speed }).ToArray() };
+                this.WorldComplete();
+            }
+        }
         if (this.worldTestPending == "action-menu-closed")
         {
             // Closing vanilla dialogue can enqueue the normal "continue chatting" question on the next update.

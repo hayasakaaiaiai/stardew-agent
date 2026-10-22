@@ -18,7 +18,7 @@
 | 里程碑 | 状态 | 已完成 | 还没做 | 文档 |
 |---|---|---|---|---|
 | M1 存储与事务 | 完成 | 记忆内核；当天事务；存档与回滚；崩溃恢复；过期临时日志/检查点清理，失败新读档保护旧日志（2026-10-20 合入 `main`） | — | `README.md`、`design.md` §16 |
-| M2 Agent | 已合入步骤保持；后续功能在 Windows 分支完成分批原生验收 | 对话、夜间整合、次日计划、气泡、寄信、恢复；碰面、送礼、好感、家庭信息和在场传话已合入；后台传话、小动作、节日、调度器和行程已验收；主动靠近、按约赴约及七类修复已验收并推送；农场帮忙和四类兼容修复在 `codex/farm-help-windows-tests` 完成限定原生 73/73、行动回归 5/5 | 新验收分支尚未合入 main；下矿在 `codex/mine-companion-windows-tests` 完成 122/122，农场回归 71/71；当天赴约、改口送别在 `codex/call-off-windows-tests` 完成五项修复与 257/257 限定原生检查；约到后天、赴约好感及动物活的七类修复和配偶豁免在 `codex/meetings-animals-windows-tests` 完成限定原生 228/228 及补验 114/114；这些 Windows 修复都已合并进 `m2c-farm-animals`，不迟到（传送）待 Windows 验收；碰面后一起逛在最前端 `m2c-outing`，待 Windows 验收；时段修复重放 12/12（原始样本 11/12 保留）；观察自由内容和全角色／剧情／自然日程未覆盖情况 | `dialogue-prototype.md`、`nightly-consolidation.md`、`next-day-plans.md`、`npc-bubbles.md`、`npc-mail.md`、`npc-chat.md`、`npc-gifts.md`、`npc-friendship.md`、`npc-in-person-gifts.md`、`world-public-facts.md`、`npc-news.md`、`offscreen-news.md`、`legacy-cleanup.md`、`ambient-lines.md`、`reliability-fixes.md`、`festival-memories.md`、`scheduler.md`、`npc-schedules.md`、`npc-approach.md`、`npc-meetings.md`、`npc-farm-help.md`、`npc-mine-companion.md`、`npc-same-day-meetings.md`、`npc-call-off.md`、`npc-meeting-friendship.md`、`npc-later-meetings.md`、`npc-farm-animals.md`、`npc-meeting-warp.md`、`npc-outing.md` |
+| M2 Agent | 已合入步骤保持；后续功能在 Windows 分支完成分批原生验收 | 对话、夜间整合、次日计划、气泡、寄信、恢复；碰面、送礼、好感、家庭信息和在场传话已合入；后台传话、小动作、节日、调度器和行程已验收；主动靠近、按约赴约及七类修复已验收并推送；农场帮忙和四类兼容修复在 `codex/farm-help-windows-tests` 完成限定原生 73/73、行动回归 5/5 | 新验收分支尚未合入 main；下矿在 `codex/mine-companion-windows-tests` 完成 122/122，农场回归 71/71；当天赴约、改口送别在 `codex/call-off-windows-tests` 完成五项修复与 257/257 限定原生检查；约到后天、赴约好感及动物活的七类修复和配偶豁免在 `codex/meetings-animals-windows-tests` 完成限定原生 228/228 及补验 114/114；传送赴约和入口临时快走在 `codex/meeting-warp-windows-tests` 完成 263/263 限定原生；这些 Windows 修复都已合并进 `m2c-farm-animals`；碰面后一起逛在最前端 `m2c-outing`，待 Windows 验收；时段修复重放 12/12（原始样本 11/12 保留）；观察自由内容和全角色／剧情／自然日程未覆盖情况 | `dialogue-prototype.md`、`nightly-consolidation.md`、`next-day-plans.md`、`npc-bubbles.md`、`npc-mail.md`、`npc-chat.md`、`npc-gifts.md`、`npc-friendship.md`、`npc-in-person-gifts.md`、`world-public-facts.md`、`npc-news.md`、`offscreen-news.md`、`legacy-cleanup.md`、`ambient-lines.md`、`reliability-fixes.md`、`festival-memories.md`、`scheduler.md`、`npc-schedules.md`、`npc-approach.md`、`npc-meetings.md`、`npc-farm-help.md`、`npc-mine-companion.md`、`npc-same-day-meetings.md`、`npc-call-off.md`、`npc-meeting-friendship.md`、`npc-later-meetings.md`、`npc-farm-animals.md`、`npc-meeting-warp.md`、`npc-outing.md` |
 | M3 接入游戏 | 完成（Windows） | 游戏里"继续聊"；真实保存/退出、跨天记忆、回滚、后端进程重启与旧档分叉；拼音输入法、原版台词保留、取消三项手测通过 | — | `game-bridge.md`、`game-memory.md` |
 | M4 内容 | 角色卡已完成 | 34 张角色卡（已审阅），"看过事件之后"共 201 条（`group-events` 补群体 10 心和科罗布斯 14 心后 226 条）；物品名到 ID 的对应在寄信那一步已做（Mod 按游戏中文名找物品，123 个可送物品核对过，见 `npc-mail.md`） | 各动作的上限 | `design.md` §11 |
 
@@ -130,6 +130,10 @@ Windows 本轮按用户“测一下之后修复”，在 `codex/meetings-animals
 
 2026-10-22 用户说“推送吧 为什么不合并”，`c5728f3` 推送到 `m2c-farm-animals`；用户定“先等 Windows 测完传送再合并”，main 不动。随后用户说“继续做下一步 需要向我提问”：方向选“碰面后一起做事”，再定跟着走、陪钓鱼、对玩家做的事有反应、玩家停下她也停下四样都做，一起时只冒原版表情、聊天时知道发生了什么，到约定的等待结束，答应赴约的都会；设计稿确认“按这个做，做好推送”（`m2c-outing`，建在 `m2c-farm-animals` 上）。在海滩、镇广场等普通地点碰上面以后，NPC 跟着玩家走、换地图跟到身边，玩家停下或钓鱼时站到身边面朝同一方向，钓到鱼、鱼跑了、捡到采集物、挖到古物、收到礼物时冒原版表情；有怪物的地方、澡堂里面、节日场地不跟，在门口等。到点说“我该回去了。”从所在的地方回原日程。和她聊天时那一行写去过哪、看玩家钓到了什么（DeepSeek 实测每轮 +4 到 +64），事后记成重要度 3 的记忆；一起时不冒自言自语、不参加 NPC 碰面聊天和同图小动作。真实模型问“我们今天都干了什么？”：带这一行 18/18 说对、0 次编玩家没做的事，原写法 0/6 知道一起逛过。0 次新增调用。262/262、类型检查、构建、Mod Release 0 警告 0 错误；C# 流程检查 48 项能编译，要在 Windows 跑。配偶和室友本来不在普通地点赴约，设计稿那一行不成立，已改。见 [npc-outing.md](npc-outing.md)，Windows 清单在 §7。
 
+Windows 后续按用户“测一下之后修复”，在 `codex/meeting-warp-windows-tests` 从 `b1c34f4` 整合 `m2c-farm-animals / c8e9821`。原生复现到期后仍传送并误扣 5 点，已改为恢复原日程、不报告赴约或失约；正常钟速还复现 1430 约 1500 海滩见、实际 1510 到。用户选“入口进来，必要时临时快走，争取准时”，已实现最高临时步速 4 及抵达／取消／到期／清理时恢复，原版钟速复测 1500 抵达并恢复步速 2。最终 258/258 Node、46/46 C#、类型检查与构建通过；限定原生 263/263，3 次真实保存、49 次读档，原档 6 文件 SHA256 不变，表内各批源码和 DLL 与最终一致。脚本、失败和完整结果见 [传送赴约报告](test-results/2026-10-22-meeting-warp-windows.md)。本轮保持本地修复，main 不合并，正常安装和后端不部署。
+
+2026-10-22 用户说“看一下新推送”：远端是上面一段的 `codex/meeting-warp-windows-tests / ab9eb06`。它和我的 `c5728f3` 合的是同一对父提交（`b1c34f4`、`c8e9821`），冲突处理两边结果等价：代码用 Windows 的版本（钟点读法叫回 `readClocks`，行为不变），只补回字段注释。这次合并进 `m2c-farm-animals` 后再并进最前端 `m2c-outing`；一起逛开始前 NPC 已经到了，到达时步速已恢复，和入口快走不冲突。合并后的检查结果写在 `npc-meeting-warp.md` §5。
+
 ## 3. 分支
 
 GitHub 私有仓库：https://github.com/hayasakaaiaiai/stardew-agent
@@ -178,7 +182,8 @@ GitHub 私有仓库：https://github.com/hayasakaaiaiai/stardew-agent
 | `codex/call-off-windows-tests` | 纳入 `3fa263a`，修复当天钟点／省略时段／改日期、半路取消站位及实际抵达／等待；含原生脚本和报告，推送目标为本功能分支 | Windows：`E:\stardew-agent` |
 | `m2c-meeting-friendship` | 赴约和爽约影响好感，建在 `m2c-call-off` 上 | 已推送 |
 | `m2c-later-meetings` | 约定最远到后天、更远的 NPC 婉拒，建在 `m2c-meeting-friendship` 上 | 已推送 |
-| `m2c-farm-animals` | 来农场帮忙加动物活，建在 `m2c-later-meetings` 上；合并了 `codex/call-off-windows-tests`、`codex/meetings-animals-windows-tests`，加上不迟到（传送）；传送待 Windows 验收，验收后用户要合并 main | 已推送 |
+| `m2c-farm-animals` | 来农场帮忙加动物活，建在 `m2c-later-meetings` 上；合并了 `codex/call-off-windows-tests`、`codex/meetings-animals-windows-tests`、`codex/meeting-warp-windows-tests`，加上不迟到（传送），传送已由 Windows 验收；用户定验收后合并 main | 已推送 |
+| `codex/meeting-warp-windows-tests` | `b1c34f4` + `c8e9821`；修复过期误传送／误扣好感，按用户选择入口临时快走和恢复；258/258 Node、46/46 C#、263/263 限定原生，见 [报告](test-results/2026-10-22-meeting-warp-windows.md)；本地验收分支 | Windows：`E:\stardew-agent` |
 | `m2c-outing` | 碰面后一起逛，建在 `m2c-farm-animals` 上；是代码的最前端，待 Windows 验收 | `/Users/a11/Documents/ChatGPT/stardew-agent-gifts` |
 | `codex/meetings-animals-windows-tests` | `edb6d80` + `f10021d`；初轮 258/258 Node、45/45 C#、228/228 限定原生；追加配偶／室友赴约豁免、专章 57/57、原好感回归 57/57，本轮授权推送分支，见 [报告](test-results/2026-10-22-meetings-animals-windows.md) | Windows：`E:\stardew-agent` |
 | `codex/offscreen-windows-tests` | `main / 35affae` + `less-fabrication / f98222c`，上一轮组合验收与赠礼开关修复；`bda43f3` 已推送，修复已摘到 `festival-memories`，未合入 main | Windows 历史验收分支 |
@@ -303,8 +308,8 @@ dotnet build mod/StardewAgentBridge   # 编译 Mod，编译完自动装进游戏
 11. **关系好了以后帮忙种地、陪玩家下矿洞**（用户 2026-10-21 提出）：① 主动靠近与② 约定兑现已完成 Windows 限定场景脚本验收，七类修复已推送，见 [动作报告](test-results/2026-10-22-actions-windows.md)。③ 农场帮忙已按用户确认的 [设计](npc-farm-help.md) 在 `m2c-farm-help / 369788c` 实现；用代码执行浇水、收作物、添干草、收鱼塘产物，不设每日数量上限，原版物资和存档规则约束实际结果。Windows 修复及脚本结果见 [农场报告](test-results/2026-10-22-farm-help-windows.md)，初始真实样本 11/12，时段修复后同批重放 12/12，原始输出保留。④ 陪下矿洞已按用户 2026-10-21 选定的六项实现（`m2c-mine-companion`，[设计](npc-mine-companion.md)），2026-10-22 Windows 限定脚本 122/122、共用农场回归 71/71 通过，修复和边界见该文档 §9。四步都已实现。之后又做了[当天约当天](npc-same-day-meetings.md)（`m2c-same-day-meetings`），聊天时说定的当天就去；[改口和送别](npc-call-off.md)（`m2c-call-off`），约好的能撤，在一起时能让 NPC 先回去；[赴约影响好感](npc-meeting-friendship.md)（`m2c-meeting-friendship`），按约见面加好感、失约扣好感；[约到后天](npc-later-meetings.md)（`m2c-later-meetings`），用户定约定最远到后天，更远的 NPC 婉拒；[农场动物活](npc-farm-animals.md)（`m2c-farm-animals`），来帮忙时也捡蛋、挤奶剪毛、摸动物、捡松露；[不会迟到](npc-meeting-warp.md)，走路赶不上就趁玩家看不见时直接到。
 12. **当天赴约与改口的 Windows 修复**：`codex/call-off-windows-tests` 纳入 `m2c-call-off / 3fa263a`，包含下矿验收修复；五类问题的修复与可重复原生脚本见 [报告](test-results/2026-10-22-same-day-call-off-windows.md)。该分支用于本轮推送，main 保持原状态。全 NPC／随机矿层／剧情／多人等未覆盖边界仍需后续观察。
 13. **约到后天、好感、动物活的 Windows 修复**：`codex/meetings-animals-windows-tests` 从 `edb6d80` 纳入 `m2c-farm-animals / f10021d`，保留此前五类修复，再修复四类日期问题、地面产品堆叠丢失、实际迟到免扣判定和实际好感记账。初轮 258/258 Node、45/45 C#、228/228 限定原生（7 次真实保存、46 次读档）。用户随后明确配偶规则“按文档”“之后推送”，追加配偶／室友赴约均不加、不扣的修复，专章八种组合 57/57、原好感回归 57/57 通过；失败记录和边界见 [本轮报告](test-results/2026-10-22-meetings-animals-windows.md)。当前功能分支已获推送授权，main 不合并。
-14. **待验收**：最前端是 `m2c-farm-animals`，一条直线包含下矿验收修复、当天赴约与改口的 Windows 修复（第 12 项）、约到后天／好感／动物活的 Windows 修复（第 13 项），以及赴约影响好感、约到后天、农场动物活、不会迟到；Windows 已在合并前的代码上验过前三步；还要按 `npc-meeting-warp.md` §6 测不迟到（传送），并把 Windows 脚本里两处受传送影响的断言改掉，再用合并后的代码重跑三步的脚本。全 NPC／随机矿层／剧情／多人等未覆盖边界照旧，main 保持原状态。
-15. **碰面后一起逛**：`m2c-outing` 建在第 14 项的分支上，按 `npc-outing.md` §7 测。用户定：Windows 测完传送后把 main 快进到 `m2c-farm-animals`；`m2c-outing` 另等它自己的验收。
+14. **传送已验收**：`m2c-farm-animals` 一条直线包含下矿验收修复、当天赴约与改口的 Windows 修复（第 12 项）、约到后天／好感／动物活的 Windows 修复（第 13 项），以及赴约影响好感、约到后天、农场动物活、不会迟到。传送由 `codex/meeting-warp-windows-tests`（`ab9eb06`）验收并修复过期仍传送误扣、加入口临时快走，限定原生 263/263，已合并进来。用户之前定“先等 Windows 测完传送再合并”，现在等用户确认后把 main 快进到 `m2c-farm-animals`。全 NPC／随机矿层／剧情／多人等未覆盖边界照旧。
+15. **碰面后一起逛**：`m2c-outing` 建在 `m2c-farm-animals` 上，已合并第 14 项的传送修复，按 `npc-outing.md` §7 测。main 快进只到 `m2c-farm-animals`；`m2c-outing` 另等它自己的验收。
 
 ## 8. 文档索引
 
@@ -342,7 +347,8 @@ dotnet build mod/StardewAgentBridge   # 编译 Mod，编译完自动装进游戏
 | `docs/npc-later-meetings.md` | 约到后天：日历换算、记成记忆、更远的婉拒（三种做法的实测）、提前取消、NPC 知道约定、测试和 Windows 清单 |
 | `docs/npc-farm-animals.md` | 农场动物活：用户定的四样和规则、照原版的做法、实测、测试和 Windows 清单 |
 | `docs/npc-outing.md` | 碰面后一起逛：跟着走、陪钓鱼、表情、站到身边、不跟去的地方、聊天那一行和记忆、实测、Windows 清单 |
-| `docs/npc-meeting-warp.md` | 不会迟到：走路赶不上就趁玩家看不见时直接到，从出入口进来，原日程和取消，Windows 清单和要改的两处断言 |
+| `docs/npc-meeting-warp.md` | 传送赴约、入口临时快走和步速恢复，实际到场／取消／过期的 Windows 验收及准时性边界 |
+| `docs/test-results/2026-10-22-meeting-warp-windows.md` | 过期误传送误扣、入口快走的原版钟速对照、逐地点入口、保存回滚、失败及覆盖边界 |
 | `docs/npc-meetings.md` | 按约定赴约：夜间 `meet` 字段与原话核对、8 个地点的格子、在原版日程里插两站的做法、实测、测试和 Windows 清单 |
 | `docs/npc-approach.md` | NPC 有话要说时主动走过来：谁会来（`seek` 与关键词实测）、原版寻路和日程的依据、等候与走回、测试和 Windows 清单 |
 | `docs/npc-schedules.md` | NPC 知道自己今天的行程：原版日程怎么读、写进哪些 prompt、token 和真实模型对照、Windows 清单 |

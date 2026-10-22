@@ -63,16 +63,18 @@ internal sealed partial class ModEntry
 
         /// <summary>The time as agreed, before any putting off.</summary>
         public int Agreed { get; }
-        /// <summary>When the Mod got it; one agreed today at or before this is "right away".</summary>
-        public int ReceivedAt;
-        /// <summary>Only observed lateness excuses a no-show; the route estimate can be early or late.</summary>
-        public bool ComesLate => this.SameDay && this.Agreed > this.ReceivedAt && this.ArrivedAt > this.Agreed;
         /// <summary>
         /// Walking cannot get there in time, so it appears there once the player cannot see it go
         /// (docs/npc-meeting-warp.md); `Warped` once it has.
         /// </summary>
         public bool Warp;
         public bool Warped;
+        /// <summary>Its own speed before hurrying in from a way in; put back on arrival and every way out.</summary>
+        public int? WarpSpeed;
+        /// <summary>When the Mod got it; one agreed today at or before this is "right away".</summary>
+        public int ReceivedAt;
+        /// <summary>Only observed lateness excuses a no-show; the route estimate can be early or late.</summary>
+        public bool ComesLate => this.SameDay && this.Agreed > this.ReceivedAt && this.ArrivedAt > this.Agreed;
 
         /// <summary>The game name.</summary>
         public string Npc { get; }
@@ -153,6 +155,9 @@ internal sealed partial class ModEntry
 
     private void ClearMeetings()
     {
+        foreach (Meeting m in this.meetings.Values)
+            if (m.WarpSpeed is not null && Game1.getCharacterFromName(m.Npc) is NPC npc)
+                RestoreWarpSpeed(m, npc);
         this.ReleaseFarmVisitors();
         this.ReleaseCompanions();
         this.ReleaseOutings();
@@ -402,7 +407,21 @@ internal sealed partial class ModEntry
         if (tile == spot)
             npc.faceDirection(m.Spot.Facing);
         else
+        {
             npc.controller = new PathFindController(npc, there, spot, m.Spot.Facing);
+            if ((!m.SameDay || m.Agreed > m.ReceivedAt) && npc.controller.pathToEndPoint is { Count: > 0 } path)
+            {
+                int minutes = Math.Max(10, Utility.ConvertTimeToMinutes(m.Time) - Utility.ConvertTimeToMinutes(Game1.timeOfDay));
+                double ticks = minutes / 10d * Game1.realMilliSecondsPerGameTenMinutes / 1000d * 60;
+                int speed = Math.Clamp((int)Math.Ceiling(path.Count * 64d / Math.Max(1, ticks)), npc.speed, Math.Max(4, npc.speed));
+                if (speed > npc.speed)
+                {
+                    m.WarpSpeed = npc.speed;
+                    npc.speed = speed;
+                    this.Monitor.Log($"{m.Npc} 从入口赶往{m.Place}，临时步速 {speed}，抵达后恢复。", LogLevel.Info);
+                }
+            }
+        }
         // Its own stops until it leaves were taken out when this was planned; nothing due now may set off elsewhere.
         npc.lastAttemptedSchedule = Game1.timeOfDay;
         m.Warped = true;
@@ -426,6 +445,16 @@ internal sealed partial class ModEntry
         }
         // In through a door in sight is how anyone comes in.
         return seen;
+    }
+
+    /// <summary>Only the entrance leg may hurry; all ways out restore the speed it had before that leg.</summary>
+    private static void RestoreWarpSpeed(Meeting m, NPC npc)
+    {
+        if (m.WarpSpeed is int original)
+        {
+            npc.speed = original;
+            m.WarpSpeed = null;
+        }
     }
 
     /// <summary>
@@ -494,6 +523,7 @@ internal sealed partial class ModEntry
     /// <summary>The original stops back in place; from where it stands to where they have it now, if it has set off.</summary>
     private void RestoreSchedule(Meeting m, NPC npc, bool warpInSight = true)
     {
+        RestoreWarpSpeed(m, npc);
         if (npc.Schedule is not { } schedule)
             return;
         schedule.Remove(m.Depart);
@@ -509,6 +539,7 @@ internal sealed partial class ModEntry
     {
         if (m.Arrived)
             return;
+        RestoreWarpSpeed(m, npc);
         m.ArrivedAt = Game1.timeOfDay;
         m.Arrived = true;
         if (!m.SameDay || m.Spouse || m.Leave == m.ReturnAt || npc.Schedule is not { } schedule)
@@ -578,6 +609,14 @@ internal sealed partial class ModEntry
     {
         if (Game1.getCharacterFromName(m.Npc) is not NPC npc)
             return;
+        // A missed update window or a blocked entrance must not invent an arrival at the deadline and penalize the player.
+        if (m.Warp && !m.Arrived && Game1.timeOfDay >= m.Leave)
+        {
+            m.Reported = true;
+            this.RestoreSchedule(m, npc);
+            this.Monitor.Log($"{m.Npc} 在赴约结束前没能到达{m.Place}，回原日程，不记赴约或爽约。", LogLevel.Info);
+            return;
+        }
         if (m.Warp && !m.Warped && !m.Arrived)
             this.WarpToMeeting(m, npc);
         if (m.Farm)
@@ -649,6 +688,8 @@ internal sealed partial class ModEntry
     private void ReportMeeting(Meeting m, int left)
     {
         m.Reported = true;
+        if ((m.Trip.Actor ?? Game1.getCharacterFromName(m.Npc)) is NPC actor)
+            RestoreWarpSpeed(m, actor);
         if (!m.Arrived)
         {
             this.Monitor.Log($"{m.Npc} 没走到{m.Place}，不记这次约定。", LogLevel.Info);
