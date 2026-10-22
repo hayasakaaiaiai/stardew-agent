@@ -5,7 +5,7 @@
 import { clock } from './schedule.ts';
 import { OPENING_LINE, SEASONS } from './dialogue.ts';
 import { asksToMeet, type CallOff, type Change, type Invitation, type Kept, type LaterAgreement, namedDays, quotedAgreement, quotedCallOff, quotedChange, quotedDecline,
-  quotedInvite,
+  quotedInvite, FESTIVAL_DAYS, festivalOn, withVenue,
   quotedLater, quotedLaterCallOff,
   quotedPeriodTime, quotedToday,
   type TimedQuote } from './meeting-agreement.ts';
@@ -27,7 +27,13 @@ export const MEET_PLACES: Readonly<Record<string, RegExp>> = {
   矿洞: /矿洞|矿井|矿坑|下矿|矿里/,
   骷髅洞穴: /骷髅洞|骷髅矿/,
   火山: /火山/,
+  // A festival is where the town is that day: going together (docs/npc-meetings-more.md §3).
+  ...Object.fromEntries(Object.entries(FESTIVAL_DAYS).map(([name, festival]) => [name, festival.words])),
 };
+
+const festive = (place: string) => Object.hasOwn(FESTIVAL_DAYS, place);
+/** "14:00 在海滩见面", or "一起去花舞节". */
+const meetText = (meeting: Pick<Meeting, 'time' | 'place'>) => festive(meeting.place) ? `一起去${meeting.place}` : `${clock(meeting.time)} 在${meeting.place}见面`;
 
 /**
  * Farm chores a close NPC did on arrival (docs/npc-farm-help.md), and the animals tended (docs/npc-farm-animals.md);
@@ -172,7 +178,7 @@ export function meetingFor(state: NpcState, today: number): Meeting | undefined 
   const meet = state.meet as Record<string, unknown> | null | undefined;
   if (state.day !== today - 1 || !meet || typeof meet !== 'object' || typeof meet.place !== 'string' || !Object.hasOwn(MEET_PLACES, meet.place)
     || !Number.isSafeInteger(meet.time) || (meet.time as number) < EARLIEST || (meet.time as number) > LATEST
-    || (meet.time as number) % 10 !== 0 || (meet.time as number) % 100 > 59) return undefined;
+    || (meet.time as number) % 10 !== 0 || (meet.time as number) % 100 > 59 || festivalOn(today)) return undefined;
   return { time: meet.time as number, place: meet.place };
 }
 
@@ -183,7 +189,7 @@ export function meetingLeave(time: number): number {
 }
 
 /** "约好 14:00 在海滩见面", or "约好马上去矿洞见面" for one agreed as right away. */
-const agreedText = (meeting: Meeting) => meeting.soon ? `约好马上去${meeting.place}见面` : `约好 ${clock(meeting.time)} 在${meeting.place}见面`;
+const agreedText = (meeting: Meeting) => meeting.soon ? `约好马上去${meeting.place}见面` : `约好${festive(meeting.place) ? '' : ' '}${meetText(meeting)}`;
 
 /**
  * For the NPC's own conversation that day; nothing once it has left the place, unless it is still with the player in a
@@ -192,7 +198,7 @@ const agreedText = (meeting: Meeting) => meeting.soon ? `约好马上去${meetin
 export function meetingLine(meeting: Meeting | undefined, now: number, here: boolean, helped?: Helped, trip?: MineTrip,
   outing?: Outing): string | undefined {
   if (!meeting || meeting.calledOff || !trip && !outing && (meeting.sameDay ? meeting.ended || now >= MEET_END : now > meetingLeave(meeting.time))) return undefined;
-  const agreed = meeting.soon ? `今天 ${clock(meeting.time)} ${agreedText(meeting)}` : `今天 ${clock(meeting.time)} 在${meeting.place}见面`;
+  const agreed = meeting.soon ? `今天 ${clock(meeting.time)} ${agreedText(meeting)}` : `今天${festive(meeting.place) ? '' : ' '}${meetText(meeting)}`;
   if (trip) return `${agreed}；${tripText(meeting.place, trip)}`;
   if (outing) return `${agreed}；${outingText(outing)}`;
   return `${agreed}${here ? '，现在就在这里碰面了' : ''}${helped ? `；你来了以后已经${helpedText(helped)}` : ''}`;
@@ -222,7 +228,8 @@ export function meetingMemory(meeting: Meeting & { met: boolean; left: number; h
   const agreed = `${agreedText(meeting)}${late}${meeting.helped ? `，我${helpedText(meeting.helped)}` : ''}`;
   return meeting.met
     ? { text: `${agreed}，农场主来了${sent}。`, importance: 2, kind: 'observation', subjects: ['player'], visibility: 'private' }
-    : { text: `${agreed}，我等到 ${clock(meeting.left)}，农场主没来。`, importance: 3, kind: 'observation', subjects: ['player'], visibility: 'private' };
+    : { text: `${agreed}${festive(meeting.place) ? '' : `，我等到 ${clock(meeting.left)}`}，农场主没来。`, importance: 3, kind: 'observation', subjects: ['player'],
+      visibility: 'private' };
 }
 
 /** At most this many appointments a day, as the Mod keeps (Meetings.cs). */
@@ -235,7 +242,20 @@ function hhmm(gameTime: number): number {
   return time < 600 ? time + 2400 : time;
 }
 
-type TurnLog = { player: string; npc: string; atMeeting?: true; invited?: true };
+type TurnLog = { player: string; npc: string; atMeeting?: true; invited?: true; birthday?: number };
+
+/** The NPC's birthday as a day of the year (1 = spring 1), from the Mod's `talk.open` (docs/npc-meetings-more.md §3). */
+export const yearDay = (birthday: { season: string; day: number }) => SEASON_ORDER.indexOf(birthday.season as typeof SEASON_ORDER[number]) * 28 + birthday.day;
+
+/**
+ * "你生日那天" said to the NPC, or "我生日" by it, made the absolute day it next falls on ("第41天"), which the checks
+ * read like any day named outright.
+ */
+export function withBirthday(text: string, speaker: '玩家' | 'NPC', birthday: number | undefined, today: number): string {
+  if (birthday === undefined) return text;
+  const day = today - (today - 1) % 112 + birthday - 1;
+  return text.replace(speaker === '玩家' ? /(?:你|您)的?生日(?:那天|当天)?/g : /我的?生日(?:那天|当天)?/g, `第${day < today ? day + 112 : day}天`);
+}
 const turnOf = (entry: DayEntry, npcId: string) => {
   const log = entry.changes.find(change => change.npcId === npcId)?.log as Partial<TurnLog> | undefined;
   return log && typeof log.player === 'string' && typeof log.npc === 'string' ? log as TurnLog : undefined;
@@ -246,11 +266,12 @@ const turnOf = (entry: DayEntry, npcId: string) => {
  * Speakers come from the saved log; the opening stage direction is not something the player said.
  */
 export function lastConversation(entries: readonly DayEntry[], npcId: string): TimedQuote[] {
-  const turns = entries.flatMap(entry => { const turn = turnOf(entry, npcId); return turn ? [{ ...turn, time: hhmm(entry.gameTime) }] : []; });
+  const turns = entries.flatMap(entry => { const turn = turnOf(entry, npcId); return turn ? [{ ...turn, time: hhmm(entry.gameTime), day: Math.floor(entry.gameTime / 1440) }] : []; });
   const opened = turns.findLastIndex(turn => turn.player === OPENING_LINE);
+  const birthday = opened >= 0 ? turns[opened]!.birthday : undefined;
   return turns.slice(Math.max(0, opened)).flatMap((turn, index) => [
-    ...(turn.player === OPENING_LINE ? [] : [{ id: `p${index}`, speaker: '玩家' as const, text: turn.player, time: turn.time }]),
-    { id: `n${index}`, speaker: 'NPC' as const, text: turn.npc, time: turn.time },
+    ...(turn.player === OPENING_LINE ? [] : [{ id: `p${index}`, speaker: '玩家' as const, text: withBirthday(turn.player, '玩家', birthday, turn.day), time: turn.time }]),
+    { id: `n${index}`, speaker: 'NPC' as const, text: withBirthday(turn.npc, 'NPC', birthday, turn.day), time: turn.time },
   ]);
 }
 
@@ -327,7 +348,7 @@ export function dayLabel(day: number, today?: number): string {
 
 export interface LaterMeeting extends Meeting { day: number }
 
-const laterText = (meeting: LaterMeeting) => `约好${dayLabel(meeting.day)}${clock(meeting.time)} 在${meeting.place}见面`;
+const laterText = (meeting: LaterMeeting) => `约好${dayLabel(meeting.day)}${meetText(meeting)}`;
 
 /** The note that keeps it: "约好春季 12 日（周六）14:00 在海滩见面。" */
 export function laterNote(agreement: LaterAgreement): MemoryDraft {
@@ -365,7 +386,8 @@ export function moodLine(notes: readonly Pick<Memory, 'topics'>[], today: number
     const down = /^被拒:(\d+)$/.exec(topic);
     if (down && today - Number(down[1]) <= TURNED_DOWN_DAYS && today >= Number(down[1])) declined = Math.max(declined ?? 0, Number(down[1]));
   }
-  if (stood) return `- ${AGO[today - stood.day]}${agreedText(stood)}，农场主没来（你等到 ${clock(stood.left)}），你还记着；这几天农场主再约你，答不答应看你自己。`;
+  if (stood) return `- ${AGO[today - stood.day]}${agreedText(stood)}，农场主没来${festive(stood.place) ? '' : `（你等到 ${clock(stood.left)}）`}，你还记着；`
+    + '这几天农场主再约你，答不答应看你自己。';
   return declined === undefined ? undefined : `- ${AGO[today - declined]}你开口约农场主出去，农场主当场说不行，没约成。`;
 }
 
@@ -375,7 +397,8 @@ export function declinedIn(entries: readonly DayEntry[], npcId: string): boolean
 }
 
 /** Where an appointment moved, as said to the NPC and shown by the Mod: "明天（周五）15:00 在镇广场". */
-export const movedLabel = (to: Kept, today: number) => `${to.day === today ? '今天 ' : dayLabel(to.day, today)}${clock(to.time)} 在${to.place}`;
+export const movedLabel = (to: Kept, today: number) => `${to.day === today ? festive(to.place) ? '今天' : '今天 ' : dayLabel(to.day, today)}${
+  festive(to.place) ? `一起去${to.place}` : `${clock(to.time)} 在${to.place}`}`;
 
 /** Today's moved to another day: "约好 14:00 在海滩见面，后来改到明天（周五）15:00 在镇广场。" */
 export function movedNote(meeting: Meeting, label: string): MemoryDraft {
@@ -434,9 +457,8 @@ export function farInvitation(text: string, today: number): string | undefined {
   return /下个?月/.test(text) ? '下个月' : /下个?(?:星期|礼拜|周)/.test(text) ? '下周' : undefined;
 }
 
-/** The line for that turn; measured to turn far invitations down 12/12 against 3/12 without (docs/npc-later-meetings.md §3). */
 /** Where an NPC may ask the player to meet, besides the farm and the mines it may also offer (docs/npc-invites.md). */
-const ORDINARY_PLACES = Object.keys(MEET_PLACES).filter(place => !['农场', '矿洞', '骷髅洞穴', '火山'].includes(place));
+const ORDINARY_PLACES = Object.keys(MEET_PLACES).filter(place => !['农场', '矿洞', '骷髅洞穴', '火山'].includes(place) && !festive(place));
 /** From this time on there is too little of the day left to ask for later today. */
 const INVITE_TODAY_UNTIL = 1800;
 
@@ -450,12 +472,28 @@ export function invitationLine(now: number): string {
     + '说清几点。自然地问农场主愿不愿意；不答应也没关系，别勉强。';
 }
 
+/**
+ * The player asks to meet somewhere ordinary on a festival day (today unless another day is named): that turn the NPC
+ * is told the town is at the festival and only going together can be agreed (docs/npc-meetings-more.md §3).
+ */
+export function festivalClash(text: string, today: number): string | undefined {
+  const named = namedDays(text, today);
+  const day = named.length ? named[0]! : today;
+  const festival = festivalOn(day);
+  if (!festival || !asksToMeet(text) || named.some(other => other !== day) || day > today + NEAR_DAYS) return undefined;
+  // Going together, even by where it is held ("看月光水母，海边见"), is fine.
+  const places = withVenue(Object.keys(MEET_PLACES).filter(place => MEET_PLACES[place]!.test(text)));
+  if (places.every(place => festive(place)) || !places.some(place => ORDINARY_PLACES.includes(place))) return undefined;
+  return `- 农场主说的${dayLabel(day)}是${festival}，大家都要去节日，普通地方约不了；要约就约一起去${festival}。`;
+}
+
+/** The line for that turn; measured to turn far invitations down 12/12 against 3/12 without (docs/npc-later-meetings.md §3). */
 export const farInvitationLine = (label: string) => `- 农场主约的是${label}，太远了：你只答应三天内（今天、明天、后天）的约定，这次婉拒，说到时候再约。`;
 
 /** The nearest one ahead, for the NPC's own conversation: "后天（周六）14:00 在海滩见面". */
 export function upcomingLine(upcoming: readonly LaterMeeting[], today: number): string | undefined {
   const next = upcoming.find(meeting => meeting.day > today);
-  return next && `${dayLabel(next.day, today)}${clock(next.time)} 在${next.place}见面`;
+  return next && `${dayLabel(next.day, today)}${meetText(next)}`;
 }
 
 /** What the conversation that just ended agreed for a later day, or took back of those already made. */

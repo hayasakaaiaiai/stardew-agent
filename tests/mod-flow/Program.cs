@@ -719,6 +719,22 @@ Test("about one day in three someone asks the player out, the same one for a sav
     Check(Lately(10, 16) && !Lately(10, 17) && !Lately(null, 3), "Not a week between two invitations from the same NPC.");
 });
 
+Test("a festival is a place an appointment can be at, the evening ones at 22:00, by vanilla's festival id, and is no outing", () =>
+{
+    object mod = BubbleMod();
+    Set(mod, "meetings", Activator.CreateInstance(modType.GetField("meetings", Fields)!.FieldType, StringComparer.OrdinalIgnoreCase)!);
+    var meetings = (System.Collections.IDictionary)Get(mod, "meetings")!;
+    using JsonDocument packet = JsonDocument.Parse(JsonSerializer.Serialize(new { type = "day.meetings", lineageId = "farm", loadNonce = "current", seq = 0,
+        meetings = new object[] { new { npc = "abigail", time = 2200, place = "月光水母起舞" }, new { npc = "leah", time = 2200, place = "海滩" },
+            new { npc = "sam", time = 900, place = "花舞节" } } }));
+    Invoke(mod, "HandleMeetings", "day.meetings", packet.RootElement);
+    Check(meetings.Contains("Abigail") && meetings.Contains("Sam") && !meetings.Contains("Leah"), "22:00 is for the evening festivals only (docs/npc-meetings-more.md §3).");
+    Type meetingType = modType.GetNestedType("Meeting", BindingFlags.NonPublic)!;
+    Check((string?)meetingType.GetProperty("Festival")!.GetValue(meetings["Abigail"]) == "summer28"
+        && (string?)meetingType.GetProperty("Festival")!.GetValue(meetings["Sam"]) == "spring24", "Not vanilla's festival id.");
+    Check(!(bool)meetingType.GetProperty("Ordinary")!.GetValue(meetings["Sam"])!, "Going to a festival together became an outing.");
+});
+
 Test("farm chores are worded like the backend, and the farm is a place an appointment can be at", () =>
 {
     Type doneType = modAssembly.GetType("StardewAgentBridge.FarmHelp+Done", throwOnError: true)!;

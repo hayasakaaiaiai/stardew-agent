@@ -101,6 +101,8 @@ export type ModMessage =
     outing?: Outing;
     /** The Mod chose this NPC to ask the player out on its first opening today (docs/npc-invites.md). */
     invite?: boolean;
+    /** Its birthday, so "你生日那天" names a day (docs/npc-meetings-more.md §3). */
+    birthday?: { season: Season; day: number };
     world: WorldSnapshot;
   } & Envelope)
   | ({ type: 'talk.say'; npc: string; text: string; date: GameDate } & Envelope)
@@ -309,6 +311,11 @@ export function parseModMessage(raw: string): ModMessage {
       if (data.schedule !== undefined && !isSchedule(data.schedule)) fail('schedule must be a list of stops');
       if (data.atMeeting !== undefined && typeof data.atMeeting !== 'boolean') fail('atMeeting must be a boolean');
       if (data.invite !== undefined && typeof data.invite !== 'boolean') fail('invite must be a boolean');
+      if (data.birthday !== undefined) {
+        const birthday = data.birthday as Record<string, unknown> | null;
+        if (!birthday || typeof birthday !== 'object' || !SEASONS.has(birthday.season as Season) || !Number.isSafeInteger(birthday.day)
+          || (birthday.day as number) < 1 || (birthday.day as number) > 28) fail('birthday is invalid');
+      }
       helped(data.helped);
       mine(data.mine);
       outing(data.outing);

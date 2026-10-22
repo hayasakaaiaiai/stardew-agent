@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { type TimedQuote, quotedChange, quotedDecline, quotedToday } from '../src/agent/meeting-agreement.ts';
-import { MEET_PLACES, moodLine, stoodUpTopics, turnedDownNote } from '../src/agent/meetings.ts';
+import { festivalDay, festivalOn, namedDays, type TimedQuote, quotedChange, quotedDecline, quotedLater, quotedToday } from '../src/agent/meeting-agreement.ts';
+import { festivalClash, meetingLine, meetingMemory, MEET_PLACES, moodLine, stoodUpTopics, turnedDownNote, upcomingLine } from '../src/agent/meetings.ts';
 import { connect, harness, meetingsSent, openTalk, WORLD } from './helpers/bridge.ts';
 
 const at = (time: number) => (speaker: '玩家' | 'NPC', text: string, id = speaker + text): TimedQuote => ({ id, speaker, text, time });
@@ -17,17 +17,17 @@ test('"一点" is one o’clock only as a time; "早一点", "人少一点", "�
   }
 });
 
-const kept = { day: 39, time: 1400, place: '海滩' };
+const kept = { day: 40, time: 1400, place: '海滩' }; // summer 12 (the 11th is the Luau)
 const pair = (player: string, npc: string, playerFirst = true) => playerFirst
   ? [at(1000)('玩家', player), at(1000)('NPC', npc)] : [at(1000)('NPC', npc), at(1000)('玩家', player)];
 
 test('an appointment is moved by what follows "改成/换到/还是", the rest staying; either side may ask, the other must plainly agree (docs/npc-meetings-more.md §1)', () => {
-  const moved = (player: string, npc: string, playerFirst = true) => quotedChange(pair(player, npc, playerFirst), kept, MEET_PLACES, 39);
-  assert.deepEqual(moved('三点改成五点吧', '行。'), { day: 39, time: 1700, place: '海滩', by: '玩家' });
-  assert.deepEqual(moved('我们别去海边了，改去广场吧？', '好呀。'), { day: 39, time: 1400, place: '镇广场', by: '玩家' });
-  assert.deepEqual(moved('今天的改到明天下午吧？', '嗯，明天下午见。'), { day: 40, time: 1400, place: '海滩', by: '玩家' });
-  assert.deepEqual(moved('还是去墓地吧？', '可以啊。'), { day: 39, time: 1400, place: '墓地', by: '玩家' });
-  assert.deepEqual(moved('好啊！', '我下午要帮妈妈看店，改到傍晚好吗？', false), { day: 39, time: 1700, place: '海滩', by: 'NPC' });
+  const moved = (player: string, npc: string, playerFirst = true) => quotedChange(pair(player, npc, playerFirst), kept, MEET_PLACES, 40);
+  assert.deepEqual(moved('三点改成五点吧', '行。'), { day: 40, time: 1700, place: '海滩', by: '玩家' });
+  assert.deepEqual(moved('我们别去海边了，改去广场吧？', '好呀。'), { day: 40, time: 1400, place: '镇广场', by: '玩家' });
+  assert.deepEqual(moved('今天的改到明天下午吧？', '嗯，明天下午见。'), { day: 41, time: 1400, place: '海滩', by: '玩家' });
+  assert.deepEqual(moved('还是去墓地吧？', '可以啊。'), { day: 40, time: 1400, place: '墓地', by: '玩家' });
+  assert.deepEqual(moved('好啊！', '我下午要帮妈妈看店，改到傍晚好吗？', false), { day: 40, time: 1700, place: '海滩', by: 'NPC' });
   for (const [player, npc, playerFirst] of [['换个话题吧', '好啊'], ['还是算了吧', '好吧'], ['改成五点吧？', '五点不行，我要看店。'], ['改到下周三吧', '好'],
     ['嗯……我看看吧。', '改到傍晚好吗？', false], ['改成上午九点吧？', '好啊。']] as const) {
     assert.equal(moved(player, npc, playerFirst ?? true), null, `${player}｜${npc}`);
@@ -135,5 +135,54 @@ test('the talks after being stood up or turned down carry that line', { timeout:
   wire.send({ ...openTalk(1, 'Sam'), world: { ...WORLD, date: day(1100) } }); await wire.until('talk.reply', wire.inbox.length);
   assert.match(system(), /- 今天你开口约农场主出去，农场主当场说不行，没约成。/);
   assert.doesNotMatch(system(), /农场主没来/, 'only the one stood up minds that');
+  await wire.close();
+});
+
+test('a festival names its day and is the place that day; nowhere else is agreed on it (docs/npc-meetings-more.md §3)', () => {
+  // Spring 22 is a Monday; the Flower Dance is spring 24, the Moonlight Jellies summer 28 at 22:00.
+  assert.equal(festivalDay('花舞节', 22), 24);
+  assert.equal(festivalDay('花舞节', 25), 24 + 112, 'next year once it is past');
+  assert.equal(festivalOn(24), '花舞节');
+  assert.equal(festivalOn(25), undefined);
+  assert.deepEqual(namedDays('花舞节那天', 22), [24]);
+  const said = (player: string, npc: string, time = 1000) => [at(time)('玩家', player), at(time)('NPC', npc)];
+  assert.deepEqual(quotedLater(said('花舞节那天一起去吧？', '好啊，花舞节见。'), MEET_PLACES, 22), { day: 24, time: 900, place: '花舞节' });
+  assert.deepEqual(quotedToday(said('一起去花舞节吧？', '好啊，走吧。'), MEET_PLACES, 24), { time: 900, place: '花舞节', soon: false });
+  assert.deepEqual(quotedToday(said('今晚一起去看月光水母吧？', '好啊，晚上海边见。', 1500), MEET_PLACES, 56), { time: 2200, place: '月光水母起舞', soon: false },
+    'the beach is where the jellies are');
+  assert.equal(festivalClash('月光水母那天一起去海边吧？', 54), undefined, 'where the festival is held');
+  assert.deepEqual(quotedToday(said('今晚一起去看月光水母吧？', '好啊，一起去。', 1500), MEET_PLACES, 56), { time: 2200, place: '月光水母起舞', soon: false });
+  assert.equal(quotedLater(said('花舞节那天在海边见？', '好啊。'), MEET_PLACES, 22), null, 'an ordinary place on a festival day');
+  assert.equal(quotedToday(said('下午两点海边见？', '好啊，两点见。'), MEET_PLACES, 24), null, 'nor today, on the festival');
+  assert.equal(festivalClash('花舞节那天下午一起去海边吧？', 22), '- 农场主说的春季 24 日（周三）是花舞节，大家都要去节日，普通地方约不了；要约就约一起去花舞节。');
+  assert.equal(festivalClash('后天下午一起去海边吧？', 22), festivalClash('花舞节那天下午一起去海边吧？', 22));
+  assert.equal(festivalClash('花舞节那天一起去吧？', 22), undefined, 'going together is fine');
+  assert.equal(festivalClash('明天下午一起去海边吧？', 22), undefined, 'not a festival day');
+  const dance = { time: 900, place: '花舞节' };
+  assert.equal(meetingLine(dance, 1000, true), '今天一起去花舞节，现在就在这里碰面了');
+  assert.equal(meetingLine(dance, 1000, false), '今天一起去花舞节');
+  assert.equal(meetingMemory({ ...dance, met: false, left: 2200 }).text, '约好一起去花舞节，农场主没来。');
+  assert.equal(meetingMemory({ ...dance, met: true, left: 1400 }).text, '约好一起去花舞节，农场主来了。');
+  assert.equal(upcomingLine([{ ...dance, day: 24 }], 22), '后天（周三）一起去花舞节');
+  assert.equal(moodLine([{ topics: stoodUpTopics(24, dance, 2200) }], 25), '- 昨天约好一起去花舞节，农场主没来，你还记着；这几天农场主再约你，答不答应看你自己。');
+});
+
+test('"你生日那天" said to the NPC names its birthday', { timeout: 15000 }, async t => {
+  const h = await harness(t);
+  const originalChat = h.fake.model.chat.bind(h.fake.model);
+  h.fake.model.chat = async (...args: Parameters<typeof originalChat>) => {
+    const result = await originalChat(...args);
+    const asked = /生日那天/.test(args[0].at(-1)!.content);
+    return asked ? { ...result, content: JSON.stringify({ ...JSON.parse(result.content), reply: '好啊，那天下午海边见。' }) } : result;
+  };
+  const server = await h.start();
+  const wire = await connect(server);
+  await wire.until('day.meetings', 0);
+  wire.send({ ...openTalk(1), birthday: { season: 'spring', day: 3 } }); await wire.until('talk.reply', wire.inbox.length);
+  wire.send({ type: 'talk.say', npc: 'Abigail', text: '你生日那天下午一起去海边吧？', date: { ...WORLD.date, time: 1000 } }); await wire.until('talk.reply', wire.inbox.length);
+  wire.send({ type: 'talk.close', npc: 'Abigail' }); await wire.until('ack', wire.inbox.length);
+  const note = '阿比盖尔记下了：约好春季 3 日（周三）14:00 在海滩见面。';
+  for (let i = 0; i < 300 && !h.logs.includes(note); i++) await new Promise(resolve => setTimeout(resolve, 10));
+  assert.ok(h.logs.includes(note), h.logs.filter(line => line.includes('阿比盖尔')).join('\n'));
   await wire.close();
 });

@@ -5,7 +5,7 @@ import { invitationLine, MEET_PLACES } from '../src/agent/meetings.ts';
 import { parseModMessage } from '../src/bridge/protocol.ts';
 import { connect, harness, meetingsSent, openTalk, WORLD } from './helpers/bridge.ts';
 
-const DAY = 39; // summer 11, a Thursday
+const DAY = 40; // summer 12, a Friday (the 11th is the Luau)
 const said = (ask: string, answer: string, reply = '', time = 1000): TimedQuote[] => [
   { id: 'n0', speaker: 'NPC', text: ask, time }, { id: 'p1', speaker: '玩家', text: answer, time: time + 10 },
   ...(reply ? [{ id: 'n1', speaker: 'NPC' as const, text: reply, time: time + 10 }] : []),

@@ -19,7 +19,8 @@ test('a next-season date must not be booked as a near date in this season', () =
 
 test('a numeric date can name today', () => {
   assert.deepEqual(namedDays('11号', 39), [39]);
-  assert.deepEqual(quotedToday(talk('11号下午两点海边见？', '好啊，两点海边见。'), MEET_PLACES, 39), { time: 1400, place: '海滩', soon: false });
+  // Summer 12: the 11th is the Luau, when only the festival itself can be agreed (docs/npc-meetings-more.md §3).
+  assert.deepEqual(quotedToday(talk('12号下午两点海边见？', '好啊，两点海边见。'), MEET_PLACES, 40), { time: 1400, place: '海滩', soon: false });
   assert.deepEqual(namedDays('下个月1号', 27), [29]);
   assert.deepEqual(namedDays('下月1号', 111), [113], 'the 28-day calendar also crosses the year');
   assert.deepEqual(quotedLater(talk('下个月1号上午八点矿洞见？', '好啊，八点矿洞见。'), MEET_PLACES, 27),

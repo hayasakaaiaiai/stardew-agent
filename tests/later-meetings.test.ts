@@ -52,7 +52,8 @@ test('an appointment for the day after tomorrow, or a weekday that close, is kep
   assert.equal(quotedToday(talk('周六下午两点海边见？', '好啊，两点见。'), MEET_PLACES, THURSDAY), null, 'Saturday is not today');
   assert.deepEqual(quotedToday(talk('周六下午两点海边见？', '好啊，两点见。'), MEET_PLACES, 41), { time: 1400, place: '海滩', soon: false }, 'unless it is');
   assert.deepEqual(quotedToday(talk('下午两点博物馆见，带你看个新化石？', '新化石？哇，我肯定来！不过周四我在诊所上班……两点我应该能溜出来。'),
-    MEET_PLACES, THURSDAY), { time: 1400, place: '博物馆', soon: false }, 'today’s weekday is today');
+    // A week on: summer 11 is the Luau, when only the festival itself can be agreed (docs/npc-meetings-more.md §3).
+    MEET_PLACES, THURSDAY + 7), { time: 1400, place: '博物馆', soon: false }, 'today’s weekday is today');
 });
 
 test('another day’s call-off leaves today’s alone, and takes back the one it names', () => {

@@ -16,7 +16,7 @@ import { type DeliveredLetter, type Letter, letterFor, letterKey } from '../agen
 import { callOffIn, changeIn, LATER_TOPIC, laterCallOffNote, laterIn, type LaterMeeting, laterMeetings, laterMovedNote, laterNote, type Meeting, meetingFor,
   meetingMemory, MEET_PLACES, movedLabel, movedNote,
   MEETS_PER_DAY, declinedIn, invitedIn, MOOD_TOPIC, moodLine, openedAtMeeting, stoodUpTopics, todayAgreement, todayMeeting,
-  turnedDownNote } from '../agent/meetings.ts';
+  turnedDownNote, yearDay } from '../agent/meetings.ts';
 import type { CallOff } from '../agent/meeting-agreement.ts';
 import { Nightly } from '../agent/nightly.ts';
 import { withMorningPlan } from '../agent/morning.ts';
@@ -498,6 +498,8 @@ export class GameSave {
             ...(message.type === 'talk.open' && message.atMeeting ? { atMeeting: true } : {}),
             // Asked the player out: the answer is read as an invitation when the talk closes (docs/npc-invites.md).
             ...(message.type === 'talk.open' && inviting ? { invited: true } : {}),
+            // So "你生日那天" names a day when the talk closes (docs/npc-meetings-more.md §3).
+            ...(message.type === 'talk.open' && message.birthday ? { birthday: yearDay(message.birthday) } : {}),
             ...(friendship ? { friendship } : {}), ...(gave ? { gave } : {}), bridgeReceipt: JSON.parse(canonical(receipt)) },
           memories: [...staged.remembered.map(item => ({ text: item.text, importance: item.importance,
             kind: 'conversation' as const, subjects: ['player'], visibility: 'private' as const })), ...(gave ? [givenMemory(gave)] : [])],
