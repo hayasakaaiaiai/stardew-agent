@@ -163,7 +163,7 @@ export type BackendMessage =
    * (docs/npc-same-day-meetings.md). `calledOff` ones were taken back, or the NPC sent home, in a later conversation
    * (docs/npc-call-off.md).
    */
-  | ({ type: 'day.meetings'; meetings: { npc: string; time: number; place: string; sameDay?: true; calledOff?: true }[] } & Envelope)
+  | ({ type: 'day.meetings'; meetings: { npc: string; time: number; place: string; sameDay?: true; calledOff?: true; movedTo?: string }[] } & Envelope)
   /** At most one letter for the mailbox this morning (docs/npc-mail.md); seq is 0. */
   | ({ type: 'day.letters'; letters: DeliveredLetter[] } & Envelope)
   | ({ type: 'talk.delta'; npc: string; text: string } & Envelope)

@@ -351,6 +351,51 @@ export function quotedInvite(lines: readonly TimedQuote[], places: Readonly<Reco
 /** Who took today's appointment back, or sent the other home: the player or the NPC (docs/npc-call-off.md). */
 export type CallOff = '玩家' | 'NPC';
 
+/** An appointment kept as it is now: absolute `day`, HHMM `time`, the place. */
+export interface Kept { day: number; time: number; place: string }
+/** It moved to another day, time or place, at whose asking (docs/npc-meetings-more.md §1). */
+export type Change = Kept & { by: CallOff };
+
+// What follows is the new day, time or place: "三点改成五点" is five, "周六改到周日" Sunday.
+const CHANGE = /改(?:成|到|在|去|为)|换(?:成|到|去)|挪到|推(?:到|迟到?)|提前到?|延(?:后到?|到|迟到?)|还是/;
+
+/**
+ * One side moves an appointment made before this conversation, the other plainly says yes (docs/npc-meetings-more.md
+ * §1): what follows "改成/换到/还是…" names the new day, time or place, and what it leaves out stays as it was. Only
+ * from today to the day after tomorrow; today's must still be ahead. Taken back afterwards means none; the last such
+ * move in the conversation wins.
+ */
+export function quotedChange(lines: readonly TimedQuote[], current: Kept, places: Readonly<Record<string, RegExp>>, today: number): Change | null {
+  let found: Change | null = null;
+  for (let i = 0; i + 1 < lines.length; i++) {
+    const ask = lines[i]!, answer = lines[i + 1]!;
+    const at = CHANGE.exec(ask.text)?.index;
+    if (at === undefined || answer.speaker === ask.speaker) continue;
+    const yes = answer.speaker === '玩家'
+      ? (agrees(answer) || YES.test(answer.text)) && PLAIN_YES.test(answer.text) && !HEDGE.test(answer.text)
+      : agrees(answer) || YES.test(answer.text);
+    if (!yes || REFUSED.test(answer.text) || DECLINED.test(answer.text) || CONDITIONAL.test(answer.text)) continue;
+    const moved = ask.text.slice(at).replace(NOT_THE_TIME, '');
+    const placesSaid = Object.keys(places).filter(place => places[place]!.test(moved));
+    const days = new Set([...namedDays(moved, today), ...(TODAY_WORDS.test(moved) ? [today] : [])]);
+    if (placesSaid.length > 1 || days.size > 1) continue;
+    const day = [...days][0] ?? current.day;
+    const timed = [moved, answer.text].map(text => text.replace(/今晚/g, '今天晚上').replace(/今早/g, '今天早上'));
+    const clocks = readClocks(timed, time => day === today && time <= later(answer.time, 10) && time < 1200 ? time + 1200 : time);
+    const periods = timed.flatMap(text => PERIODS.filter(([period]) => period.test(text))).map(([, time]) => time);
+    const times = clocks.length ? clocks : periods;
+    if (times.some(time => time !== times[0])) continue;
+    const time = times[0] ?? current.time;
+    const place = placesSaid[0] ?? current.place;
+    if (day === current.day && time === current.time && place === current.place) continue;
+    if (day < today || day > today + LATER_DAYS || time < EARLIEST || time > LATEST || day === today && time <= later(answer.time, 10)) continue;
+    // Taken back afterwards: then it is a call-off, not a move.
+    if (lines.slice(i + 2).some(quote => quote.speaker === '玩家' && (PLAYER_OFF.test(quote.text) || /算了/.test(quote.text)))) return null;
+    found = { day, time, place, by: ask.speaker };
+  }
+  return found;
+}
+
 // Plain words only, unlike REFUSED above: a wrong call-off walks the NPC away. Questions and conditions never count.
 const PLAYER_OFF = /不(?:去|来)了|别(?:去|来|等(?:我)?)了|不用(?:去|来)了|改天(?:再)?去|下次(?:再)?去/;
 // Sending company home; one that says it is staying ("凭什么让我先走？再往下一点点嘛") stays until the player insists.

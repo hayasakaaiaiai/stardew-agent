@@ -128,6 +128,12 @@ internal sealed partial class ModEntry
         /// <summary>A conversation took it back or sent the NPC home; undone on the next tick, once.</summary>
         public bool CallOff;
         public bool CalledOff;
+        /// <summary>A conversation moved it within today: undone, then put in afresh (docs/npc-meetings-more.md §1).</summary>
+        public (int Time, string Place)? MoveTo;
+        /// <summary>Where it moved, for the notice instead of "取消了".</summary>
+        public string? MovedTo;
+        /// <summary>The one it moved to: its notice was already shown.</summary>
+        public bool Moved;
     }
 
     /// <summary>Where a schedule has an NPC at some time: the end of a route, with how it stands there.</summary>
@@ -219,7 +225,23 @@ internal sealed partial class ModEntry
             if (item.TryGetProperty("calledOff", out JsonElement off) && off.ValueKind == JsonValueKind.True)
             {
                 if (name is not null && this.meetings.TryGetValue(name, out Meeting? known))
+                {
                     known.CallOff = true;
+                    // Moved to another day: said so instead of "取消了" (docs/npc-meetings-more.md §1).
+                    if (item.TryGetProperty("movedTo", out JsonElement to) && to.ValueKind == JsonValueKind.String && to.GetString() is { Length: > 0 and <= 40 } where)
+                        known.MovedTo = where;
+                }
+                continue;
+            }
+            // The same NPC at another time or place today: moved (docs/npc-meetings-more.md §1).
+            if (name is not null && this.meetings.TryGetValue(name, out Meeting? same) && !same.Reported
+                && (same.Agreed != hhmm || same.Place != place.GetString()))
+            {
+                if (same.Applied)
+                    same.MoveTo = (hhmm, place.GetString()!);
+                else
+                    // One that could not go: tried afresh, with the usual notice.
+                    this.meetings[name] = new Meeting(name, hhmm, place.GetString()!, sameDay: true);
                 continue;
             }
             if (name is not null && !this.meetings.ContainsKey(name) && this.meetings.Count < MeetsPerDay)
@@ -233,9 +255,11 @@ internal sealed partial class ModEntry
     {
         if (!this.config.NpcMeetings || this.meetings.Count == 0 || !Context.IsWorldReady || !this.activeLoad || Game1.eventUp)
             return;
-        foreach (Meeting m in this.meetings.Values)
+        foreach (Meeting m in this.meetings.Values.ToList())
         {
-            if (m.CallOff && !m.CalledOff)
+            if (m.MoveTo is not null && !m.CallOff)
+                this.MoveMeeting(m);
+            else if (m.CallOff && !m.CalledOff)
                 this.CallOffMeeting(m);
             else if (!m.Applied && !m.Failed)
                 this.ApplyMeeting(m);
@@ -300,7 +324,7 @@ internal sealed partial class ModEntry
             return;
         }
         m.Applied = true;
-        if (m.SameDay && npc is not null)
+        if (m.SameDay && !m.Moved && npc is not null)
             Game1.addHUDMessage(new HUDMessage(m.Agreed <= m.ReceivedAt ? $"和{npc.displayName}约好马上在{m.Place}见"
                 : $"和{npc.displayName}约好 {m.Time / 100}:{m.Time % 100:00} 在{m.Place}见", HUDMessage.newQuest_type));
     }
@@ -519,8 +543,29 @@ internal sealed partial class ModEntry
         else
         {
             m.Reported = true;
-            Game1.addHUDMessage(new HUDMessage($"和{npc.displayName}的约定取消了", HUDMessage.error_type));
+            Game1.addHUDMessage(m.MovedTo is string to ? new HUDMessage($"和{npc.displayName}的约定改到{to}", HUDMessage.newQuest_type)
+                : new HUDMessage($"和{npc.displayName}的约定取消了", HUDMessage.error_type));
         }
+    }
+
+    /// <summary>
+    /// Moved within today (docs/npc-meetings-more.md §1): before they met, undone as a call-off is, then put into the
+    /// schedule afresh at the new time and place; once together (met, on the farm, underground), it stays as it is.
+    /// </summary>
+    private void MoveMeeting(Meeting m)
+    {
+        (int time, string place) = m.MoveTo!.Value;
+        m.MoveTo = null;
+        if (m.Met || m.Reported || m.Trip.Joined || m.Out.Started || m.Farm && m.Stage >= 1)
+        {
+            this.Monitor.Log($"{m.Npc} 已经和玩家在一起，约定不改。", LogLevel.Info);
+            return;
+        }
+        m.CallOff = true;
+        m.MovedTo = $" {time / 100}:{time % 100:00} 在{place}";
+        this.CallOffMeeting(m);
+        this.meetings[m.Npc] = new Meeting(m.Npc, time, place, sameDay: true) { Moved = true };
+        this.Monitor.Log($"{m.Npc} 今天的约定改到 {time} 在{place}。", LogLevel.Info);
     }
 
     /// <summary>The original stops back in place; from where it stands to where they have it now, if it has set off.</summary>

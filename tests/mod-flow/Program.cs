@@ -594,6 +594,29 @@ Test("a called-off appointment is marked for undoing, never added, and one not y
     Check((bool)Get(leah, "Failed")! && (bool)Get(leah, "Reported")! && (bool)Get(leah, "CalledOff")!, "One never applied could still be applied or reported.");
 });
 
+Test("an appointment moved within today is marked to be moved, one moved to another day says where, and one that could not go is tried afresh", () =>
+{
+    object mod = BubbleMod();
+    Set(mod, "meetings", Activator.CreateInstance(modType.GetField("meetings", Fields)!.FieldType, StringComparer.OrdinalIgnoreCase)!);
+    var meetings = (System.Collections.IDictionary)Get(mod, "meetings")!;
+    JsonDocument Packet(params object[] rows) => JsonDocument.Parse(JsonSerializer.Serialize(new { type = "day.meetings", lineageId = "farm",
+        loadNonce = "current", seq = 0, meetings = rows }));
+    using (JsonDocument packet = Packet(new { npc = "abigail", time = 1400, place = "海滩" }, new { npc = "leah", time = 1400, place = "海滩" },
+        new { npc = "sam", time = 1500, place = "墓地", sameDay = true }))
+        Invoke(mod, "HandleMeetings", "day.meetings", packet.RootElement);
+    object abigail = meetings["Abigail"]!, leah = meetings["Leah"]!, sam = meetings["Sam"]!;
+    Set(abigail, "Applied", true); Set(leah, "Applied", true); Set(sam, "Failed", true);
+    using (JsonDocument later = Packet(new { npc = "abigail", time = 1500, place = "镇广场", sameDay = true },
+        new { npc = "leah", time = 1400, place = "海滩", calledOff = true, movedTo = "明天（周五）15:00 在镇广场" },
+        new { npc = "sam", time = 1700, place = "墓地", sameDay = true }))
+        Invoke(mod, "HandleMeetings", "day.meetings", later.RootElement);
+    var move = Get(abigail, "MoveTo");
+    Check(meetings["Abigail"] == abigail && move is not null && move.ToString() == "(1500, 镇广场)", "A move within today was not marked (docs/npc-meetings-more.md §1).");
+    Check((bool)Get(leah, "CallOff")! && (string?)Get(leah, "MovedTo") == "明天（周五）15:00 在镇广场", "A move to another day did not say where.");
+    Check(meetings["Sam"] != sam && (int)modType.GetNestedType("Meeting", BindingFlags.NonPublic)!.GetProperty("Agreed")!.GetValue(meetings["Sam"])! == 1700,
+        "One that could not go was not tried again at the new time.");
+});
+
 Test("one that walking cannot get there in time may appear there half an hour early, never in the past", () =>
 {
     int Warp(int time, int now) => (int)modType.GetMethod("WarpDeparture", BindingFlags.Static | BindingFlags.NonPublic)!.Invoke(null, new object[] { time, now })!;

@@ -4,7 +4,8 @@
  */
 import { clock } from './schedule.ts';
 import { OPENING_LINE, SEASONS } from './dialogue.ts';
-import { asksToMeet, type CallOff, type Invitation, type LaterAgreement, namedDays, quotedAgreement, quotedCallOff, quotedInvite, quotedLater, quotedLaterCallOff,
+import { asksToMeet, type CallOff, type Change, type Invitation, type Kept, type LaterAgreement, namedDays, quotedAgreement, quotedCallOff, quotedChange, quotedInvite,
+  quotedLater, quotedLaterCallOff,
   quotedPeriodTime, quotedToday,
   type TimedQuote } from './meeting-agreement.ts';
 import type { DayEntry, Memory, MemoryDraft, NpcState } from '../types.ts';
@@ -131,6 +132,8 @@ export interface Meeting {
   calledOff?: CallOff;
   /** Called off while they were together: the Mod reports it, and the memory says so. */
   sentHome?: true;
+  /** Taken off today because it moved to another day: where to, for the Mod's notice (docs/npc-meetings-more.md §1). */
+  movedTo?: string;
 }
 
 /** What the nightly model wrote, before its quotes are checked. */
@@ -288,12 +291,18 @@ export function todayMeeting(nightly: Meeting | undefined, entries: readonly Day
     const log = entry.changes.find(change => change.npcId === npcId)?.log as Record<string, unknown> | undefined;
     const agreed = log?.meetToday as Record<string, unknown> | undefined;
     const off = log?.meetCalledOff as Record<string, unknown> | undefined;
+    const moved = log?.meetChanged as Record<string, unknown> | undefined;
     if (!meeting && agreed && typeof agreed.place === 'string' && Object.hasOwn(MEET_PLACES, agreed.place)
       && Number.isSafeInteger(agreed.time) && (agreed.time as number) % 10 === 0 && (agreed.time as number) % 100 <= 59)
       meeting = { time: agreed.time as number, place: agreed.place, sameDay: true, ...(agreed.soon === true ? { soon: true as const } : {}) };
     else if (meeting && log?.meeting) meeting.ended = true;
     else if (meeting && off && (off.by === '玩家' || off.by === 'NPC'))
-      Object.assign(meeting, { calledOff: off.by }, off.met === true ? { sentHome: true } : {});
+      Object.assign(meeting, { calledOff: off.by }, off.met === true ? { sentHome: true } : {}, typeof off.movedTo === 'string' ? { movedTo: off.movedTo } : {});
+    // Moved within today: agreed anew today, at the new time and place (docs/npc-meetings-more.md §1).
+    else if (meeting && !meeting.ended && !meeting.calledOff && moved && typeof moved.place === 'string' && Object.hasOwn(MEET_PLACES, moved.place)
+      && Number.isSafeInteger(moved.time)) {
+      meeting = { time: moved.time as number, place: moved.place, sameDay: true };
+    }
   }
   return meeting;
 }
@@ -323,6 +332,29 @@ const laterText = (meeting: LaterMeeting) => `约好${dayLabel(meeting.day)}${cl
 export function laterNote(agreement: LaterAgreement): MemoryDraft {
   return { text: `${laterText(agreement)}。`, importance: 3, kind: 'observation', subjects: ['player'], visibility: 'private',
     topics: [LATER_TOPIC, dayTopic(agreement.day), `约定:${agreement.time}:${agreement.place}`] };
+}
+
+/** Where an appointment moved, as said to the NPC and shown by the Mod: "明天（周五）15:00 在镇广场". */
+export const movedLabel = (to: Kept, today: number) => `${to.day === today ? '今天 ' : dayLabel(to.day, today)}${clock(to.time)} 在${to.place}`;
+
+/** Today's moved to another day: "约好 14:00 在海滩见面，后来改到明天（周五）15:00 在镇广场。" */
+export function movedNote(meeting: Meeting, label: string): MemoryDraft {
+  return { text: `${agreedText(meeting)}，后来改到${label}。`, importance: 2, kind: 'observation', subjects: ['player'], visibility: 'private' };
+}
+
+/** A later one moved to another day: it hides the appointment on its old day, like a call-off. */
+export function laterMovedNote(meeting: LaterMeeting, label: string): MemoryDraft {
+  return { text: `${laterText(meeting)}，后来改到${label}。`, importance: 2, kind: 'observation', subjects: ['player'], visibility: 'private',
+    topics: [LATER_TOPIC, dayTopic(meeting.day), '约定取消'] };
+}
+
+/**
+ * The conversation that just ended moved an appointment made before it (docs/npc-meetings-more.md §1); not one held
+ * while they are together, and not by the invitation's own opening.
+ */
+export function changeIn(entries: readonly DayEntry[], npcId: string, target: Kept, today: number, skip = 0): Change | null {
+  if (openedAtMeeting(entries, npcId)) return null;
+  return quotedChange(lastConversation(entries, npcId).slice(skip), target, MEET_PLACES, today);
 }
 
 /** Taken back before the day: "……，后来农场主说不去了。" It hides the appointment on that day. */

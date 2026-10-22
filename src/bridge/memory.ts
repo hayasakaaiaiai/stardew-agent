@@ -13,7 +13,8 @@ import { giftItemName, giftMemory } from '../agent/gifts.ts';
 import { GIVEN_TOPIC, givenMemory, withInPersonGift } from '../agent/in-person-gifts.ts';
 import { type Gossip, gossipOf, heardMemory, heardToday, shareFor, spread, type Transfer } from '../agent/news.ts';
 import { type DeliveredLetter, type Letter, letterFor, letterKey } from '../agent/letters.ts';
-import { callOffIn, LATER_TOPIC, laterCallOffNote, laterIn, type LaterMeeting, laterMeetings, laterNote, type Meeting, meetingFor, meetingMemory, MEET_PLACES,
+import { callOffIn, changeIn, LATER_TOPIC, laterCallOffNote, laterIn, type LaterMeeting, laterMeetings, laterMovedNote, laterNote, type Meeting, meetingFor,
+  meetingMemory, MEET_PLACES, movedLabel, movedNote,
   MEETS_PER_DAY, invitedIn, openedAtMeeting, todayAgreement, todayMeeting } from '../agent/meetings.ts';
 import type { CallOff } from '../agent/meeting-agreement.ts';
 import { Nightly } from '../agent/nightly.ts';
@@ -34,9 +35,9 @@ type FestivalEnded = Extract<Event, { type: 'festival.ended' }>;
 type MeetEnded = Extract<Event, { type: 'meet.ended' }>;
 type TalkClose = Extract<Event, { type: 'talk.close' }>;
 /** An appointment as the Mod gets it (docs/npc-meetings.md, docs/npc-same-day-meetings.md, docs/npc-call-off.md). */
-export type DayMeeting = { npc: string; time: number; place: string; sameDay?: true; calledOff?: true };
+export type DayMeeting = { npc: string; time: number; place: string; sameDay?: true; calledOff?: true; movedTo?: string };
 /** What a closed conversation did to today's appointment: settled one, or called it off and who did. */
-export type Settled = DayMeeting & { soon?: true; by?: CallOff; sentHome?: true; note?: string };
+export type Settled = DayMeeting & { soon?: true; by?: CallOff; sentHome?: true; note?: string; moved?: true };
 /** All a closed conversation settled: today's appointment, and the notes kept for later days (docs/npc-later-meetings.md). */
 export interface Settlement { today?: Settled; later: string[] }
 /** Who learned what, for the log. */
@@ -325,7 +326,36 @@ export class GameSave {
     // Its own opening asked the player out: that exchange is read as an invitation (docs/npc-invites.md).
     const { invitation, opening } = invitedIn(entries, npcId, today);
     const current = await this.meeting(npcId);
-    if (current) {
+    const upcoming = (await this.laterOf(npcId)).filter(meeting => meeting.day > today);
+    // Moved rather than taken back or made anew: today's while still ahead, or else the nearest later one
+    // (docs/npc-meetings-more.md §1).
+    const open = current && !current.ended && !current.calledOff ? current : undefined;
+    const target = open ? { day: today, time: open.time, place: open.place } : upcoming[0];
+    const change = target ? changeIn(entries, npcId, target, today, opening) : null;
+    // Another day than its own takes a free place there: one a day for each NPC, no more than the Mod keeps.
+    const roomOn = async (day: number) => day === target?.day
+      || !upcoming.some(meeting => meeting.day === day) && await this.laterCount(day) < MEETS_PER_DAY;
+    if (change && target) {
+      const label = movedLabel(change, today);
+      if (open && change.day === today) {
+        log.meetChanged = { time: change.time, place: change.place };
+        settled = { npc: npcId, ...wire({ time: change.time, place: change.place, sameDay: true }), moved: true };
+      } else if (change.day !== today ? await roomOn(change.day) : !current && (await this.meetings()).length < MEETS_PER_DAY) {
+        if (open) {
+          const note = movedNote(open, label);
+          log.meetCalledOff = { by: change.by, met: false, movedTo: label };
+          memories.push(note);
+          settled = { npc: npcId, ...wire({ ...open, calledOff: change.by, movedTo: label }), by: change.by, note: note.text };
+        } else if (change.day !== target.day) memories.push(laterMovedNote(upcoming[0]!, label));
+        if (change.day === today) {
+          log.meetToday = { time: change.time, place: change.place, soon: false };
+          settled = { npc: npcId, ...wire({ time: change.time, place: change.place, sameDay: true }) };
+        } else {
+          memories.push(laterNote(change));
+          (await this.withLater()).add(npcId);
+        }
+      }
+    } else if (current) {
       const by = current.ended || current.calledOff ? null : callOffIn(entries, npcId, current, today);
       if (by) {
         // Sent home while together, the Mod reports how it went; taken back beforehand, it is remembered now.
@@ -343,14 +373,15 @@ export class GameSave {
         settled = { npc: npcId, ...wire(meeting), ...(meeting.soon ? { soon: meeting.soon } : {}) };
       }
     }
-    const upcoming = (await this.laterOf(npcId)).filter(meeting => meeting.day > today);
-    const later = laterIn(entries, npcId, upcoming, today, opening);
-    for (const { meeting, by } of later.calledOff) memories.push(laterCallOffNote(meeting, by));
-    // One a day for each NPC, and no more than the Mod keeps on that day.
-    const agreed = invitation && invitation.day > today ? invitation : later.agreed;
-    if (agreed && !upcoming.some(meeting => meeting.day === agreed.day) && await this.laterCount(agreed.day) < MEETS_PER_DAY) {
-      memories.push(laterNote(agreed));
-      (await this.withLater()).add(npcId);
+    if (!change) {
+      const later = laterIn(entries, npcId, upcoming, today, opening);
+      for (const { meeting, by } of later.calledOff) memories.push(laterCallOffNote(meeting, by));
+      // One a day for each NPC, and no more than the Mod keeps on that day.
+      const agreed = invitation && invitation.day > today ? invitation : later.agreed;
+      if (agreed && !upcoming.some(meeting => meeting.day === agreed.day) && await this.laterCount(agreed.day) < MEETS_PER_DAY) {
+        memories.push(laterNote(agreed));
+        (await this.withLater()).add(npcId);
+      }
     }
     if (!Object.keys(log).length && !memories.length) return undefined;
     const receipt: Receipt = { seq: message.seq, hash: digest(canonical(message)) };
@@ -723,5 +754,5 @@ export class GameSave {
 /** Only what the Mod needs: one agreed today may come late rather than not at all; one called off is undone. */
 function wire(meeting: Meeting): Omit<DayMeeting, 'npc'> {
   return { time: meeting.time, place: meeting.place, ...(meeting.sameDay ? { sameDay: true as const } : {}),
-    ...(meeting.calledOff ? { calledOff: true as const } : {}) };
+    ...(meeting.calledOff ? { calledOff: true as const } : {}), ...(meeting.calledOff && meeting.movedTo ? { movedTo: meeting.movedTo } : {}) };
 }
