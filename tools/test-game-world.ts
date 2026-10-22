@@ -22,7 +22,7 @@ import { runMineCore, runMineRescue, runMineEdges, runMineWorlds, runMineSave, t
 import { runSameDay, runSameDayEdges } from './game-same-day-meetings.ts';
 import { runCallOff, runArrivalProbe } from './game-call-off.ts';
 import { runFarmAnimals } from './game-farm-animals.ts';
-import { runMeetingFriendship, runFriendshipBoundaries } from './game-meeting-friendship.ts';
+import { runMeetingFriendship, runFriendshipBoundaries, runSpouseFriendship } from './game-meeting-friendship.ts';
 import { runLaterMeetings } from './game-later-meetings.ts';
 
 interface Config { RequestId: string; UniqueId: string; SaveFolder: string; SaveDirectory: string; RunDirectory: string; GamePath: string; BackendUrl: string; World: boolean; Offline: boolean; Section: string }
@@ -38,7 +38,7 @@ const ROOT = resolve(import.meta.dirname, '..');
 const configPath = resolve(process.argv[2]!);
 const config = JSON.parse((await readFile(configPath, 'utf8')).replace(/^\uFEFF/, '')) as Config;
 assert.equal(config.World, true); assert.equal(config.SaveFolder, `MemoryTest_${config.UniqueId}`); assert.notEqual(config.UniqueId, '436774213');
-assert.ok(['all', 'schedules', 'backstage', 'festivals', 'content', 'fair-return', 'actions', 'actions-edge', 'actions-timing', 'actions-checks', 'actions-places', 'actions-incoming', 'farm-help', 'farm-chores', 'farm-visits', 'farm-save', 'mine', 'mine-core', 'mine-rescue', 'mine-edges', 'mine-worlds', 'mine-dungeons', 'mine-save', 'same-day', 'same-day-core', 'same-day-edges', 'call-off', 'call-off-arrival', 'call-off-arrival-save', 'farm-animals', 'meeting-friendship', 'later-meetings', 'friendship-boundaries'].includes(config.Section), 'Unknown native world test section.');
+assert.ok(['all', 'schedules', 'backstage', 'festivals', 'content', 'fair-return', 'actions', 'actions-edge', 'actions-timing', 'actions-checks', 'actions-places', 'actions-incoming', 'farm-help', 'farm-chores', 'farm-visits', 'farm-save', 'mine', 'mine-core', 'mine-rescue', 'mine-edges', 'mine-worlds', 'mine-dungeons', 'mine-save', 'same-day', 'same-day-core', 'same-day-edges', 'call-off', 'call-off-arrival', 'call-off-arrival-save', 'farm-animals', 'meeting-spouses', 'meeting-friendship', 'later-meetings', 'friendship-boundaries'].includes(config.Section), 'Unknown native world test section.');
 assert.equal(resolve(config.SaveDirectory), resolve(process.env.APPDATA!, 'StardewValley/Saves', config.SaveFolder));
 assert.ok(resolve(config.RunDirectory).startsWith(resolve(ROOT, '.runtime') + '\\'));
 const directory = config.RunDirectory;
@@ -468,14 +468,15 @@ try {
     if (['all', 'mine', 'mine-worlds', 'mine-dungeons'].includes(config.Section)) await runMineWorlds(host, config.Section !== 'mine-dungeons');
     if (['all', 'mine', 'mine-save'].includes(config.Section)) await runMineSave(host);
   }
-  if (['same-day', 'same-day-core', 'same-day-edges', 'call-off', 'call-off-arrival', 'call-off-arrival-save', 'farm-animals', 'meeting-friendship', 'later-meetings', 'friendship-boundaries'].includes(config.Section)) {
+  if (['same-day', 'same-day-core', 'same-day-edges', 'call-off', 'call-off-arrival', 'call-off-arrival-save', 'farm-animals', 'meeting-spouses', 'meeting-friendship', 'later-meetings', 'friendship-boundaries'].includes(config.Section)) {
     const host = { rpc, chapter, check, say, close, packets: modPackets, wireCount: () => packets.length,
     latestSystem: () => latestDialogue().messages[0]!.content, seedNight, meetingEntries,
     setReply: (text: string) => { actionTodayReply = text; },
     setMood: (mood: number) => { actionTodayMood = mood; },
     dayMeetings: (from = 0) => packets.slice(from).filter(row => row.direction === 'backend' && row.packet.type === 'day.meetings').map(row => row.packet),
     restart: async () => { await server.close(); server = await BridgeServer.start(options); await rpc('wait', { ticks: 120 }); } };
-    if (config.Section === 'friendship-boundaries') await runFriendshipBoundaries(host);
+    if (config.Section === 'meeting-spouses') await runSpouseFriendship(host);
+    else if (config.Section === 'friendship-boundaries') await runFriendshipBoundaries(host);
     else if (config.Section === 'later-meetings') await runLaterMeetings(host);
     else if (config.Section === 'meeting-friendship') await runMeetingFriendship(host);
     else if (config.Section === 'farm-animals') await runFarmAnimals(host);

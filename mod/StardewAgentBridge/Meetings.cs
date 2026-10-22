@@ -585,9 +585,10 @@ internal sealed partial class ModEntry
         if (m.Trip.Joined)
             fields["mine"] = m.Trip.Fields(Fighters.Contains(m.Npc));
         // Kept, it warms the NPC like a kind word; stood up, it stings like a slight (docs/npc-meeting-friendship.md).
-        // Called off beforehand, the NPC itself late, a spouse at home or chores done on the farm: nobody was stood up.
-        if (this.config.MeetingsChangeFriendship && (m.Trip.Actor ?? Game1.getCharacterFromName(m.Npc)) is NPC npc
-            && (m.Met || !m.CalledOff && !m.ComesLate && !m.Spouse && m.Helped is null))
+        // Spouses and roommates never gain or lose appointment friendship, even when the player comes.
+        // Called off beforehand, the NPC itself late or chores done on the farm: nobody was stood up.
+        if (this.config.MeetingsChangeFriendship && !m.Spouse && (m.Trip.Actor ?? Game1.getCharacterFromName(m.Npc)) is NPC npc
+            && (m.Met || !m.CalledOff && !m.ComesLate && m.Helped is null))
         {
             (int gain, int loss) = FriendshipStep(GameState.Hearts(npc), GameState.Relation(npc));
             int changed = this.ChangeFriendshipToday(npc, m.Met ? gain : -loss, m.Met ? $"和{npc.displayName}赴约" : $"{npc.displayName}在{m.Place}没等到农场主");

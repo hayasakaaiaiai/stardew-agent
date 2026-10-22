@@ -3,7 +3,7 @@ import type { TodayHost } from './game-same-day-meetings.ts';
 import type { State } from './test-game-world.ts';
 
 export interface FriendshipHost extends TodayHost { setMood(mood: number): void }
-interface Points { points: number; total: number }
+interface Points { points: number; total: number; spouse: string | null; relation: string }
 const points = (state: State) => state.native as unknown as Points;
 
 export async function runMeetingFriendship(h: FriendshipHost) {
@@ -57,7 +57,7 @@ export async function runMeetingFriendship(h: FriendshipHost) {
     check('friendship-wire-matches-native-point-change-' + scenario.name, Number(ended?.friendship ?? 0) === after.points - before, { after, ended });
   }
   check('friendship-native-matrix-matches-observed-arrivals', rows.every(row => row.actual === row.expected), rows);
-  // Record the documented spouse exception separately while its intended positive reward is clarified.
+  // The documented spouse exception applies to positive rewards as well as no-show penalties.
   await prepare(); await rpc('mine-unlock'); await rpc('config', { NpcMineCompanion: true });
   await rpc('action-place', { map: 'FarmHouse', x: 3, y: 4, relation: 'Married', hearts: 8, noSchedule: true });
   const spouseBefore = points(await rpc('friendship-inspect')).points;
@@ -68,7 +68,9 @@ export async function runMeetingFriendship(h: FriendshipHost) {
   await rpc('warp', { map: 'Mountain', x: 54, y: 5 }); state = await rpc('wait', { ticks: 60 });
   check('friendship-spouse-actually-meets-player', meeting(state).Met, state.actions);
   await rpc('clock', { time: meeting(state).Leave }); await rpc('wait', { ticks: 60 });
-  console.log('SPOUSE_REWARD ' + JSON.stringify({ actual: points(await rpc('friendship-inspect')).points - spouseBefore, wire: h.packets('meet.ended', spouseWire) }));
+  const spouseAfter = points(await rpc('friendship-inspect')), spouseEnded = h.packets('meet.ended', spouseWire).at(-1);
+  check('friendship-spouse-kept-meeting-is-exempt', spouseAfter.points === spouseBefore && spouseAfter.total === 0
+    && spouseEnded?.met === true && spouseEnded.friendship === undefined, { spouseAfter, spouseEnded });
 
   for (const met of [false, true]) {
     await prepare(); await rpc('farm-fixture');
@@ -144,4 +146,45 @@ export async function runFriendshipBoundaries(h: FriendshipHost) {
     }
   }
   h.setMood(0); h.setReply('');
+}
+
+/** Spouses and roommates keep their meeting memories without gaining or losing appointment friendship. */
+export async function runSpouseFriendship(h: FriendshipHost) {
+  const { rpc, chapter, check } = h;
+  for (const npc of ['Abigail', 'Krobus']) {
+    for (const place of ['矿洞', '农场']) {
+      for (const met of [true, false]) {
+        const label = `${npc}-${place}-${met ? 'met' : 'absent'}`;
+        await chapter('spring', 6); await rpc('action-reset'); await rpc('clock', { time: 1000 });
+        await rpc('mine-unlock');
+        if (place === '农场') await rpc('farm-fixture');
+        // Vanilla can move the farmhouse entry to (3, 11); keep its resident within greeting range of that entry.
+        await rpc('action-place', { npc, map: 'FarmHouse', x: 3, y: place === '农场' ? 7 : 4, relation: 'Married', roommate: npc === 'Krobus',
+          hearts: 8, noSchedule: true });
+        const before = points(await rpc('friendship-fixture', { npc, points: 2000, spouse: true }));
+        check('spouse-fixture-resolves-native-household-' + label, before.spouse === npc
+          && before.relation === (npc === 'Krobus' ? 'roommate' : 'married'), before);
+        await rpc('config', { NpcMeetings: true, NpcApproach: false, NpcMineCompanion: true, MeetingsChangeFriendship: true });
+        await rpc('warp', { map: 'Farm', x: 50, y: 25 });
+        const wire = h.wireCount();
+        let state = await rpc('action-meetings', { npc, meetings: [{ npc: npc.toLowerCase(), place, time: 1500 }] });
+        check('spouse-plan-is-applied-' + label, state.actions!.meetings[0]!.Applied && state.actions!.meetings[0]!.Spouse, state.actions);
+        await rpc('clock', { time: 1500 }); state = await rpc('wait', { ticks: 60 });
+        check('spouse-actually-arrives-' + label, state.actions!.meetings[0]!.Arrived && !state.actions!.meetings[0]!.Met
+          && (place !== '农场' || !!state.actions!.meetings[0]!.Helped), state.actions);
+        if (met) {
+          await rpc('warp', place === '农场' ? { map: 'FarmHouse', x: 3, y: 10 } : { map: 'Mountain', x: 54, y: 5 });
+          state = await rpc('wait', { ticks: 60 });
+        }
+        check('spouse-player-presence-matches-' + label, state.actions!.meetings[0]!.Met === met, state.actions);
+        await rpc('clock', { time: state.actions!.meetings[0]!.Leave }); state = await rpc('wait', { ticks: 60 });
+        const after = points(await rpc('friendship-inspect', { npc }));
+        const ended = h.packets('meet.ended', wire).find(packet => String(packet.npc).toLowerCase() === npc.toLowerCase());
+        check('spouse-appointment-changes-neither-points-nor-daily-total-' + label, state.actions!.meetings[0]!.Reported
+          && after.points === before.points && after.total === 0 && !!ended && ended.met === met
+          && ended.friendship === undefined, { before, after, ended });
+        check('spouse-meeting-memory-still-recorded-' + label, await h.meetingEntries() === 1);
+      }
+    }
+  }
 }

@@ -120,9 +120,11 @@ internal sealed partial class ModEntry
             {
                 Game1.player.friendshipData[npc].Points = Number("points", 2000);
                 Game1.player.stats.Set("Book_Friendship", (uint)Number("book", 0));
+                if (Flag("spouse")) Game1.player.spouse = npc;
             }
             this.worldTestNative = new { npc, points = Game1.player.friendshipData[npc].Points, total = this.friendshipToday.GetValueOrDefault(npc),
-                book = Game1.player.stats.Get("Book_Friendship") };
+                book = Game1.player.stats.Get("Book_Friendship"), relation = GameState.Relation(this.SocialActor(npc)),
+                spouse = Game1.player.getSpouse()?.Name };
         }
         else this.worldTestNative = this.AnimalSnapshot();
         this.WorldComplete(); return true;
