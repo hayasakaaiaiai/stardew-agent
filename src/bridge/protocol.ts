@@ -147,8 +147,12 @@ export type BackendMessage =
   | ({ type: 'day.bubbles'; npcs: Record<string, Bubble[]> } & Envelope)
   /** NPCs who walk over to the player today, by id, with the fewest hearts each needs (docs/npc-approach.md); seq is 0. */
   | ({ type: 'day.approach'; npcs: Record<string, number> } & Envelope)
-  /** Today's appointments with the player, by NPC id; HHMM and a place the Mod knows (docs/npc-meetings.md); seq is 0. */
-  | ({ type: 'day.meetings'; meetings: { npc: string; time: number; place: string }[] } & Envelope)
+  /**
+   * Today's appointments with the player, by NPC id; HHMM and a place the Mod knows (docs/npc-meetings.md); seq is 0.
+   * `sameDay` ones were agreed today and may come late; resent when a conversation settles one
+   * (docs/npc-same-day-meetings.md).
+   */
+  | ({ type: 'day.meetings'; meetings: { npc: string; time: number; place: string; sameDay?: true }[] } & Envelope)
   /** At most one letter for the mailbox this morning (docs/npc-mail.md); seq is 0. */
   | ({ type: 'day.letters'; letters: DeliveredLetter[] } & Envelope)
   | ({ type: 'talk.delta'; npc: string; text: string } & Envelope)

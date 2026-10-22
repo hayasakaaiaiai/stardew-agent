@@ -12,7 +12,8 @@ namespace StardewAgentBridge;
 /// <summary>
 /// NPCs keep yesterday's appointments with the player (docs/npc-meetings.md): two stops go into today's vanilla
 /// schedule, there and back, so the game's own schedule pathing walks them across maps. When it is over, the backend
-/// is told whether the player came, so the NPC remembers.
+/// is told whether the player came, so the NPC remembers. One agreed in a conversation today comes the same way, late
+/// rather than not at all (docs/npc-same-day-meetings.md).
 /// </summary>
 internal sealed partial class ModEntry
 {
@@ -48,19 +49,22 @@ internal sealed partial class ModEntry
 
     private sealed class Meeting
     {
-        public Meeting(string npc, int time, string place)
+        public Meeting(string npc, int time, string place, bool sameDay)
         {
             this.Npc = npc;
             this.Time = time;
             this.Place = place;
-            this.Leave = MeetingLeave(time);
+            this.SameDay = sameDay;
         }
 
         /// <summary>The game name.</summary>
         public string Npc { get; }
-        public int Time { get; }
+        /// <summary>Put off to when it can get there, for one agreed today that cannot make it in time.</summary>
+        public int Time { get; set; }
         public string Place { get; }
-        public int Leave { get; }
+        public int Leave => MeetingLeave(this.Time);
+        /// <summary>Agreed in a conversation today: "right away" comes as the time it was agreed.</summary>
+        public bool SameDay { get; }
         public (string Map, int X, int Y, int Facing) Spot;
         /// <summary>When it sets off; before that its own schedule may already have it near the place.</summary>
         public int Depart;
@@ -119,12 +123,25 @@ internal sealed partial class ModEntry
     private static int MeetingDeparture(int arrive, int travelMinutes, int now)
     {
         int depart = Utility.ConvertMinutesToTime(Utility.ConvertTimeToMinutes(arrive) - travelMinutes - MeetEarlyMinutes);
-        return Math.Max(depart, Utility.ModifyTime(now - now % 10, 10));
+        return Math.Max(depart, NextTick(now));
+    }
+
+    private static int NextTick(int now) => Utility.ModifyTime(now - now % 10, 10);
+
+    /// <summary>
+    /// The earliest an NPC setting off now can be there, ten minutes early as usual, on a ten-minute tick and not before
+    /// 8:00; `walkEnds` is when the walk it is on gets where it is going.
+    /// </summary>
+    private static (int Depart, int Arrive) SoonestMeeting(int now, int walkEnds, int travelMinutes)
+    {
+        int depart = Math.Max(NextTick(now), walkEnds % 10 == 0 ? walkEnds : NextTick(walkEnds));
+        int arrive = Utility.ModifyTime(depart, travelMinutes + MeetEarlyMinutes);
+        return (depart, Math.Max(800, arrive % 10 == 0 ? arrive : NextTick(arrive)));
     }
 
     /// <summary>
     /// A newer list replaces appointments not yet put into a schedule, e.g. after a late consolidation; ones already in
-    /// a schedule stay until the day ends.
+    /// a schedule stay until the day ends. The backend resends the whole list when a conversation settles one for today.
     /// </summary>
     private bool HandleMeetings(string type, JsonElement message)
     {
@@ -132,18 +149,23 @@ internal sealed partial class ModEntry
             return false;
         if (!this.IsCurrentMessage(message) || !message.TryGetProperty("meetings", out JsonElement list) || list.ValueKind != JsonValueKind.Array)
             return true;
-        foreach (string pending in this.meetings.Where(pair => !pair.Value.Applied).Select(pair => pair.Key).ToList())
+        // One agreed today that could not go stays given up, so a resend does not tell the player twice.
+        foreach (string pending in this.meetings.Where(pair => !pair.Value.Applied && !(pair.Value.Failed && pair.Value.SameDay)).Select(pair => pair.Key).ToList())
             this.meetings.Remove(pending);
         foreach (JsonElement item in list.EnumerateArray())
         {
-            if (item.ValueKind != JsonValueKind.Object || !item.TryGetProperty("npc", out JsonElement id) || id.ValueKind != JsonValueKind.String
+            if (item.ValueKind != JsonValueKind.Object)
+                continue;
+            // Agreed today "right away" from 6:00 on; it still gets there no earlier than 8:00.
+            bool sameDay = item.TryGetProperty("sameDay", out JsonElement today) && today.ValueKind == JsonValueKind.True;
+            if (!item.TryGetProperty("npc", out JsonElement id) || id.ValueKind != JsonValueKind.String
                 || !item.TryGetProperty("time", out JsonElement time) || time.ValueKind != JsonValueKind.Number || !time.TryGetInt32(out int hhmm)
-                || hhmm is < 800 or > 2100 || hhmm % 100 > 59 || hhmm % 10 != 0
+                || hhmm < (sameDay ? 600 : 800) || hhmm > 2100 || hhmm % 100 > 59 || hhmm % 10 != 0
                 || !item.TryGetProperty("place", out JsonElement place) || place.ValueKind != JsonValueKind.String || !MeetPlaces.ContainsKey(place.GetString()!))
                 continue;
             string? name = SocialNpcs.FirstOrDefault(npc => npc.Equals(id.GetString(), StringComparison.OrdinalIgnoreCase));
             if (name is not null && !this.meetings.ContainsKey(name) && this.meetings.Count < MeetsPerDay)
-                this.meetings[name] = new Meeting(name, hhmm, place.GetString()!);
+                this.meetings[name] = new Meeting(name, hhmm, place.GetString()!, sameDay);
         }
         return true;
     }
@@ -170,7 +192,7 @@ internal sealed partial class ModEntry
         string? why = npc is null || npc.IsInvisible ? "今天不在"
             : spouse && !m.Farm && !m.Dungeon ? "配偶和室友的日程不改"
             : !spouse && (npc.Schedule is null || npc.ignoreScheduleToday) ? "今天没有原版日程"
-            : Utility.ModifyTime(Game1.timeOfDay, MeetEarlyMinutes) >= m.Time ? "收到时已经来不及"
+            : !m.SameDay && Utility.ModifyTime(Game1.timeOfDay, MeetEarlyMinutes) >= m.Time ? "收到时已经来不及"
             : null;
         int taken = this.meetings.Values.Count(other => other != m && other.Applied && other.Place == m.Place);
         if (why is null && !m.Farm && taken >= MeetPlaces[m.Place].Length)
@@ -186,10 +208,16 @@ internal sealed partial class ModEntry
             {
                 // Spouses' days are vanilla's own; they are fetched from home unseen instead (MineCompanion.cs).
                 m.Spot = MeetPlaces[m.Place][taken];
+                if (m.SameDay)
+                    m.Time = Math.Max(m.Time, SoonestMeeting(Game1.timeOfDay, Game1.timeOfDay, SpouseHeadStartMinutes).Arrive);
                 m.Depart = MeetingDeparture(m.Time, SpouseHeadStartMinutes, Game1.timeOfDay);
             }
             else if (spouse)
+            {
+                if (m.SameDay)
+                    m.Time = Math.Max(m.Time, SoonestMeeting(Game1.timeOfDay, Game1.timeOfDay, 0).Arrive);
                 m.Depart = m.Time;
+            }
             else
             {
                 try
@@ -204,9 +232,14 @@ internal sealed partial class ModEntry
         {
             m.Failed = true;
             this.Monitor.Log($"{m.Npc} 今天 {m.Time} 在{m.Place}的约定不去了：{why}", LogLevel.Info);
+            // Just agreed face to face: say so rather than leave the player waiting (docs/npc-same-day-meetings.md).
+            if (m.SameDay && npc is not null)
+                Game1.addHUDMessage(new HUDMessage($"{npc.displayName}今天去不了{m.Place}了", HUDMessage.error_type));
             return;
         }
         m.Applied = true;
+        if (m.SameDay && npc is not null)
+            Game1.addHUDMessage(new HUDMessage($"和{npc.displayName}约好 {m.Time / 100}:{m.Time % 100:00} 在{m.Place}见", HUDMessage.newQuest_type));
     }
 
     /// <summary>
@@ -246,16 +279,33 @@ internal sealed partial class ModEntry
             // Keep the earlier departure when an earlier stop is nearer; moving it forward can alternate between stops.
             depart = Math.Min(depart, BeforePendingStop(MeetingDeparture(m.Time, TravelMinutes(go.route, farmSteps), now)));
         }
-        if (StopBefore(npc, depart, inclusive: false) != from)
+        bool late = depart < NextTick(now) || Utility.ModifyTime(depart, TravelMinutes(go.route, farmSteps) + MeetEarlyMinutes) > m.Time;
+        int replaceFrom = depart;
+        if (late && m.SameDay)
+        {
+            // Agreed today: set off at the next tick, or once the walk it is on is over, and come late.
+            var walking = schedule.Where(pair => pair.Key <= now).OrderBy(pair => pair.Key).LastOrDefault();
+            bool onTheWay = walking.Value is not null && npc.controller is { pathToEndPoint.Count: > 0 };
+            from = StopBefore(npc, NextTick(now), inclusive: false);
+            go = Go(from);
+            (depart, int arrive) = SoonestMeeting(now, onTheWay ? Utility.ModifyTime(walking.Key, TravelMinutes(walking.Value!.route)) : now,
+                TravelMinutes(go.route, farmSteps));
+            if (arrive > 2100)
+                return "21:00 前赶不到";
+            m.Time = arrive;
+            // No later stop may slip in before it sets off: the way there starts where it is going now.
+            replaceFrom = NextTick(now);
+        }
+        else if (StopBefore(npc, depart, inclusive: false) != from)
             return "出发的位置算不准";
-        if (depart < Utility.ModifyTime(now - now % 10, 10) || Utility.ModifyTime(depart, TravelMinutes(go.route, farmSteps) + MeetEarlyMinutes) > m.Time)
+        else if (late)
             return "来不及在约定时间到";
         ScheduleStop back = StopBefore(npc, m.Leave, inclusive: true);
         SchedulePathDescription ret = npc.pathfindToNextScheduleLocation(key, spot.Map, spot.X, spot.Y, back.Map, back.Tile.X, back.Tile.Y,
             back.Facing, back.Behavior, back.Message);
         if (go.route is not { Count: > 0 } || ret.route is not { Count: > 0 })
             return "原版寻路找不到路";
-        foreach (int replaced in schedule.Keys.Where(time => time >= depart && time <= m.Leave).ToList())
+        foreach (int replaced in schedule.Keys.Where(time => time >= replaceFrom && time <= m.Leave).ToList())
             schedule.Remove(replaced);
         go.time = depart;
         ret.time = m.Leave;

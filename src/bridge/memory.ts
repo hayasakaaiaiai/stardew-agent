@@ -13,7 +13,7 @@ import { giftItemName, giftMemory } from '../agent/gifts.ts';
 import { GIVEN_TOPIC, givenMemory, withInPersonGift } from '../agent/in-person-gifts.ts';
 import { type Gossip, gossipOf, heardMemory, heardToday, shareFor, spread, type Transfer } from '../agent/news.ts';
 import { type DeliveredLetter, type Letter, letterFor, letterKey } from '../agent/letters.ts';
-import { type Meeting, meetingFor, meetingMemory, MEET_PLACES } from '../agent/meetings.ts';
+import { type Meeting, meetingFor, meetingMemory, MEET_PLACES, MEETS_PER_DAY, sameDayMeeting, todayAgreement } from '../agent/meetings.ts';
 import { Nightly } from '../agent/nightly.ts';
 import { withMorningPlan } from '../agent/morning.ts';
 import { createRuntime, type SaveScope } from '../index.ts';
@@ -30,6 +30,9 @@ type SceneShown = Extract<Event, { type: 'scene.shown' }>;
 type TownHour = Extract<Event, { type: 'town.hour' }>;
 type FestivalEnded = Extract<Event, { type: 'festival.ended' }>;
 type MeetEnded = Extract<Event, { type: 'meet.ended' }>;
+type TalkClose = Extract<Event, { type: 'talk.close' }>;
+/** An appointment as the Mod gets it (docs/npc-meetings.md, docs/npc-same-day-meetings.md). */
+export type DayMeeting = { npc: string; time: number; place: string; sameDay?: true };
 /** Who learned what, for the log. */
 export interface Heard { npcId: string; memory: MemoryDraft }
 interface Receipt { seq: number; hash: string; reply?: TalkReply }
@@ -242,10 +245,12 @@ export class GameSave {
     this.state.lastSeq = Math.max(this.state.lastSeq, receipt.seq);
   }
 
-  async control(message: Exclude<Event, TalkRequest>, onApply: () => void = () => {}): Promise<void> {
+  /** Returns the appointment a closed conversation settled for today, if any (docs/npc-same-day-meetings.md). */
+  async control(message: Exclude<Event, TalkRequest>, onApply: () => void = () => {}): Promise<(DayMeeting & { soon?: true }) | undefined> {
     return this.enqueue(async () => {
-      if (this.check(message)) return;
+      if (this.check(message)) return undefined;
       onApply();
+      let agreed: (DayMeeting & { soon?: true }) | undefined;
       switch (message.type) {
         case 'save.saving': {
           const p = message.commit;
@@ -283,11 +288,29 @@ export class GameSave {
         case 'title.returned':
           await this.discardNow(); break;
         case 'talk.close':
+          agreed = await this.agreeToday(message);
           break;
       }
       this.addReceipt({ seq: message.seq, hash: digest(canonical(message)) });
       await this.persist();
+      return agreed;
     });
+  }
+
+  /**
+   * A conversation that settled an appointment for today logs it in that NPC's day, so it is saved or rolled back with
+   * the day like the conversation itself (docs/npc-same-day-meetings.md). One a day for each NPC, three in all.
+   */
+  private async agreeToday(message: TalkClose): Promise<(DayMeeting & { soon?: true }) | undefined> {
+    const npcId = message.npc.toLowerCase();
+    if (this.state.phase !== 'open' || !(SOCIAL_NPCS as readonly string[]).includes(npcId) || await this.meeting(npcId)) return undefined;
+    const entries = this.dayEntries(npcId);
+    const meeting = todayAgreement(entries, npcId);
+    if (!meeting || (await this.meetings()).length >= MEETS_PER_DAY) return undefined;
+    const receipt: Receipt = { seq: message.seq, hash: digest(canonical(message)) };
+    await this.scope!.agent(npcId).record({ seq: message.seq, gameTime: entries.at(-1)!.gameTime,
+      log: { meetToday: { time: meeting.time, place: meeting.place, soon: meeting.soon === true }, bridgeReceipt: JSON.parse(canonical(receipt)) } });
+    return { npc: npcId, ...wire(meeting), ...(meeting.soon ? { soon: meeting.soon } : {}) };
   }
 
   /** `gifts` are the NPC's card gifts, one of which a close NPC may hand over (docs/npc-in-person-gifts.md). */
@@ -380,7 +403,10 @@ export class GameSave {
         && (SOCIAL_NPCS as readonly string[]).includes(npcId) && Object.hasOwn(MEET_PLACES, message.place);
       // Only one who came along can have been in the dungeon with the player.
       const trip = message.mine && message.met ? { ...message.mine } : undefined;
-      const note = fits ? meetingMemory({ time: message.time, place: message.place, met: message.met, left: message.left,
+      // One agreed today is remembered as agreed, though it may have come late (docs/npc-same-day-meetings.md).
+      const sameDay = fits ? sameDayMeeting(this.dayEntries(npcId), npcId) : undefined;
+      const agreed = sameDay?.place === message.place ? { time: sameDay.time, ...(sameDay.soon ? { soon: sameDay.soon } : {}) } : { time: message.time };
+      const note = fits ? meetingMemory({ ...agreed, place: message.place, met: message.met, left: message.left,
         ...(message.helped ? { helped: message.helped } : {}), ...(trip ? { trip } : {}) }) : undefined;
       if (note) await this.scope!.agent(npcId).record({ seq: message.seq, gameTime: gameMinutes(message.date),
         log: { meeting: { place: message.place, time: message.time, left: message.left, met: message.met, ...(message.helped ? { helped: { ...message.helped } } : {}),
@@ -392,10 +418,23 @@ export class GameSave {
     });
   }
 
-  /** This NPC's appointment with the player today, written last night (docs/npc-meetings.md). */
+  /**
+   * This NPC's appointment with the player today, written last night (docs/npc-meetings.md) or agreed in a conversation
+   * today (docs/npc-same-day-meetings.md).
+   */
   async meeting(npcId: string): Promise<Meeting | undefined> {
     const state = await this.runtime.ctx.store.call('state', { lineageId: this.initial.lineageId, headCommitId: this.state.head, npcId });
-    return meetingFor(state, this.state.day);
+    return meetingFor(state, this.state.day) ?? sameDayMeeting(this.dayEntries(npcId), npcId);
+  }
+
+  /** Today's appointments as the Mod gets them, resent when a conversation settles a new one. */
+  async meetings(): Promise<DayMeeting[]> {
+    const meetings: DayMeeting[] = [];
+    for (const npcId of SOCIAL_NPCS) {
+      const meeting = await this.meeting(npcId);
+      if (meeting) meetings.push({ npc: npcId, ...wire(meeting) });
+    }
+    return meetings;
   }
 
   /** Today's events in this NPC's part of the day. */
@@ -546,13 +585,13 @@ export class GameSave {
    * needs (docs/npc-approach.md), and today's appointments (docs/npc-meetings.md).
    */
   async today(): Promise<{ bubbles: Record<string, Bubble[]>; letters: DeliveredLetter[]; approach: Record<string, number>;
-    meetings: (Meeting & { npc: string })[] }> {
+    meetings: DayMeeting[] }> {
     const { lineageId } = this.initial;
     const headCommitId = this.state.head;
     const day = this.state.day;
     const bubbles: Record<string, Bubble[]> = {};
     const approach: Record<string, number> = {};
-    const meetings: (Meeting & { npc: string })[] = [];
+    const meetings: DayMeeting[] = [];
     let best: { npcId: string; letter: Letter } | undefined;
     for (const npcId of SOCIAL_NPCS) {
       const state = await this.runtime.ctx.store.call('state', { lineageId, headCommitId, npcId });
@@ -560,8 +599,8 @@ export class GameSave {
       if (lines.length) bubbles[npcId] = lines;
       const letter = letterFor(state, day);
       if (letter && (!best || letter.importance > best.letter.importance)) best = { npcId, letter };
-      const meeting = meetingFor(state, day);
-      if (meeting) meetings.push({ npc: npcId, ...meeting });
+      const meeting = meetingFor(state, day) ?? sameDayMeeting(this.dayEntries(npcId), npcId);
+      if (meeting) meetings.push({ npc: npcId, ...wire(meeting) });
       // Only the few who chose to last night need their memories and today's part of the day.
       if (state.seek === true && this.scope && !this.closed) {
         const hearts = approachHearts(await this.scope.agent(npcId).context({ nowGameTime: day * 1440, limit: 10, maxChars: 4000 }), day);
@@ -572,4 +611,9 @@ export class GameSave {
       ...(best.letter.item ? { item: best.letter.item } : {}) }] : [];
     return { bubbles, letters, approach, meetings };
   }
+}
+
+/** Only what the Mod needs: one agreed today may come late rather than not at all. */
+function wire(meeting: Meeting): Omit<DayMeeting, 'npc'> {
+  return { time: meeting.time, place: meeting.place, ...(meeting.sameDay ? { sameDay: true as const } : {}) };
 }

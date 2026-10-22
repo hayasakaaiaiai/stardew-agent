@@ -269,6 +269,19 @@ export class BridgeServer {
     }
   }
 
+  /** Only the appointments, after a conversation settled one for today (docs/npc-same-day-meetings.md). */
+  private async sendMeetings(session: Session): Promise<void> {
+    const save = session.save;
+    if (!save || save.closed) return;
+    try {
+      const meetings = await save.meetings();
+      if (session.save !== save || save.closed) return;
+      session.send({ type: 'day.meetings', lineageId: save.initial.lineageId, loadNonce: save.loadNonce, seq: 0, meetings });
+    } catch (error) {
+      this.log(`读取今天的约定失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
   private accept(socket: WebSocket) {
     const session = new Session();
     this.sessions.add(session);
@@ -403,13 +416,17 @@ export class BridgeServer {
       return;
     }
     const head = save.head, day = save.day;
-    await save.control(message, () => {
+    const agreed = await save.control(message, () => {
       if (message.type === 'talk.close') session.open.delete(message.npc);
       else session.open.clear();
       session.pending?.abort('Conversation or game day ended');
       session.pending = undefined;
     });
     send({ type: 'ack', ...envelope(message) });
+    if (agreed) {
+      this.log(`${this.cardName(agreed.npc)}答应了今天的约定：${agreed.soon ? `${clock(agreed.time)} 说好马上去` : clock(agreed.time)} ${agreed.place}`);
+      void this.sendMeetings(session);
+    }
     if (message.type === 'save.saved' && save.head !== head && this.options.gateway) this.log(this.options.gateway.report(day));
     if (message.type === 'day.started') void this.sendToday(session);
   }
