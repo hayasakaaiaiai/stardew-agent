@@ -13,7 +13,8 @@ import { giftItemName, giftMemory } from '../agent/gifts.ts';
 import { GIVEN_TOPIC, givenMemory, withInPersonGift } from '../agent/in-person-gifts.ts';
 import { type Gossip, gossipOf, heardMemory, heardToday, shareFor, spread, type Transfer } from '../agent/news.ts';
 import { type DeliveredLetter, type Letter, letterFor, letterKey } from '../agent/letters.ts';
-import { callOffIn, type Meeting, meetingFor, meetingMemory, MEET_PLACES, MEETS_PER_DAY, openedAtMeeting, todayAgreement, todayMeeting } from '../agent/meetings.ts';
+import { callOffIn, LATER_TOPIC, laterCallOffNote, laterIn, type LaterMeeting, laterMeetings, laterNote, type Meeting, meetingFor, meetingMemory, MEET_PLACES,
+  MEETS_PER_DAY, openedAtMeeting, todayAgreement, todayMeeting } from '../agent/meetings.ts';
 import type { CallOff } from '../agent/meeting-agreement.ts';
 import { Nightly } from '../agent/nightly.ts';
 import { withMorningPlan } from '../agent/morning.ts';
@@ -36,6 +37,8 @@ type TalkClose = Extract<Event, { type: 'talk.close' }>;
 export type DayMeeting = { npc: string; time: number; place: string; sameDay?: true; calledOff?: true };
 /** What a closed conversation did to today's appointment: settled one, or called it off and who did. */
 export type Settled = DayMeeting & { soon?: true; by?: CallOff; sentHome?: true; note?: string };
+/** All a closed conversation settled: today's appointment, and the notes kept for later days (docs/npc-later-meetings.md). */
+export interface Settlement { today?: Settled; later: string[] }
 /** Who learned what, for the log. */
 export interface Heard { npcId: string; memory: MemoryDraft }
 interface Receipt { seq: number; hash: string; reply?: TalkReply }
@@ -163,6 +166,8 @@ export class GameSave {
   private live = true;
   /** Request seq → what its listeners learned; only in memory, so a backend restart before it was shown forgets it. */
   private readonly scenes = new Map<number, { day: number; transfers: Transfer[] }>();
+  /** NPCs with notes for later days (docs/npc-later-meetings.md); read once, then kept up as notes are made. */
+  private laterNpcs: Promise<Set<string>> | undefined;
   /** Backstage results waiting for the next town hour (docs/scheduler.md §4.5); only in memory, like scenes. */
   private backstage: { day: number; notes: BackstageNote[] }[] = [];
 
@@ -248,12 +253,15 @@ export class GameSave {
     this.state.lastSeq = Math.max(this.state.lastSeq, receipt.seq);
   }
 
-  /** Returns what a closed conversation did to today's appointment, if anything (docs/npc-same-day-meetings.md, docs/npc-call-off.md). */
-  async control(message: Exclude<Event, TalkRequest>, onApply: () => void = () => {}): Promise<Settled | undefined> {
+  /**
+   * Returns what a closed conversation did to appointments, if anything (docs/npc-same-day-meetings.md,
+   * docs/npc-call-off.md, docs/npc-later-meetings.md).
+   */
+  async control(message: Exclude<Event, TalkRequest>, onApply: () => void = () => {}): Promise<Settlement | undefined> {
     return this.enqueue(async () => {
       if (this.check(message)) return undefined;
       onApply();
-      let agreed: Settled | undefined;
+      let agreed: Settlement | undefined;
       switch (message.type) {
         case 'save.saving': {
           const p = message.commit;
@@ -291,7 +299,7 @@ export class GameSave {
         case 'title.returned':
           await this.discardNow(); break;
         case 'talk.close':
-          agreed = await this.settleToday(message);
+          agreed = await this.settleTalk(message);
           break;
       }
       this.addReceipt({ seq: message.seq, hash: digest(canonical(message)) });
@@ -303,29 +311,94 @@ export class GameSave {
   /**
    * A conversation that settled an appointment for today, or called today's off, logs it in that NPC's day, so it is
    * saved or rolled back with the day like the conversation itself (docs/npc-same-day-meetings.md,
-   * docs/npc-call-off.md). One a day for each NPC, three in all; one called off is not made again.
+   * docs/npc-call-off.md). One a day for each NPC, three in all; one called off is not made again. One for a later day,
+   * or taken back before it, is kept as a note (docs/npc-later-meetings.md). All of it goes into one entry.
    */
-  private async settleToday(message: TalkClose): Promise<Settled | undefined> {
+  private async settleTalk(message: TalkClose): Promise<Settlement | undefined> {
     const npcId = message.npc.toLowerCase();
     if (this.state.phase !== 'open' || !(SOCIAL_NPCS as readonly string[]).includes(npcId)) return undefined;
     const entries = this.dayEntries(npcId);
+    const today = this.day;
+    const log: Record<string, unknown> = {};
+    const memories: MemoryDraft[] = [];
+    let settled: Settled | undefined;
     const current = await this.meeting(npcId);
-    const receipt: Receipt = { seq: message.seq, hash: digest(canonical(message)) };
-    const record = (log: Record<string, unknown>, memories: MemoryDraft[] = []) => this.scope!.agent(npcId).record({ seq: message.seq,
-      gameTime: entries.at(-1)!.gameTime, log: { ...log, bridgeReceipt: JSON.parse(canonical(receipt)) }, memories });
     if (current) {
-      const by = current.ended || current.calledOff ? null : callOffIn(entries, npcId, current);
-      if (!by) return undefined;
-      // Sent home while together, the Mod reports how it went; taken back beforehand, it is remembered now.
-      const met = openedAtMeeting(entries, npcId);
-      const note = met ? undefined : meetingMemory({ ...current, calledOff: by, met: false, left: 0 });
-      await record({ meetCalledOff: { by, met } }, note ? [note] : []);
-      return { npc: npcId, ...wire({ ...current, calledOff: by }), by, ...(met ? { sentHome: true as const } : {}), ...(note ? { note: note.text } : {}) };
+      const by = current.ended || current.calledOff ? null : callOffIn(entries, npcId, current, today);
+      if (by) {
+        // Sent home while together, the Mod reports how it went; taken back beforehand, it is remembered now.
+        const met = openedAtMeeting(entries, npcId);
+        const note = met ? undefined : meetingMemory({ ...current, calledOff: by, met: false, left: 0 });
+        log.meetCalledOff = { by, met };
+        if (note) memories.push(note);
+        settled = { npc: npcId, ...wire({ ...current, calledOff: by }), by, ...(met ? { sentHome: true as const } : {}), ...(note ? { note: note.text } : {}) };
+      }
+    } else {
+      const meeting = todayAgreement(entries, npcId, today);
+      if (meeting && (await this.meetings()).length < MEETS_PER_DAY) {
+        log.meetToday = { time: meeting.time, place: meeting.place, soon: meeting.soon === true };
+        settled = { npc: npcId, ...wire(meeting), ...(meeting.soon ? { soon: meeting.soon } : {}) };
+      }
     }
-    const meeting = todayAgreement(entries, npcId);
-    if (!meeting || (await this.meetings()).length >= MEETS_PER_DAY) return undefined;
-    await record({ meetToday: { time: meeting.time, place: meeting.place, soon: meeting.soon === true } });
-    return { npc: npcId, ...wire(meeting), ...(meeting.soon ? { soon: meeting.soon } : {}) };
+    const upcoming = (await this.laterOf(npcId)).filter(meeting => meeting.day > today);
+    const later = laterIn(entries, npcId, upcoming, today);
+    for (const { meeting, by } of later.calledOff) memories.push(laterCallOffNote(meeting, by));
+    // One a day for each NPC, and no more than the Mod keeps on that day.
+    const agreed = later.agreed;
+    if (agreed && !upcoming.some(meeting => meeting.day === agreed.day) && await this.laterCount(agreed.day) < MEETS_PER_DAY) {
+      memories.push(laterNote(agreed));
+      (await this.withLater()).add(npcId);
+    }
+    if (!Object.keys(log).length && !memories.length) return undefined;
+    const receipt: Receipt = { seq: message.seq, hash: digest(canonical(message)) };
+    await this.scope!.agent(npcId).record({ seq: message.seq, gameTime: entries.at(-1)!.gameTime,
+      log: { ...log, bridgeReceipt: JSON.parse(canonical(receipt)) }, memories });
+    return { ...(settled ? { today: settled } : {}),
+      later: memories.filter(memory => memory.topics?.includes(LATER_TOPIC)).map(memory => memory.text) };
+  }
+
+  /** This NPC's notes for later days, as they stand (docs/npc-later-meetings.md). */
+  private async laterOf(npcId: string): Promise<LaterMeeting[]> {
+    if (!(await this.withLater()).has(npcId)) return [];
+    return laterMeetings(await this.laterNotes(npcId, 50));
+  }
+
+  /**
+   * Read from the saved history plus today's part of the day, not through the day's session, so a read that races a
+   * save or a day change sees one or the other but never an unloaded day.
+   */
+  private async laterNotes(npcId: string, limit: number) {
+    const overlay = this.scope?.ledger.currentDay?.overlay(npcId);
+    const found = await this.runtime.ctx.store.call('context', {
+      scope: { lineageId: this.initial.lineageId, headCommitId: this.state.head, npcId },
+      options: { topics: [LATER_TOPIC], nowGameTime: this.state.day * 1440, limit, maxChars: 20_000 },
+      overlay: { memories: overlay?.memories ?? [], retired: [...(overlay?.retired ?? [])] } });
+    return found.memories;
+  }
+
+  /**
+   * Who has any such note, read once a load: notes only come from this load's conversations (added as they are made) or
+   * from the history it was loaded on, so the daily lists do not search every NPC every time.
+   */
+  private withLater(): Promise<Set<string>> {
+    this.laterNpcs ??= (async () => {
+      const found = new Set<string>();
+      for (const npcId of SOCIAL_NPCS) if ((await this.laterNotes(npcId, 1)).length) found.add(npcId);
+      return found;
+    })().catch((error: unknown) => { this.laterNpcs = undefined; throw error; });
+    return this.laterNpcs;
+  }
+
+  /** How many NPCs have an appointment kept for that day. */
+  private async laterCount(day: number): Promise<number> {
+    let count = 0;
+    for (const npcId of await this.withLater()) if ((await this.laterOf(npcId)).some(meeting => meeting.day === day)) count++;
+    return count;
+  }
+
+  /** The nearest appointment ahead, for the NPC's own conversation (docs/npc-later-meetings.md). */
+  async upcoming(npcId: string): Promise<LaterMeeting[]> {
+    return (await this.laterOf(npcId)).filter(meeting => meeting.day > this.state.day);
   }
 
   /** `gifts` are the NPC's card gifts, one of which a close NPC may hand over (docs/npc-in-person-gifts.md). */
@@ -446,7 +519,8 @@ export class GameSave {
    */
   async meeting(npcId: string): Promise<Meeting | undefined> {
     const state = await this.runtime.ctx.store.call('state', { lineageId: this.initial.lineageId, headCommitId: this.state.head, npcId });
-    return todayMeeting(meetingFor(state, this.state.day), this.dayEntries(npcId), npcId);
+    const kept = meetingFor(state, this.state.day) ?? (await this.laterOf(npcId)).find(meeting => meeting.day === this.state.day);
+    return todayMeeting(kept && { time: kept.time, place: kept.place }, this.dayEntries(npcId), npcId);
   }
 
   /** Today's appointments as the Mod gets them, resent when a conversation settles a new one. */
@@ -621,7 +695,7 @@ export class GameSave {
       if (lines.length) bubbles[npcId] = lines;
       const letter = letterFor(state, day);
       if (letter && (!best || letter.importance > best.letter.importance)) best = { npcId, letter };
-      const meeting = todayMeeting(meetingFor(state, day), this.dayEntries(npcId), npcId);
+      const meeting = await this.meeting(npcId);
       if (meeting) meetings.push({ npc: npcId, ...wire(meeting) });
       // Only the few who chose to last night need their memories and today's part of the day.
       if (state.seek === true && this.scope && !this.closed) {

@@ -3,9 +3,10 @@
  * The model only names the time, the place and the quoted lines; code checks the quotes and the Mod walks the NPC there.
  */
 import { clock } from './schedule.ts';
-import { OPENING_LINE } from './dialogue.ts';
-import { type CallOff, quotedAgreement, quotedCallOff, quotedPeriodTime, quotedToday, type TimedQuote } from './meeting-agreement.ts';
-import type { DayEntry, MemoryDraft, NpcState } from '../types.ts';
+import { OPENING_LINE, SEASONS } from './dialogue.ts';
+import { asksToMeet, type CallOff, type LaterAgreement, namedDays, quotedAgreement, quotedCallOff, quotedLater, quotedLaterCallOff, quotedPeriodTime, quotedToday,
+  type TimedQuote } from './meeting-agreement.ts';
+import type { DayEntry, Memory, MemoryDraft, NpcState } from '../types.ts';
 
 /** The places the Mod has a standing tile for (Meetings.cs), with how people say them. */
 export const MEET_PLACES: Readonly<Record<string, RegExp>> = {
@@ -193,8 +194,8 @@ export function lastConversation(entries: readonly DayEntry[], npcId: string): T
 }
 
 /** What `talk.close` logs when the conversation settled an appointment for today. */
-export function todayAgreement(entries: readonly DayEntry[], npcId: string): Meeting | null {
-  const found = quotedToday(lastConversation(entries, npcId), MEET_PLACES);
+export function todayAgreement(entries: readonly DayEntry[], npcId: string, today: number): Meeting | null {
+  const found = quotedToday(lastConversation(entries, npcId), MEET_PLACES, today);
   return found && { time: found.time, place: found.place, sameDay: true, ...(found.soon ? { soon: true as const } : {}) };
 }
 
@@ -205,8 +206,8 @@ export function openedAtMeeting(entries: readonly DayEntry[], npcId: string): bo
 }
 
 /** Whether the conversation that just ended took today's appointment back, or sent the NPC home (docs/npc-call-off.md). */
-export function callOffIn(entries: readonly DayEntry[], npcId: string, meeting: Meeting): CallOff | null {
-  return quotedCallOff(lastConversation(entries, npcId), MEET_PLACES[meeting.place]!, MEET_PLACES);
+export function callOffIn(entries: readonly DayEntry[], npcId: string, meeting: Meeting, today: number): CallOff | null {
+  return quotedCallOff(lastConversation(entries, npcId), MEET_PLACES[meeting.place]!, MEET_PLACES, today);
 }
 
 /**
@@ -228,4 +229,88 @@ export function todayMeeting(nightly: Meeting | undefined, entries: readonly Day
       Object.assign(meeting, { calledOff: off.by }, off.met === true ? { sentHome: true } : {});
   }
   return meeting;
+}
+
+/**
+ * Appointments for a later day than tomorrow are kept as the NPC's own notes, tagged with this topic and the day, so
+ * they are saved or rolled back with the day they were made, like a gift handed over (docs/npc-later-meetings.md).
+ */
+export const LATER_TOPIC = '以后的约定';
+const dayTopic = (day: number) => `约定日:${day}`;
+const WEEKDAY_NAMES = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+const SEASON_ORDER = ['spring', 'summer', 'fall', 'winter'] as const;
+
+/** "春季 12 日（周六）"; with `today`, "明天（周六）" and "后天（周六）" for the next two days. */
+export function dayLabel(day: number, today?: number): string {
+  const weekday = WEEKDAY_NAMES[(day - 1) % 7]!;
+  if (today !== undefined && day - today === 1) return `明天（${weekday}）`;
+  if (today !== undefined && day - today === 2) return `后天（${weekday}）`;
+  return `${SEASONS[SEASON_ORDER[Math.floor((day - 1) / 28) % 4]!]} ${(day - 1) % 28 + 1} 日（${weekday}）`;
+}
+
+export interface LaterMeeting extends Meeting { day: number }
+
+const laterText = (meeting: LaterMeeting) => `约好${dayLabel(meeting.day)}${clock(meeting.time)} 在${meeting.place}见面`;
+
+/** The note that keeps it: "约好春季 12 日（周六）14:00 在海滩见面。" */
+export function laterNote(agreement: LaterAgreement): MemoryDraft {
+  return { text: `${laterText(agreement)}。`, importance: 3, kind: 'observation', subjects: ['player'], visibility: 'private',
+    topics: [LATER_TOPIC, dayTopic(agreement.day), `约定:${agreement.time}:${agreement.place}`] };
+}
+
+/** Taken back before the day: "……，后来农场主说不去了。" It hides the appointment on that day. */
+export function laterCallOffNote(meeting: LaterMeeting, by: CallOff): MemoryDraft {
+  return { text: `${laterText(meeting)}，后来${by === '玩家' ? '农场主说不去了' : '我跟农场主说去不了了'}。`, importance: 2, kind: 'observation',
+    subjects: ['player'], visibility: 'private', topics: [LATER_TOPIC, dayTopic(meeting.day), '约定取消'] };
+}
+
+/** The appointments the notes still hold, by day: the latest note for a day decides, and a call-off note leaves none. */
+export function laterMeetings(notes: readonly Pick<Memory, 'topics' | 'gameTime'>[]): LaterMeeting[] {
+  const latest = new Map<number, Pick<Memory, 'topics' | 'gameTime'>>();
+  for (const note of notes) {
+    const day = Number(note.topics.find(topic => topic.startsWith('约定日:'))?.slice('约定日:'.length));
+    if (Number.isSafeInteger(day) && day > 0 && (latest.get(day)?.gameTime ?? -1) <= note.gameTime) latest.set(day, note);
+  }
+  return [...latest].flatMap(([day, note]) => {
+    const kept = /^约定:(\d{3,4}):(.+)$/.exec(note.topics.find(topic => topic.startsWith('约定:')) ?? '');
+    const time = Number(kept?.[1]);
+    return kept && Object.hasOwn(MEET_PLACES, kept[2]!) && time >= 800 && time <= 2100 && time % 10 === 0 && time % 100 <= 59
+      ? [{ day, time, place: kept[2]! }] : [];
+  }).sort((a, b) => a.day - b.day);
+}
+
+/** Appointments go no further than the day after tomorrow; the user wants NPCs to turn down later ones. */
+const NEAR_DAYS = 2;
+
+/**
+ * The far day a player's invitation names, beyond the day after tomorrow, as the NPC is told it this turn so it turns it
+ * down: "下周三（6 天后）", "下个月"; undefined for a line that names none, or does not ask to meet (docs/npc-later-meetings.md).
+ */
+export function farInvitation(text: string, today: number): string | undefined {
+  if (!asksToMeet(text)) return undefined;
+  const days = namedDays(text, today);
+  const far = Math.max(0, ...days);
+  if (far > today + NEAR_DAYS) return `${far - today} 天后的${dayLabel(far)}`;
+  if (days.some(day => day > today)) return undefined;
+  return /下个?月/.test(text) ? '下个月' : /下个?(?:星期|礼拜|周)/.test(text) ? '下周' : undefined;
+}
+
+/** The line for that turn; measured to turn far invitations down 12/12 against 3/12 without (docs/npc-later-meetings.md §3). */
+export const farInvitationLine = (label: string) => `- 农场主约的是${label}，太远了：你只答应三天内（今天、明天、后天）的约定，这次婉拒，说到时候再约。`;
+
+/** The nearest one ahead, for the NPC's own conversation: "后天（周六）14:00 在海滩见面". */
+export function upcomingLine(upcoming: readonly LaterMeeting[], today: number): string | undefined {
+  const next = upcoming.find(meeting => meeting.day > today);
+  return next && `${dayLabel(next.day, today)}${clock(next.time)} 在${next.place}见面`;
+}
+
+/** What the conversation that just ended agreed for a later day, or took back of those already made. */
+export function laterIn(entries: readonly DayEntry[], npcId: string, upcoming: readonly LaterMeeting[], today: number):
+  { agreed: LaterAgreement | null; calledOff: { meeting: LaterMeeting; by: CallOff }[] } {
+  const lines = lastConversation(entries, npcId);
+  const calledOff = upcoming.flatMap(meeting => {
+    const by = quotedLaterCallOff(lines, MEET_PLACES[meeting.place]!, MEET_PLACES, meeting.day, today);
+    return by ? [{ meeting, by }] : [];
+  });
+  return { agreed: quotedLater(lines, MEET_PLACES, today), calledOff };
 }

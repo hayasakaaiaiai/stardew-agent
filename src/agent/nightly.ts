@@ -5,7 +5,7 @@ import { daysAgo, type PlayerIdentity } from './dialogue-memory.ts';
 import { type Exchange, OPENING_LINE, RELATIONS, SEASONS, type Season, type Standing } from './dialogue.ts';
 import { withGivenCooldown } from './in-person-gifts.ts';
 import { giftFor, safeLetter } from './letters.ts';
-import { checkMeet, meetDraft, type MeetDraft } from './meetings.ts';
+import { checkMeet, LATER_TOPIC, meetDraft, type MeetDraft } from './meetings.ts';
 import { rankMemories } from './memory.ts';
 import { safeShare } from './news.ts';
 import type { ChatMessage, ChatModel, Thinking } from '../services/model/client.ts';
@@ -228,9 +228,10 @@ export function nightlyConsolidator(deps: { roster: Roster; model: ChatModel; lo
 
 function change(npc: NpcInput, prompt: ReturnType<typeof nightlyPrompt>, output: NightlyOutput, day: number): NpcChange {
   // Model-facing numbers map back to real ids here; unknown numbers are ignored.
+  // A note keeping an appointment for a later day is not the model's to drop (docs/npc-later-meetings.md).
   const retired = output.retire.flatMap((alias) => {
     const memory = /^m(\d+)$/.exec(alias) ? prompt.shown[Number(alias.slice(1)) - 1] : undefined;
-    return memory ? [memory.id] : [];
+    return memory && !memory.topics.includes(LATER_TOPIC) ? [memory.id] : [];
   });
   // Today's conversation notes are only replaced when there is something to replace them with. Other notes, such
   // as a gift (docs/npc-gifts.md), have no utterance to quote and are kept as they are.

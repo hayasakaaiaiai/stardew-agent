@@ -5,7 +5,7 @@ import { BACKSTAGE_PER_DAY, BACKSTAGE_TOPIC, type BackstagePerson, backstageHour
 import { AMBIENT_CALLS_PER_DAY, type AmbientLine, type AmbientPerson, ambientPrompt, parseAmbient } from '../agent/ambient.ts';
 import type { Consolidator } from '../agent/consolidation.ts';
 import { OPENING_LINE, runTurn, type Standing, type WorldState } from '../agent/dialogue.ts';
-import { meetingLine } from '../agent/meetings.ts';
+import { farInvitation, farInvitationLine, meetingLine, upcomingLine } from '../agent/meetings.ts';
 import { newsFor } from '../agent/news.ts';
 import { parseScene, type SceneLine, type SceneNews, SCENES_PER_DAY, SCENE_GAP_MINUTES, scenePrompt } from '../agent/scene.ts';
 import { nextStop, restOfDay, scheduleReplies, type ScheduleStop } from '../agent/schedule.ts';
@@ -63,6 +63,23 @@ class Session {
 }
 
 export class BridgeServer {
+  /**
+   * Every read of today's appointments takes a ticket; a list is sent only if no newer one has gone out, so a slow read
+   * at load never lands after the list a conversation just changed (docs/npc-later-meetings.md).
+   */
+  private readonly meetingTickets = new WeakMap<object, { issued: number; sent: number }>();
+
+  private meetingTicket(session: object): () => boolean {
+    const tickets = this.meetingTickets.get(session) ?? { issued: 0, sent: 0 };
+    this.meetingTickets.set(session, tickets);
+    const ticket = ++tickets.issued;
+    return () => {
+      if (ticket < tickets.sent) return false;
+      tickets.sent = ticket;
+      return true;
+    };
+  }
+
   private readonly options: BridgeOptions;
   private readonly server: WebSocketServer;
   private readonly memory: GameMemory;
@@ -248,6 +265,7 @@ export class BridgeServer {
   private async sendToday(session: Session): Promise<void> {
     const save = session.save;
     const revision = ++session.todayRevision;
+    const meetingsFresh = this.meetingTicket(session);
     if (!save || save.closed) return;
     const head = save.head, day = save.day;
     try {
@@ -257,7 +275,7 @@ export class BridgeServer {
       session.send({ type: 'day.bubbles', ...envelope, npcs: bubbles });
       session.send({ type: 'day.letters', ...envelope, letters });
       session.send({ type: 'day.approach', ...envelope, npcs: approach });
-      session.send({ type: 'day.meetings', ...envelope, meetings });
+      if (meetingsFresh()) session.send({ type: 'day.meetings', ...envelope, meetings });
       const names = Object.keys(bubbles);
       if (names.length) this.log(`今天的气泡：${names.join('、')}`);
       if (letters.length) this.log(`今天的信：${letters.map(letter => letter.npc).join('、')}`);
@@ -272,10 +290,11 @@ export class BridgeServer {
   /** Only the appointments, after a conversation settled one for today or called it off (docs/npc-same-day-meetings.md, docs/npc-call-off.md). */
   private async sendMeetings(session: Session): Promise<void> {
     const save = session.save;
+    const fresh = this.meetingTicket(session);
     if (!save || save.closed) return;
     try {
       const meetings = await save.meetings();
-      if (session.save !== save || save.closed) return;
+      if (session.save !== save || save.closed || !fresh()) return;
       session.send({ type: 'day.meetings', lineageId: save.initial.lineageId, loadNonce: save.loadNonce, seq: 0, meetings });
     } catch (error) {
       this.log(`读取今天的约定失败：${error instanceof Error ? error.message : String(error)}`);
@@ -357,7 +376,9 @@ export class BridgeServer {
         send({ type: 'talk.error', ...envelope(message), npc: message.npc, message: '上一句还没回完' }); return;
       }
       const schedule = restOfDay(message.schedule ?? [], message.world.date.time);
-      const meeting = meetingLine(await save.meeting(npcId), message.world.date.time, message.atMeeting === true, message.helped, message.mine);
+      // Today's, or else the nearest one ahead (docs/npc-later-meetings.md).
+      const meeting = meetingLine(await save.meeting(npcId), message.world.date.time, message.atMeeting === true, message.helped, message.mine)
+        ?? upcomingLine(await save.upcoming(npcId), save.day);
       const talk: OpenTalk = { npcId, inPersonGifts: message.inPersonGifts !== false,
         standing: { hearts: message.hearts, relation: message.relation, seenEvents: new Set(message.seenEvents) },
         world: { ...worldState(message.world, save.player, this.cardName),
@@ -372,7 +393,10 @@ export class BridgeServer {
       if (!talk || session.pending) {
         send({ type: 'talk.error', ...envelope(message), npc: message.npc, message: talk ? '上一句还没回完' : '对话还没有打开' }); return;
       }
-      talk.world = { ...talk.world, ...message.date, time: clock(message.date.time) };
+      // Only for this turn: an invitation beyond the day after tomorrow is turned down (docs/npc-later-meetings.md).
+      const { farInvitation: _, ...world } = talk.world;
+      const far = farInvitation(message.text, save.day);
+      talk.world = { ...world, ...message.date, time: clock(message.date.time), ...(far ? { farInvitation: farInvitationLine(far) } : {}) };
       void this.turn(session, talk, message, message.text, send);
       return;
     }
@@ -416,13 +440,16 @@ export class BridgeServer {
       return;
     }
     const head = save.head, day = save.day;
-    const agreed = await save.control(message, () => {
+    const settled = await save.control(message, () => {
       if (message.type === 'talk.close') session.open.delete(message.npc);
       else session.open.clear();
       session.pending?.abort('Conversation or game day ended');
       session.pending = undefined;
     });
     send({ type: 'ack', ...envelope(message) });
+    // Notes for later days: an appointment made, or one taken back (docs/npc-later-meetings.md).
+    if (message.type === 'talk.close') for (const note of settled?.later ?? []) this.log(`${this.cardName(message.npc)}记下了：${note}`);
+    const agreed = settled?.today;
     if (agreed) {
       const name = this.cardName(agreed.npc);
       this.log(!agreed.by ? `${name}答应了今天的约定：${agreed.soon ? `${clock(agreed.time)} 说好马上去` : clock(agreed.time)} ${agreed.place}`

@@ -56,6 +56,9 @@ function asksAlong(quoted: readonly Quote[], placeWords: RegExp): boolean {
     && !/[我你]|自己|独自|单独|一个人/.test(quote.text));
 }
 
+/** A line asking to meet or to come along, today or any day. */
+export const asksToMeet = (text: string) => invited(text) || ASKED.test(text);
+
 /** Both parties must show intent, and every quoted concrete time must agree with the proposed ten-minute slot. */
 export function quotedAgreement(quoted: readonly Quote[], all: readonly Quote[], placeWords: RegExp, time: number): boolean {
   const text = quoted.map(quote => quote.text).join('\n');
@@ -82,6 +85,36 @@ export interface TodayAgreement { time: number; place: string; soon: boolean }
 
 // Another day, or none in particular, belongs to the nightly `meet` or to nobody; the NPC may mention its own past.
 const ANOTHER_DAY = /明天|明早|明晚|明儿|明日|后天|下周|下个|下次|以后|改天|哪天|(?:等.{0,3}|以后)有空|有空的时候|有空再|有机会|什么时候|周末|过几天|找(?:个)?时间|这周|这个月|将来/;
+// A day named outright: "后天", "周六", "下周一", "15号" (docs/npc-later-meetings.md).
+const DATE_WORDS = /后天|(?:周|星期|礼拜)[一二三四五六日天](?!起)|[\d一二三四五六七八九十]{1,3}号/;
+// No day in particular.
+const VAGUE = /下次|以后|改天|哪天|(?:等.{0,3}|以后)有空|有空的时候|有空再|有机会|什么时候|周末|过几天|找(?:个)?时间|这个月|将来/;
+/** How far ahead an appointment may be: today, tomorrow and the day after, as the user set (docs/npc-later-meetings.md). */
+const LATER_DAYS = 2;
+const WEEK = '一二三四五六日';
+
+/**
+ * The absolute days a line names, by Stardew's calendar: 28-day seasons, each starting on a Monday; `today` is absolute,
+ * 1 = spring 1 of year 1. "周六" on a Saturday is today; "3号" when the season is past the 3rd cannot be told, and
+ * comes back as 0.
+ */
+export function namedDays(text: string, today: number): number[] {
+  const weekday = (today - 1) % 7, seasonDay = (today - 1) % 28 + 1;
+  // Tomorrow is named too, so "明天不去矿洞了" can take back one kept for tomorrow; agreeing to it is the nightly's.
+  const days = [...text.matchAll(/(大)?后天|明天|明早|明晚|明儿|明日/g)].map(match => today + (match[0].endsWith('后天') ? match[1] ? 3 : 2 : 1));
+  // "下周一起去" is next week together, not next Monday.
+  for (const match of text.matchAll(/(下|这|本)?个?(?:周|星期|礼拜)([一二三四五六日天])(?!起)/g)) {
+    let ahead = (match[2] === '天' ? 6 : WEEK.indexOf(match[2]!)) - weekday;
+    if (match[1] === '下') ahead += 7;
+    else if (!match[1] && ahead < 0) ahead += 7;
+    days.push(today + ahead);
+  }
+  for (const match of text.matchAll(/([\d一二三四五六七八九十]{1,3})号/g)) {
+    const date = number(match[1]!);
+    days.push(date > seasonDay && date <= 28 ? today + date - seasonDay : 0);
+  }
+  return days;
+}
 const PAST = /昨天|前天|上次|那天/;
 // Measured declines the nightly words miss, and "after class" with no time to go by (docs/npc-same-day-meetings.md §3).
 const DECLINED = /你(?:自己|一个人)去|等你回来|找.{1,6}陪你|不陪|才不(?:要|去)|宁愿|我就不/;
@@ -110,11 +143,15 @@ function later(time: number, minutes: number): number {
   return Math.floor(total / 60) * 100 + total % 60;
 }
 
-/** One stretch of two to four lines, read on its own; `after` is everything said later. */
-function agreedIn(window: readonly TimedQuote[], after: readonly TimedQuote[], places: Readonly<Record<string, RegExp>>): TodayAgreement | null {
+/**
+ * Who agreed to meet where in one stretch of two to four lines, read on its own, leaving the day and time aside;
+ * `after` is everything said later, and `otherDay` tells words for a day this check does not take.
+ */
+function agreedPlace(window: readonly TimedQuote[], after: readonly TimedQuote[], places: Readonly<Record<string, RegExp>>,
+  otherDay: (text: string) => boolean): { place: string; words: RegExp } | null {
   const text = window.map(quote => quote.text).join('\n');
   const named = Object.keys(places).filter(place => places[place]!.test(text));
-  if (named.length !== 1 || REFUSED.test(text) || DECLINED.test(text) || PUT_OFF.test(text) || CONDITIONAL.test(text) || ANOTHER_DAY.test(text)
+  if (named.length !== 1 || REFUSED.test(text) || DECLINED.test(text) || PUT_OFF.test(text) || CONDITIONAL.test(text) || otherDay(text)
     || !invited(text) && !ASKED.test(text) && !(/矿洞|矿井|矿坑|下矿|矿里|骷髅洞|火山/.test(text) && asksAlong(window, places[named[0]!]!))) return null;
   const place = named[0]!, words = places[place]!;
   // The player's own invitation counts; an NPC naming the place and "去" may be sending the player alone.
@@ -125,10 +162,27 @@ function agreedIn(window: readonly TimedQuote[], after: readonly TimedQuote[], p
   // The player taking it back needs no place: "还是算了，你忙吧".
   if (after.some(quote => (REFUSED.test(quote.text) || DECLINED.test(quote.text)) && (quote.speaker === '玩家'
     || words.test(quote.text) || NOW_WORDS.test(quote.text) || /不去(?:了)?[。！!]?\s*$/.test(quote.text)))) return null;
-  const agreed = window.at(-1)!.time;
-  const timed = window.map(quote => quote.speaker === '玩家' ? quote.text.replace(/今晚/g, '今天晚上').replace(/今早/g, '今天早上')
+  return { place, words };
+}
+
+/** The lines as far as times go: the player's whole, the NPC's only in clauses about meeting ("十一点开始上课" is its own day). */
+function timedText(window: readonly TimedQuote[], places: Readonly<Record<string, RegExp>>): string[] {
+  return window.map(quote => quote.speaker === '玩家' ? quote.text.replace(/今晚/g, '今天晚上').replace(/今早/g, '今天早上')
     : quote.text.split(/[，,。！!？?；;…]+/).filter(clause => MEETING_CLAUSE.test(clause) || Object.values(places).some(words => words.test(clause)))
       .join('，').replace(/今晚/g, '今天晚上').replace(/今早/g, '今天早上'));
+}
+
+/** Whether a line names a day other than `today` outright; any named day counts when today is not known. */
+const namesOtherDay = (text: string, today?: number) => DATE_WORDS.test(text) && (today === undefined || namedDays(text, today).some(day => day !== today));
+
+/** Today's appointment in one stretch: a concrete time or a period still ahead, or else right away. */
+function agreedIn(window: readonly TimedQuote[], after: readonly TimedQuote[], places: Readonly<Record<string, RegExp>>, today?: number): TodayAgreement | null {
+  // "周六下午两点海边见" is not today, unless today is Saturday (docs/npc-later-meetings.md).
+  const agreement = agreedPlace(window, after, places, text => ANOTHER_DAY.test(text) || namesOtherDay(text, today));
+  if (!agreement) return null;
+  const { place } = agreement;
+  const agreed = window.at(-1)!.time;
+  const timed = timedText(window, places);
   // "八点" after "今晚八点" is the evening too: a morning hour already gone means the same hour tonight.
   const clocks = timed.flatMap(text => times(text, false)).map(time => time <= later(agreed, 10) && time < 1200 ? time + 1200 : time);
   if (clocks.length) {
@@ -149,21 +203,57 @@ function agreedIn(window: readonly TimedQuote[], after: readonly TimedQuote[], p
  * plainly agrees. A concrete time or a period still ahead is kept; none means right away. The latest agreement not
  * taken back afterwards wins; anything unsure means none.
  */
-export function quotedToday(lines: readonly TimedQuote[], places: Readonly<Record<string, RegExp>>): TodayAgreement | null {
-  let found: TodayAgreement | null = null;
+export function quotedToday(lines: readonly TimedQuote[], places: Readonly<Record<string, RegExp>>, today?: number): TodayAgreement | null {
+  const agreed = (end: number) => lines[end]!.time;
+  return latest(lines, (window, after) => agreedIn(window, after, places, today),
+    (quote, found, end) => times(quote.text).some(other => other !== found.time && other > later(agreed(end), 10)));
+}
+
+/**
+ * The latest agreement in a conversation: the shortest stretch, so talk after one does not lend it a time, each later
+ * one replacing it. One changed afterwards without the place again ("还是三点吧？/行") is unsure, so none.
+ */
+function latest<T extends { time: number }>(lines: readonly TimedQuote[], read: (window: readonly TimedQuote[], after: readonly TimedQuote[]) => T | null,
+  otherTime: (quote: TimedQuote, found: T, end: number) => boolean): T | null {
+  let found: T | null = null;
   let foundEnd = -1;
   for (let end = 1; end < lines.length; end++) {
-    // The shortest stretch, so talk after an agreement does not lend it a time; a later one replaces it.
     for (let start = end - 1; start >= Math.max(0, end - 3, foundEnd + 1); start--) {
-      const agreement = agreedIn(lines.slice(start, end + 1), lines.slice(end + 1), places);
+      const agreement = read(lines.slice(start, end + 1), lines.slice(end + 1));
       if (agreement) { found = agreement; foundEnd = end; break; }
     }
   }
   if (!found) return null;
-  // "还是三点吧？/行" without the place again: changed, but to what is unsure.
-  const agreed = lines[foundEnd]!.time;
-  return lines.slice(foundEnd + 1).some(quote => (agrees(quote) || /还是|改|换|一起|见|约/.test(quote.text))
-    && times(quote.text).some(other => other !== found.time && other > later(agreed, 10))) ? null : found;
+  const settled = found;
+  return lines.slice(foundEnd + 1).some(quote => (agrees(quote) || /还是|改|换|一起|见|约/.test(quote.text)) && otherTime(quote, settled, foundEnd))
+    ? null : found;
+}
+
+/** An appointment for a later day than tomorrow, named outright: absolute `day`, HHMM `time` (docs/npc-later-meetings.md). */
+export interface LaterAgreement { day: number; time: number; place: string }
+
+/** One stretch naming one later day, up to two weeks ahead, with a concrete time or a period. */
+function agreedLater(window: readonly TimedQuote[], after: readonly TimedQuote[], places: Readonly<Record<string, RegExp>>, today: number): LaterAgreement | null {
+  // Tomorrow said only as "明天" is the nightly `meet`'s; named another way ("周五") the reply's "明天" is the same day.
+  const agreement = agreedPlace(window, after, places, text => VAGUE.test(text));
+  if (!agreement || !window.some(quote => DATE_WORDS.test(quote.text))) return null;
+  const days = [...new Set(window.flatMap(quote => namedDays(quote.text, today)))];
+  if (days.length !== 1 || days[0]! <= today || days[0]! > today + LATER_DAYS) return null;
+  const timed = timedText(window, places);
+  const clocks = timed.flatMap(text => times(text, false));
+  const periods = timed.flatMap(text => PERIODS.filter(([period]) => period.test(text))).map(([, time]) => time);
+  const found = clocks.length ? clocks : periods;
+  if (!found.length || found.some(time => time !== found[0]) || found[0]! < EARLIEST || found[0]! > LATEST) return null;
+  return { day: days[0]!, time: found[0]!, place: agreement.place };
+}
+
+/**
+ * An appointment for a day after tomorrow agreed in the conversation that just ended, named outright ("周六下午两点海边见",
+ * "后天上午陪我下矿"); checked like today's, and tomorrow is left to the nightly `meet` (docs/npc-later-meetings.md).
+ */
+export function quotedLater(lines: readonly TimedQuote[], places: Readonly<Record<string, RegExp>>, today: number): LaterAgreement | null {
+  return latest(lines, (window, after) => agreedLater(window, after, places, today),
+    (quote, found) => times(quote.text, false).some(other => other !== found.time) || namedDays(quote.text, today).some(day => day !== found.day));
 }
 
 /** Who took today's appointment back, or sent the other home: the player or the NPC (docs/npc-call-off.md). */
@@ -180,30 +270,44 @@ const NPC_OFF = /去不了|来不了|不能去了|不能来了|没法去|没办�
 const ABOUT = /约|见面|今天|待会|等会|一会|上午|中午|下午|傍晚|晚上/;
 const ON_AGAIN = /还是(?:去|一起|见|要)|开玩笑|逗你/;
 
-/**
- * Whether the conversation that just ended took back today's appointment at `words`, or sent the NPC home, and who
- * did; null if not, or if it was taken up again afterwards in the same conversation.
- */
-export function quotedCallOff(lines: readonly TimedQuote[], words: RegExp, places: Readonly<Record<string, RegExp>>): CallOff | null {
-  const off = (quote: TimedQuote) => {
-    const text = quote.text;
-    // Another day's plans ("明天没法去农场") leave today's alone.
-    if (/[吗？?]/.test(text) || CONDITIONAL.test(text) || TOMORROW.test(text) && !/今天/.test(text)) return false;
-    return quote.speaker === '玩家'
-      // "今天就算了吧", "矿洞那边取消吧": in the same clause, not "算了，我回农场了".
-      ? PLAYER_OFF.test(text) || SEND_HOME.test(text) || text.split(/[，,。！!；;]+/).some(clause => PLAYER_CANCEL.test(clause) && (words.test(clause) || ABOUT.test(clause)))
-        // "不去矿洞那边了", "今天不下矿了".
-        || new RegExp(`不(?:去|来)?.{0,2}(?:${words.source}).{0,4}了`).test(text) || NPC_OFF.test(text) && (words.test(text) || ABOUT.test(text) || /(?:不了|不成|不能去|不能来)了[。！!～~]?$/.test(text))
-      : NPC_OFF.test(text) && (words.test(text) || ABOUT.test(text));
-  };
+/** A line that takes an appointment at `words` back, or sends company home; a question or a condition never does. */
+function offLine(quote: TimedQuote, words: RegExp): boolean {
+  const text = quote.text;
+  if (/[吗？?]/.test(text) || CONDITIONAL.test(text)) return false;
+  return quote.speaker === '玩家'
+    // "今天就算了吧", "矿洞那边取消吧": in the same clause, not "算了，我回农场了".
+    ? PLAYER_OFF.test(text) || SEND_HOME.test(text) || text.split(/[，,。！!；;]+/).some(clause => PLAYER_CANCEL.test(clause) && (words.test(clause) || ABOUT.test(clause)))
+      // "不去矿洞那边了", "今天不下矿了".
+      || new RegExp(`不(?:去|来)?.{0,2}(?:${words.source}).{0,4}了`).test(text) || NPC_OFF.test(text) && (words.test(text) || ABOUT.test(text) || /(?:不了|不成|不能去|不能来)了[。！!～~]?$/.test(text))
+    : NPC_OFF.test(text) && (words.test(text) || ABOUT.test(text));
+}
+
+/** The last line, among those `about` admits, that calls it off and was not taken up again afterwards, and who said it. */
+function lastCallOff(lines: readonly TimedQuote[], words: RegExp, about: (text: string) => boolean,
+  again: (after: readonly TimedQuote[]) => boolean): CallOff | null {
   for (let i = lines.length - 1; i >= 0; i--) {
-    if (!off(lines[i]!)) continue;
+    if (!about(lines[i]!.text) || !offLine(lines[i]!, words)) continue;
     const after = lines.slice(i + 1);
-    const again = after.findIndex(quote => quote.speaker === '玩家' && ON_AGAIN.test(quote.text));
-    if (quotedToday(after, places) || again >= 0 && after.slice(again + 1).some(quote => quote.speaker === 'NPC' && agrees(quote))) return null;
+    const onAgain = after.findIndex(quote => quote.speaker === '玩家' && ON_AGAIN.test(quote.text));
+    if (again(after) || onAgain >= 0 && after.slice(onAgain + 1).some(quote => quote.speaker === 'NPC' && agrees(quote))) return null;
     const answer = after.find(quote => quote.speaker === 'NPC');
     if (SEND_HOME.test(lines[i]!.text) && answer && STAY.test(answer.text) && !/(?:好吧|行吧|那).{0,10}(?:回去|走)/.test(answer.text)) return null;
     return lines[i]!.speaker;
   }
   return null;
+}
+
+/**
+ * Whether the conversation that just ended took back today's appointment at `words`, or sent the NPC home, and who
+ * did; null if not, or if it was taken up again afterwards in the same conversation. Another day's plans ("明天没法去农场",
+ * "周六不去海边了") leave today's alone.
+ */
+export function quotedCallOff(lines: readonly TimedQuote[], words: RegExp, places: Readonly<Record<string, RegExp>>, today?: number): CallOff | null {
+  return lastCallOff(lines, words, text => !((TOMORROW.test(text) || namesOtherDay(text, today)) && !/今天/.test(text)),
+    after => quotedToday(after, places, today) !== null);
+}
+
+/** Whether the conversation took back the appointment on later `day` at `words`; the line must name that day (docs/npc-later-meetings.md). */
+export function quotedLaterCallOff(lines: readonly TimedQuote[], words: RegExp, places: Readonly<Record<string, RegExp>>, day: number, today: number): CallOff | null {
+  return lastCallOff(lines, words, text => namedDays(text, today).includes(day), after => quotedLater(after, places, today)?.day === day);
 }
