@@ -4,7 +4,7 @@ import { quotedToday, type TimedQuote } from '../src/agent/meeting-agreement.ts'
 import { lastConversation, MEET_PLACES, meetingLine, meetingMemory, todayMeeting } from '../src/agent/meetings.ts';
 import { OPENING_LINE } from '../src/agent/dialogue.ts';
 import type { DayEntry } from '../src/types.ts';
-import { connect, harness, initial, openTalk, WORLD } from './helpers/bridge.ts';
+import { connect, harness, initial, meetingsSent, openTalk, WORLD } from './helpers/bridge.ts';
 
 /** Player and NPC lines in turn, all said at `time`. */
 const talk = (time: number, ...lines: string[]): TimedQuote[] =>
@@ -110,8 +110,8 @@ test('agreed in a conversation, the appointment reaches the Mod at once, rolls b
     return from;
   };
   const from = await converse('Abigail', 1000, '现在陪我下矿吧？');
-  const sent = await wire.until('day.meetings', from) as { meetings: unknown[] };
-  assert.deepEqual(sent.meetings, [{ npc: 'abigail', time: 1000, place: '矿洞', sameDay: true }]);
+  const expected = [{ npc: 'abigail', time: 1000, place: '矿洞', sameDay: true }];
+  assert.deepEqual(await meetingsSent(wire, from, expected), expected);
   assert.ok(h.logs.includes('阿比盖尔答应了今天的约定：10:00 说好马上去 矿洞'));
   // One a day: asking again settles nothing new.
   await converse('Abigail', 1030, '现在陪我下矿吧？');

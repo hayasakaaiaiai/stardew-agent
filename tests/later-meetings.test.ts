@@ -7,7 +7,7 @@ import { nightlyConsolidator } from '../src/agent/nightly.ts';
 import type { Completion, ModelClient } from '../src/services/model/client.ts';
 import { Roster } from '../src/services/roster/index.ts';
 import { type ConsolidationInput, SOCIAL_NPCS } from '../src/types.ts';
-import { connect, harness, openTalk, sleep, WORLD } from './helpers/bridge.ts';
+import { connect, harness, meetingsSent, openTalk, sleep, WORLD } from './helpers/bridge.ts';
 
 const THURSDAY = 39; // summer 11
 const talk = (...lines: string[]): TimedQuote[] => lines.map((text, i) => ({ id: `q${i}`, speaker: i % 2 ? 'NPC' : '玩家', text, time: 1000 }));
@@ -123,12 +123,8 @@ test('an appointment two days ahead is kept through the nights, shown to the NPC
   assert.ok(h.logs.includes('山姆记下了：约好春季 3 日（周三）14:00 在海滩见面，后来农场主说不去了。'));
   const from = wire.inbox.length;
   await sleep(wire, 'B', 2, a.commitId);
-  let sent: { meetings: unknown[] } | undefined;
-  for (let i = 0; i < 300 && !sent; i++) {
-    sent = wire.inbox.slice(from).findLast(item => item.type === 'day.meetings') as typeof sent;
-    if (!sent) await new Promise(resolve => setTimeout(resolve, 10));
-  }
-  assert.deepEqual(sent?.meetings, [{ npc: 'abigail', time: 1000, place: '矿洞' }]);
+  const expected = [{ npc: 'abigail', time: 1000, place: '矿洞' }];
+  assert.deepEqual(await meetingsSent(wire, from, expected), expected);
   await wire.close();
 });
 

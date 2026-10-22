@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { quotedCallOff, type TimedQuote } from '../src/agent/meeting-agreement.ts';
 import { MEET_PLACES, meetingLine, meetingMemory, todayMeeting } from '../src/agent/meetings.ts';
 import type { DayEntry, NpcState } from '../src/types.ts';
-import { connect, harness, openTalk, WORLD } from './helpers/bridge.ts';
+import { connect, harness, meetingsSent, openTalk, WORLD } from './helpers/bridge.ts';
 
 const talk = (...lines: string[]): TimedQuote[] => lines.map((text, i) => ({ id: `q${i}`, speaker: i % 2 ? 'NPC' : '玩家', text, time: 1100 }));
 const off = (place: string, ...lines: string[]) => quotedCallOff(talk(...lines), MEET_PLACES[place]!, MEET_PLACES);
@@ -76,8 +76,8 @@ test('a later conversation calls the appointment off at once; sending company ho
   };
   await converse('Abigail', 1000, ['现在陪我下矿吧？']);
   const from = await converse('Abigail', 1030, ['今天不去矿洞了。']);
-  const sent = await wire.until('day.meetings', from) as { meetings: unknown[] };
-  assert.deepEqual(sent.meetings, [{ npc: 'abigail', time: 1000, place: '矿洞', sameDay: true, calledOff: true }]);
+  const expected = [{ npc: 'abigail', time: 1000, place: '矿洞', sameDay: true, calledOff: true }];
+  assert.deepEqual(await meetingsSent(wire, from, expected), expected);
   assert.ok(h.logs.includes('阿比盖尔今天在矿洞的约定取消了：农场主说不去了'));
   assert.ok(h.logs.includes('阿比盖尔记下了：约好马上去矿洞见面，后来农场主说不去了。'));
   await converse('Abigail', 1040, ['现在陪我下矿吧？']);
