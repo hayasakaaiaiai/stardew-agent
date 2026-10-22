@@ -44,15 +44,22 @@ export function quotedPeriodTime(quoted: readonly Quote[], proposed: number): nu
 export function quotedAgreement(quoted: readonly Quote[], all: readonly Quote[], placeWords: RegExp, time: number): boolean {
   const text = quoted.map(quote => quote.text).join('\n');
   const farmHelp = /农场(?!主)|地里|田里/.test(text) && /帮.{0,8}(?:浇|收|喂|添|干活)|来帮.{0,4}忙/.test(text);
+  // "来我农场看看鸡吧" invites to the farm as plainly as "见" (docs/npc-mine-companion.md §5.4).
+  const farmVisit = /(?:来|到)我(?:的)?农场/.test(text);
+  // "陪我下矿" asks for company as plainly as "一起" (docs/npc-mine-companion.md §5.4).
+  const dungeonQuestion = quoted.some(quote => placeWords.test(quote.text) && /(?:下矿|探险)(?:吧|？|\?)/.test(quote.text)
+    && !/[我你]|自己|独自|单独|一个人/.test(quote.text));
+  const dungeonTrip = /矿洞|矿井|矿坑|下矿|矿里|骷髅洞|火山/.test(text)
+    && (/陪(?:我|你)|带(?:我|你)|跟(?:我|你)/.test(text) || dungeonQuestion);
   if (quoted.length < 2 || REFUSED.test(text) || CONDITIONAL.test(text) || /后天|下周|下个/.test(text)
-    || !farmHelp && !/(?:一起|见面?|碰面|等(?:你|我|着)|约(?:好|定)?)/.test(text)) return false;
+    || !farmHelp && !farmVisit && !dungeonTrip && !/(?:一起|见面?|碰面|等(?:你|我|着)|约(?:好|定)?)/.test(text)) return false;
   const concreteTimes = quoted.flatMap(quote => times(quote.text, false));
   const evidenceTimes = concreteTimes.length ? concreteTimes : quoted.flatMap(quote => times(quote.text));
   if (!evidenceTimes.length || evidenceTimes.some(value => value !== time)) return false;
   if (quoted.some(quote => !times(quote.text, false).length && PERIODS.some(([words, , start, end]) => words.test(quote.text) && (time < start || time >= end)))) return false;
   const intent = (quote: Quote) => YES.test(quote.text)
     || /(?:那就|到时|我们).{0,10}(?:见|碰面)|我(?:确定|一定|准时|会).{0,8}(?:到|去|来|参加)/.test(quote.text)
-    || TOMORROW.test(quote.text) && placeWords.test(quote.text) && times(quote.text).length > 0 && /一起|见|去|来|等/.test(quote.text);
+    || TOMORROW.test(quote.text) && placeWords.test(quote.text) && times(quote.text).length > 0 && /一起|见|去|来|等|陪|带|跟|下矿|探险/.test(quote.text);
   if (!quoted.some(quote => quote.speaker === '玩家' && intent(quote)) || !quoted.some(quote => quote.speaker === 'NPC' && intent(quote))) return false;
   const end = Math.max(...quoted.map(quote => all.findIndex(source => source.id === quote.id)));
   return !all.slice(end + 1).some(quote => REFUSED.test(quote.text)

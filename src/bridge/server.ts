@@ -344,7 +344,7 @@ export class BridgeServer {
         send({ type: 'talk.error', ...envelope(message), npc: message.npc, message: '上一句还没回完' }); return;
       }
       const schedule = restOfDay(message.schedule ?? [], message.world.date.time);
-      const meeting = meetingLine(await save.meeting(npcId), message.world.date.time, message.atMeeting === true, message.helped);
+      const meeting = meetingLine(await save.meeting(npcId), message.world.date.time, message.atMeeting === true, message.helped, message.mine);
       const talk: OpenTalk = { npcId, inPersonGifts: message.inPersonGifts !== false,
         standing: { hearts: message.hearts, relation: message.relation, seenEvents: new Set(message.seenEvents) },
         world: { ...worldState(message.world, save.player, this.cardName),

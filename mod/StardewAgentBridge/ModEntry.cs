@@ -80,6 +80,10 @@ internal sealed partial class ModEntry : Mod
         helper.Events.GameLoop.Saved += (_, _) => this.OnSaved();
         helper.Events.GameLoop.ReturnedToTitle += (_, _) => this.OnReturnedToTitle();
         helper.Events.GameLoop.TimeChanged += (_, _) => this.OnTimeChanged();
+        // Dungeon levels are dropped overnight with whoever is in them (MineCompanion.cs).
+        helper.Events.GameLoop.DayEnding += (_, _) => this.ReleaseCompanions();
+        helper.Events.GameLoop.UpdateTicking += (_, _) => this.RescueBeforeUpdate();
+        helper.Events.Player.Warped += (_, e) => this.OnWarped(e);
         helper.Events.GameLoop.UpdateTicked += this.OnUpdateTicked;
         helper.Events.Display.MenuChanged += this.OnMenuChanged;
         helper.Events.Content.AssetRequested += this.OnAssetRequested;
@@ -149,6 +153,7 @@ internal sealed partial class ModEntry : Mod
         this.TickApproach(e);
         if (e.IsMultipleOf(30))
             this.TickMeetings();
+        this.TickCompanions(e);
         this.TickGifts();
         this.TickTown();
         this.TickFestival();
@@ -238,6 +243,8 @@ internal sealed partial class ModEntry : Mod
             fields["atMeeting"] = true;
             if (this.MeetingHelped(npc) is { } helped)
                 fields["helped"] = helped;
+            if (this.MeetingTrip(npc) is { } trip)
+                fields["mine"] = trip;
         }
         this.talk.RequestSeq = this.Send("talk.open", fields);
         this.BeginWaiting(this.talk);

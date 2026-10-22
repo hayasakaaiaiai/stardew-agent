@@ -6,7 +6,7 @@ import { type Festival, FESTIVALS, type GrangeResult, SOUP_LEVELS } from '../age
 import { GIFT_TASTES, type GiftTaste } from '../agent/gifts.ts';
 import { MAX_STOPS, type ScheduleStop } from '../agent/schedule.ts';
 import type { DeliveredLetter } from '../agent/letters.ts';
-import type { Helped } from '../agent/meetings.ts';
+import type { Helped, MineTrip } from '../agent/meetings.ts';
 import type { SceneLine } from '../agent/scene.ts';
 import type { Relation } from '../services/roster/index.ts';
 
@@ -94,6 +94,8 @@ export type ModMessage =
     atMeeting?: boolean;
     /** Farm chores it did there today (docs/npc-farm-help.md). */
     helped?: Helped;
+    /** It is in a dungeon with the player now (docs/npc-mine-companion.md). */
+    mine?: MineTrip;
     world: WorldSnapshot;
   } & Envelope)
   | ({ type: 'talk.say'; npc: string; text: string; date: GameDate } & Envelope)
@@ -111,7 +113,7 @@ export type ModMessage =
   /** What happened at a festival the player just left (docs/festival-memories.md); game names. Reliable, acknowledged. */
   | ({ type: 'festival.ended' } & FestivalEnded & Envelope)
   /** An appointment the NPC went to is over (docs/npc-meetings.md); `left` is HHMM. Reliable, acknowledged. */
-  | ({ type: 'meet.ended'; npc: string; place: string; time: number; left: number; met: boolean; helped?: Helped; date: GameDate } & Envelope);
+  | ({ type: 'meet.ended'; npc: string; place: string; time: number; left: number; met: boolean; helped?: Helped; mine?: MineTrip; date: GameDate } & Envelope);
 
 export interface FestivalEnded {
   festival: Festival;
@@ -217,6 +219,12 @@ export function parseModMessage(raw: string): ModMessage {
     if (h !== undefined && (!h || typeof h !== 'object' || Array.isArray(h)
       || ['watered', 'harvested', 'fed', 'ponds'].some(key => !Number.isSafeInteger(h[key]) || (h[key] as number) < 0 || (h[key] as number) > 100000))) fail('helped is invalid');
   };
+  const mine = (value: unknown) => {
+    const m = value as Record<string, unknown> | null | undefined;
+    if (m !== undefined && (!m || typeof m !== 'object' || Array.isArray(m)
+      || ['floor', 'deepest', 'kills'].some(key => !Number.isSafeInteger(m[key]) || (m[key] as number) < 0 || (m[key] as number) > 100000)
+      || (m.floor as number) > (m.deepest as number) || typeof m.fights !== 'boolean' || typeof m.rescued !== 'boolean')) fail('mine is invalid');
+  };
   const isName = (value: unknown) => typeof value === 'string' && value.length > 0 && value.length <= 50 && !/[\u0000-\u001f]/u.test(value);
   const isSchedule = (value: unknown) => Array.isArray(value) && value.length <= MAX_STOPS && value.every((item) => {
     const stop = item as Record<string, unknown> | null;
@@ -276,6 +284,7 @@ export function parseModMessage(raw: string): ModMessage {
       if (data.schedule !== undefined && !isSchedule(data.schedule)) fail('schedule must be a list of stops');
       if (data.atMeeting !== undefined && typeof data.atMeeting !== 'boolean') fail('atMeeting must be a boolean');
       helped(data.helped);
+      mine(data.mine);
       world(data.world);
       break;
     }
@@ -289,6 +298,7 @@ export function parseModMessage(raw: string): ModMessage {
       }
       if (typeof data.met !== 'boolean') fail('met must be a boolean');
       helped(data.helped);
+      mine(data.mine);
       date(data.date);
       break;
     }

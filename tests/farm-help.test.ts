@@ -9,7 +9,7 @@ import { connect, harness, openTalk, sleep, WORLD } from './helpers/bridge.ts';
 const HELPED = { watered: 120, harvested: 35, fed: 8, ponds: 2 };
 
 test('the farm is a meeting place, but “农场主” in a line is the player, not the place', () => {
-  assert.match(NIGHTLY_RULES, /杂货店、农场之一/);
+  assert.match(NIGHTLY_RULES, /杂货店、农场、/);
   const sources = [
     { id: 't1', speaker: '玩家' as const, text: '明天上午来农场帮我浇浇水好吗？' },
     { id: 't2', speaker: 'NPC' as const, text: '好啊，明天上午我去帮农场主的忙。' },
@@ -34,6 +34,19 @@ test('farm chore requests still need both parties, a time, and an unconditional 
   ]) assert.equal(checkMeet(proposal, quotes(player!, npc!)), null, `${player} / ${npc}`);
   assert.equal(checkMeet(meetDraft({ time: '10:00', place: '农场', sources: ['t1'] }),
     quotes('明天上午来农场帮我浇水好吗？', '我不去。')), null);
+});
+
+test('an invitation to come to the player’s farm counts, with the same checks on time and answer', () => {
+  const quotes = (player: string, npc: string) => [{ id: 't1', speaker: '玩家' as const, text: player }, { id: 't2', speaker: 'NPC' as const, text: npc }];
+  const keep = (player: string, npc: string) => checkMeet(meetDraft({ time: '14:00', place: '农场', sources: ['t1', 't2'] }), quotes(player, npc));
+  assert.deepEqual(keep('明天下午来我农场看看鸡吧。', '好呀！明天下午我过去。'), { time: 1400, place: '农场' });
+  for (const [player, npc] of [
+    ['明天下午来我农场看看鸡吧。', '明天下午我没空。'],
+    ['明天下午来我农场看看鸡吧。', '我想想再说。'],
+    ['要是明天下午有空，来我农场看看鸡吧。', '好呀。'],
+    ['明天上午来我农场看看鸡吧。', '好呀！明天下午我过去。'],
+    ['我明天下午在农场看鸡。', '好呀。'],
+  ]) assert.equal(keep(player!, npc!), null, `${player} / ${npc}`);
 });
 
 test('what a helper did is said in the talk and remembered, leaving out what there was none of', () => {

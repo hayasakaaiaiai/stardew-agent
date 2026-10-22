@@ -18,10 +18,11 @@ import { SOCIAL_NPCS } from '../src/types.ts';
 import { digest } from '../src/validation.ts';
 import { runActions, runActionEdges, runActionTiming, runActionRender, runActionQueue, runActionPlaces, runActionIncoming, type ActionState } from './game-actions.ts';
 import { runFarmChores, runFarmVisits, runFarmSave, type FarmState } from './game-farm-help.ts';
+import { runMineCore, runMineRescue, runMineEdges, runMineWorlds, runMineSave, type MineState } from './game-mine-companion.ts';
 
 interface Config { RequestId: string; UniqueId: string; SaveFolder: string; SaveDirectory: string; RunDirectory: string; GamePath: string; BackendUrl: string; World: boolean; Offline: boolean; Section: string }
 interface Npc { id: string; name: string; location: string; x: number; y: number; ignoreScheduleToday: boolean; controller: boolean; temporary: boolean; queued: number; destroys: boolean; schedule: ScheduleStop[] | null }
-export interface State { ready: boolean; canChat: boolean; time: number; nonce: string; generation: number; location: string; weather: string; npcs: Npc[] | null; actions?: ActionState; farm?: FarmState; player?: { x: number; y: number; facing: number } | null;
+export interface State { ready: boolean; canChat: boolean; time: number; nonce: string; generation: number; location: string; weather: string; npcs: Npc[] | null; actions?: ActionState; farm?: FarmState; mine?: MineState; player?: { x: number; y: number; facing: number } | null;
   festival: { id: string; isFestival: boolean; actors: string[]; schedules: Record<string, unknown>; dance: string | null; soup: number | null; grangeScore: number; giver: string | null } | null;
   native: Record<string, unknown> | null; reply: { npc: string; text: string } | null; minigame: string | null }
 interface Command { id: number; operation: string; completed: boolean; success: boolean; error?: string; state: State }
@@ -32,15 +33,16 @@ const ROOT = resolve(import.meta.dirname, '..');
 const configPath = resolve(process.argv[2]!);
 const config = JSON.parse((await readFile(configPath, 'utf8')).replace(/^\uFEFF/, '')) as Config;
 assert.equal(config.World, true); assert.equal(config.SaveFolder, `MemoryTest_${config.UniqueId}`); assert.notEqual(config.UniqueId, '436774213');
-assert.ok(['all', 'schedules', 'backstage', 'festivals', 'content', 'fair-return', 'actions', 'actions-edge', 'actions-timing', 'actions-checks', 'actions-places', 'actions-incoming', 'farm-help', 'farm-chores', 'farm-visits', 'farm-save'].includes(config.Section), 'Unknown native world test section.');
+assert.ok(['all', 'schedules', 'backstage', 'festivals', 'content', 'fair-return', 'actions', 'actions-edge', 'actions-timing', 'actions-checks', 'actions-places', 'actions-incoming', 'farm-help', 'farm-chores', 'farm-visits', 'farm-save', 'mine', 'mine-core', 'mine-rescue', 'mine-edges', 'mine-worlds', 'mine-dungeons', 'mine-save'].includes(config.Section), 'Unknown native world test section.');
 assert.equal(resolve(config.SaveDirectory), resolve(process.env.APPDATA!, 'StardewValley/Saves', config.SaveFolder));
 assert.ok(resolve(config.RunDirectory).startsWith(resolve(ROOT, '.runtime') + '\\'));
 const directory = config.RunDirectory;
 await mkdir(join(directory, 'sources'));
-for (const file of ['tools/test-game-world.ts', 'tools/game-actions.ts', 'tools/game-farm-help.ts', 'mod/StardewAgentBridge/FarmHelp.cs', 'mod/StardewAgentBridge/FarmVisits.cs', 'mod/StardewAgentBridge/FarmTest.cs', 'tools/prepare-world-fixture.ps1', 'src/agent/schedule.ts', 'src/agent/dialogue.ts', 'src/agent/dialogue-facts.ts',
+for (const file of ['tools/test-game-world.ts', 'tools/game-actions.ts', 'tools/game-farm-help.ts', 'tools/game-mine-companion.ts', 'mod/StardewAgentBridge/MineCompanion.cs', 'mod/StardewAgentBridge/MineTest.cs', 'mod/StardewAgentBridge/FarmHelp.cs', 'mod/StardewAgentBridge/FarmVisits.cs', 'mod/StardewAgentBridge/FarmTest.cs', 'tools/prepare-world-fixture.ps1', 'src/agent/schedule.ts', 'src/agent/dialogue.ts', 'src/agent/dialogue-facts.ts',
   'src/agent/approach.ts', 'src/agent/meetings.ts', 'src/agent/meeting-agreement.ts', 'src/agent/nightly.ts', 'mod/StardewAgentBridge/ActionTest.cs', 'mod/StardewAgentBridge/Approach.cs', 'mod/StardewAgentBridge/Meetings.cs',
   'mod/StardewAgentBridge/SaveSync.cs', 'mod/StardewAgentBridge/ModEntry.cs',
-  'src/bridge/server.ts', 'mod/StardewAgentBridge/WorldTest.cs', 'mod/StardewAgentBridge/MemoryTest.cs', 'mod/StardewAgentBridge/Festivals.cs'])
+  'src/bridge/server.ts', 'src/bridge/protocol.ts', 'src/bridge/memory.ts', 'mod/StardewAgentBridge/ModConfig.cs', 'mod/StardewAgentBridge/GameState.cs',
+  'mod/StardewAgentBridge/WorldTest.cs', 'mod/StardewAgentBridge/MemoryTest.cs', 'mod/StardewAgentBridge/Festivals.cs'])
   await copyFile(join(ROOT, file), join(directory, 'sources', file.split('/').at(-1)!));
 const json = async (file: string, value: unknown) => {
   await writeFile(file + '.tmp', JSON.stringify(value, null, 2));
@@ -74,7 +76,8 @@ const deferred = () => { let resolve!: () => void; const promise = new Promise<v
 let heldBackstage: ReturnType<typeof deferred> | undefined;
 let actionSeedNight = false;
 let actionSeedFarm = false;
-const seedNight = (enabled: boolean, farm = false) => { actionSeedNight = enabled; actionSeedFarm = farm; };
+let actionSeedMine = '';
+const seedNight = (enabled: boolean, farm = false, mine = '') => { actionSeedNight = enabled; actionSeedFarm = farm; actionSeedMine = mine; };
 const fixed = (content: unknown): Completion => ({ content: JSON.stringify(content), reasoning: '', finishReason: 'stop',
   usage: { inputTokens: 120, cachedInputTokens: 60, outputTokens: 20, reasoningTokens: null }, timing: { firstReasoningMs: null, firstContentMs: 1, totalMs: 1 } });
 function model(kind: Kind): ChatModel {
@@ -90,10 +93,11 @@ function model(kind: Kind): ChatModel {
       const remembered = /- （(?:今天|昨天|\d+ 天前)）([^\n]+)/.exec(text)?.[1] ?? '';
       result = fixed(kind === 'background' ? { memories: { a: '格斯说汤的味道不错。', b: '潘姆说巴士站的风很大。', c: '我们聊了餐吧的天气。' } }
         : kind === 'nightly' ? { memories: actionSeedNight ? [{ sources: ['t2', 't3'], importance: 4 }] : [], retire: [], impression: '',
-          plan: actionSeedNight ? actionSeedFarm ? '想问农场主上午来农场帮忙的事' : '想问农场主下午在海滩见面的事' : '', seek: actionSeedNight,
-          meet: actionSeedNight ? { time: actionSeedFarm ? '09:00' : '14:00', place: actionSeedFarm ? '农场' : '海滩', sources: ['t2', 't3'] } : null, bubbles: [], letter: '', gift: false, share: '' }
+          plan: actionSeedNight ? actionSeedMine ? `想问农场主上午一起去${actionSeedMine}的事` : actionSeedFarm ? '想问农场主上午来农场帮忙的事' : '想问农场主下午在海滩见面的事' : '', seek: actionSeedNight,
+          meet: actionSeedNight ? { time: actionSeedFarm || actionSeedMine ? '09:00' : '14:00', place: actionSeedMine || (actionSeedFarm ? '农场' : '海滩'), sources: ['t2', 't3'] } : null, bubbles: [], letter: '', gift: false, share: '' }
         : kind === 'nearby' ? { lines: [] }
-        : { reply: actionSeedNight && actionSeedFarm ? '好啊，明天上午我来农场帮你浇水。'
+        : { reply: actionSeedNight && actionSeedMine ? `好啊，明天上午一起探险，${actionSeedMine}门口见。`
+          : actionSeedNight && actionSeedFarm ? '好啊，明天上午我来农场帮你浇水。'
           : actionSeedNight && messages.at(-1)!.content.includes('明天下午') ? '好啊，那就明天下午14:00在海滩见。'
           : remembered || (schedule ? `我的安排是：${schedule}` : '我还没有确定安排。'), emotion: 'neutral', options: ['继续聊', '换个话题', '再见'], remember: [], mood: 0, end: false });
       handlers.onContent?.(result.content);
@@ -447,6 +451,15 @@ try {
     if (['all', 'farm-help', 'farm-chores'].includes(config.Section)) await runFarmChores(host);
     if (['all', 'farm-help', 'farm-visits'].includes(config.Section)) await runFarmVisits(host);
     if (['all', 'farm-help', 'farm-save'].includes(config.Section)) await runFarmSave(host);
+  }
+  if (['all', 'mine', 'mine-core', 'mine-rescue', 'mine-edges', 'mine-worlds', 'mine-dungeons', 'mine-save'].includes(config.Section)) {
+    const host = { rpc, chapter, check, say, close, packets: modPackets, wireCount: () => packets.length,
+      latestSystem: () => latestDialogue().messages[0]!.content, seedNight, meetingEntries };
+    if (['all', 'mine', 'mine-core'].includes(config.Section)) await runMineCore(host);
+    if (['all', 'mine', 'mine-rescue'].includes(config.Section)) await runMineRescue(host);
+    if (['all', 'mine', 'mine-edges'].includes(config.Section)) await runMineEdges(host);
+    if (['all', 'mine', 'mine-worlds', 'mine-dungeons'].includes(config.Section)) await runMineWorlds(host, config.Section !== 'mine-dungeons');
+    if (['all', 'mine', 'mine-save'].includes(config.Section)) await runMineSave(host);
   }
   if (!config.Offline) {
     check('real-dialogue-preserves-configured-thinking', calls.filter(call => call.real && call.kind === 'dialogue').every(call => call.thinking === paid!.config.thinking));
