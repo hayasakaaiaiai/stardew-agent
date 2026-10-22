@@ -59,6 +59,8 @@ internal sealed partial class ModEntry : Mod
         public bool TypeNext;
         public bool ReshowNext;
         public bool LeaveNext;
+        /// <summary>This opening asks the player out (Invites.cs); once its reply arrives, the day is kept.</summary>
+        public bool Inviting;
     }
 
     public override void Entry(IModHelper helper)
@@ -250,6 +252,8 @@ internal sealed partial class ModEntry : Mod
             if (this.MeetingOuting(npc) is { } outing)
                 fields["outing"] = outing;
         }
+        if (this.InvitesToday(npc))
+            fields["invite"] = this.talk.Inviting = true;
         this.talk.RequestSeq = this.Send("talk.open", fields);
         this.BeginWaiting(this.talk);
     }
@@ -316,6 +320,11 @@ internal sealed partial class ModEntry : Mod
 
     private void OnReply(Talk t, string reply, string emotion, List<string> options, bool end)
     {
+        if (t.Inviting)
+        {
+            t.Inviting = false;
+            this.Invited(t.Npc);
+        }
         t.Waiting = false;
         t.Reply = reply;
         t.Emotion = emotion;

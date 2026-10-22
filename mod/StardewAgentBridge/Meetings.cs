@@ -162,6 +162,7 @@ internal sealed partial class ModEntry
         this.ReleaseCompanions();
         this.ReleaseOutings();
         this.meetings.Clear();
+        this.ClearInvites();
     }
 
     /// <summary>HHMM ninety minutes after the agreed time, at 22:00 at the latest.</summary>
@@ -197,6 +198,8 @@ internal sealed partial class ModEntry
             return false;
         if (!this.IsCurrentMessage(message) || !message.TryGetProperty("meetings", out JsonElement list) || list.ValueKind != JsonValueKind.Array)
             return true;
+        // Who asks the player out today is chosen once the day's appointments are known (Invites.cs).
+        this.meetingsArrived = true;
         // One agreed today that could not go stays given up, so a resend does not tell the player twice.
         foreach (string pending in this.meetings.Where(pair => !pair.Value.Applied && !(pair.Value.Failed && pair.Value.SameDay)).Select(pair => pair.Key).ToList())
             this.meetings.Remove(pending);
