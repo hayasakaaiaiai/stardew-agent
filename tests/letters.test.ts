@@ -21,8 +21,8 @@ test('late daily reads cannot deliver an obsolete competing letter, including ac
   const h = await harness(t);
   const server = await h.start();
   const pending = deferred();
-  const old = { bubbles: {}, letters: [{ key: 'StardewAgent.old', npc: 'haley', text: '谢谢你来看我。' }] };
-  const latest = { bubbles: {}, letters: [{ key: 'StardewAgent.new', npc: 'abigail', text: '今天一起做风筝。', item: '蝙蝠翅膀' }] };
+  const old = { bubbles: {}, approach: {}, meetings: [], letters: [{ key: 'StardewAgent.old', npc: 'haley', text: '谢谢你来看我。' }] };
+  const latest = { bubbles: {}, approach: {}, meetings: [], letters: [{ key: 'StardewAgent.new', npc: 'abigail', text: '今天一起做风筝。', item: '蝙蝠翅膀' }] };
   let read = () => pending.promise.then(() => old);
   const save = { initial: { lineageId: 'farm' }, loadNonce: 'current', closed: false, head: 'A', day: 2, today: () => read() };
   const packets: BackendMessage[] = [];
@@ -38,5 +38,5 @@ test('late daily reads cannot deliver an obsolete competing letter, including ac
   const obsolete = sender.sendToday(session);
   save.head = 'B';
   changed.resolve(); await obsolete;
-  assert.equal(packets.length, 2);
+  assert.equal(packets.length, 4, 'bubbles, letters, approach and meetings once');
 });

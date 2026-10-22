@@ -1,0 +1,284 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text.Json;
+using Microsoft.Xna.Framework;
+using StardewModdingAPI;
+using StardewValley;
+using StardewValley.Pathfinding;
+
+namespace StardewAgentBridge;
+
+/// <summary>
+/// NPCs keep yesterday's appointments with the player (docs/npc-meetings.md): two stops go into today's vanilla
+/// schedule, there and back, so the game's own schedule pathing walks them across maps. When it is over, the backend
+/// is told whether the player came, so the NPC remembers.
+/// </summary>
+internal sealed partial class ModEntry
+{
+    /// <summary>The same as the backend's MEET_MINUTES and its 22:00 limit (src/agent/meetings.ts).</summary>
+    private const int MeetMinutes = 90;
+    private const int MeetEnd = 2200;
+    private const int MeetsPerDay = 3;
+    /// <summary>Arrive this much before the agreed time.</summary>
+    private const int MeetEarlyMinutes = 10;
+    private const float MeetGreetRange = 6;
+
+    /// <summary>
+    /// Tiles vanilla schedules already stand NPCs on, so schedule pathing reaches them (docs/npc-meetings.md §4.1). A
+    /// second NPC meeting at the same place takes the second tile.
+    /// </summary>
+    private static readonly Dictionary<string, (string Map, int X, int Y, int Facing)[]> MeetPlaces = new()
+    {
+        ["海滩"] = new[] { ("Beach", 30, 34, 2), ("Beach", 27, 34, 2) },
+        ["镇广场"] = new[] { ("Town", 50, 68, 1), ("Town", 52, 61, 2) },
+        ["墓地"] = new[] { ("Town", 47, 87, 0) },
+        ["山上湖边"] = new[] { ("Mountain", 44, 18, 1), ("Mountain", 43, 17, 1) },
+        ["森林河边"] = new[] { ("Forest", 66, 50, 2), ("Forest", 68, 50, 2) },
+        ["博物馆"] = new[] { ("ArchaeologyHouse", 11, 9, 0), ("ArchaeologyHouse", 16, 9, 0) },
+        ["星之果实餐吧"] = new[] { ("Saloon", 20, 19, 3), ("Saloon", 16, 20, 0) },
+        ["杂货店"] = new[] { ("SeedShop", 13, 20, 0), ("SeedShop", 10, 20, 0) },
+    };
+
+    private sealed class Meeting
+    {
+        public Meeting(string npc, int time, string place)
+        {
+            this.Npc = npc;
+            this.Time = time;
+            this.Place = place;
+            this.Leave = MeetingLeave(time);
+        }
+
+        /// <summary>The game name.</summary>
+        public string Npc { get; }
+        public int Time { get; }
+        public string Place { get; }
+        public int Leave { get; }
+        public (string Map, int X, int Y, int Facing) Spot;
+        /// <summary>When it sets off; before that its own schedule may already have it near the place.</summary>
+        public int Depart;
+        public bool Applied;
+        public bool Failed;
+        public bool Arrived;
+        public bool Met;
+        public bool Reported;
+    }
+
+    /// <summary>Game name → today's appointment.</summary>
+    private readonly Dictionary<string, Meeting> meetings = new(StringComparer.OrdinalIgnoreCase);
+
+    private void ClearMeetings() => this.meetings.Clear();
+
+    /// <summary>HHMM ninety minutes after the agreed time, at 22:00 at the latest.</summary>
+    private static int MeetingLeave(int time) => Math.Min(Utility.ModifyTime(time, MeetMinutes), MeetEnd);
+
+    /// <summary>When to set off so as to arrive early, never before the next ten-minute tick.</summary>
+    private static int MeetingDeparture(int arrive, int travelMinutes, int now)
+    {
+        int depart = Utility.ConvertMinutesToTime(Utility.ConvertTimeToMinutes(arrive) - travelMinutes - MeetEarlyMinutes);
+        return Math.Max(depart, Utility.ModifyTime(now - now % 10, 10));
+    }
+
+    /// <summary>
+    /// A newer list replaces appointments not yet put into a schedule, e.g. after a late consolidation; ones already in
+    /// a schedule stay until the day ends.
+    /// </summary>
+    private bool HandleMeetings(string type, JsonElement message)
+    {
+        if (type != "day.meetings")
+            return false;
+        if (!this.IsCurrentMessage(message) || !message.TryGetProperty("meetings", out JsonElement list) || list.ValueKind != JsonValueKind.Array)
+            return true;
+        foreach (string pending in this.meetings.Where(pair => !pair.Value.Applied).Select(pair => pair.Key).ToList())
+            this.meetings.Remove(pending);
+        foreach (JsonElement item in list.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.Object || !item.TryGetProperty("npc", out JsonElement id) || id.ValueKind != JsonValueKind.String
+                || !item.TryGetProperty("time", out JsonElement time) || time.ValueKind != JsonValueKind.Number || !time.TryGetInt32(out int hhmm)
+                || hhmm is < 800 or > 2100 || hhmm % 100 > 59 || hhmm % 10 != 0
+                || !item.TryGetProperty("place", out JsonElement place) || place.ValueKind != JsonValueKind.String || !MeetPlaces.ContainsKey(place.GetString()!))
+                continue;
+            string? name = SocialNpcs.FirstOrDefault(npc => npc.Equals(id.GetString(), StringComparison.OrdinalIgnoreCase));
+            if (name is not null && !this.meetings.ContainsKey(name) && this.meetings.Count < MeetsPerDay)
+                this.meetings[name] = new Meeting(name, hhmm, place.GetString()!);
+        }
+        return true;
+    }
+
+    /// <summary>Puts appointments into today's schedules, then watches them: arrival, the player coming, the end.</summary>
+    private void TickMeetings()
+    {
+        if (!this.config.NpcMeetings || this.meetings.Count == 0 || !Context.IsWorldReady || !this.activeLoad || Game1.eventUp)
+            return;
+        foreach (Meeting m in this.meetings.Values)
+        {
+            if (!m.Applied && !m.Failed)
+                this.ApplyMeeting(m);
+            else if (m.Applied && !m.Reported)
+                this.WatchMeeting(m);
+        }
+    }
+
+    private void ApplyMeeting(Meeting m)
+    {
+        NPC? npc = Game1.getCharacterFromName(m.Npc);
+        string? why = npc is null || npc.Schedule is null || npc.ignoreScheduleToday || npc.IsInvisible ? "今天没有原版日程"
+            : GameState.Relation(npc) is "married" or "roommate" ? "配偶和室友的日程不改"
+            : Utility.ModifyTime(Game1.timeOfDay, MeetEarlyMinutes) >= m.Time ? "收到时已经来不及"
+            : null;
+        int taken = this.meetings.Values.Count(other => other != m && other.Applied && other.Place == m.Place);
+        if (why is null && taken >= MeetPlaces[m.Place].Length)
+            why = "这个地点的位置都有人约了";
+        if (why is null)
+        {
+            m.Spot = MeetPlaces[m.Place][taken];
+            try { why = this.PlanMeeting(npc!, m); }
+            catch (Exception ex) { why = "算不出路线：" + ex.Message; }
+        }
+        if (why is not null)
+        {
+            m.Failed = true;
+            this.Monitor.Log($"{m.Npc} 今天 {m.Time} 在{m.Place}的约定不去了：{why}", LogLevel.Info);
+            return;
+        }
+        m.Applied = true;
+    }
+
+    /// <summary>
+    /// Replaces the stops between setting off and leaving with two: to the place, and back to where the original schedule
+    /// has the NPC at the end. Later stops were computed from there, so their routes still fit. Null when done.
+    /// </summary>
+    private string? PlanMeeting(NPC npc, Meeting m)
+    {
+        Dictionary<int, SchedulePathDescription> schedule = npc.Schedule;
+        int now = Game1.timeOfDay;
+        // The end of the last route that sets off before (or at) a time; where the NPC is now if none has set off yet.
+        (string Map, Point Tile, int Facing, string? Behavior, string? Message) StopBefore(int time, bool inclusive)
+        {
+            SchedulePathDescription? last = schedule.Where(pair => inclusive ? pair.Key <= time : pair.Key < time)
+                .OrderBy(pair => pair.Key).Select(pair => pair.Value).LastOrDefault();
+            return last is null ? (npc.currentLocation.NameOrUniqueName, npc.TilePoint, npc.FacingDirection, null, null)
+                : (last.targetLocationName, last.targetTile, last.facingDirection, last.endOfRouteBehavior, last.endOfRouteMessage);
+        }
+        string key = npc.dayScheduleName.Value ?? "meeting";
+        (string Map, int X, int Y, int Facing) spot = m.Spot;
+        SchedulePathDescription Go((string Map, Point Tile, int Facing, string? Behavior, string? Message) from)
+            => npc.pathfindToNextScheduleLocation(key, from.Map, from.Tile.X, from.Tile.Y, spot.Map, spot.X, spot.Y, spot.Facing, null, null);
+
+        int BeforePendingStop(int departure)
+        {
+            while (true)
+            {
+                var previous = schedule.Where(pair => pair.Key < departure).OrderBy(pair => pair.Key).LastOrDefault();
+                if (previous.Value is null || Utility.ModifyTime(Math.Max(now, previous.Key), TravelMinutes(previous.Value.route)) <= departure)
+                    return departure;
+                // Replace a stop whose incoming path would still own the NPC when this appointment sets off.
+                departure = previous.Key;
+            }
+        }
+
+        // Setting off earlier can mean setting off from an earlier stop; settle in at most two more rounds.
+        var from = StopBefore(m.Time, inclusive: false);
+        SchedulePathDescription go = Go(from);
+        int depart = BeforePendingStop(MeetingDeparture(m.Time, TravelMinutes(go.route), now));
+        for (int round = 0; round < 2 && StopBefore(depart, inclusive: false) != from; round++)
+        {
+            from = StopBefore(depart, inclusive: false);
+            go = Go(from);
+            // Keep the earlier departure when an earlier stop is nearer; moving it forward can alternate between stops.
+            depart = Math.Min(depart, BeforePendingStop(MeetingDeparture(m.Time, TravelMinutes(go.route), now)));
+        }
+        if (StopBefore(depart, inclusive: false) != from)
+            return "出发的位置算不准";
+        if (depart < Utility.ModifyTime(now - now % 10, 10) || Utility.ModifyTime(depart, TravelMinutes(go.route) + MeetEarlyMinutes) > m.Time)
+            return "来不及在约定时间到";
+        var back = StopBefore(m.Leave, inclusive: true);
+        SchedulePathDescription ret = npc.pathfindToNextScheduleLocation(key, spot.Map, spot.X, spot.Y, back.Map, back.Tile.X, back.Tile.Y,
+            back.Facing, back.Behavior, back.Message);
+        if (go.route is not { Count: > 0 } || ret.route is not { Count: > 0 })
+            return "原版寻路找不到路";
+        foreach (int replaced in schedule.Keys.Where(time => time >= depart && time <= m.Leave).ToList())
+            schedule.Remove(replaced);
+        go.time = depart;
+        ret.time = m.Leave;
+        m.Depart = depart;
+        schedule[depart] = go;
+        schedule[m.Leave] = ret;
+        this.Monitor.Log($"{m.Npc} 今天 {depart} 从{from.Map}出发，{m.Time} 前到{m.Place}（{spot.Map} {spot.X},{spot.Y}），{m.Leave} 回{back.Map}。", LogLevel.Info);
+        return null;
+    }
+
+    /// <summary>The same estimate as vanilla's arrival-time schedules (NPC.parseMasterScheduleImpl): two pixels a tick.</summary>
+    private static int TravelMinutes(Stack<Point>? route)
+    {
+        int steps = 0;
+        Point? previous = null;
+        foreach (Point point in route ?? new Stack<Point>())
+        {
+            if (previous is { } p && Math.Abs(p.X - point.X) + Math.Abs(p.Y - point.Y) == 1)
+                steps++;
+            previous = point;
+        }
+        int ticksPerTenMinutes = Game1.realMilliSecondsPerGameTenMinutes / 1000 * 60;
+        return (int)Math.Round(steps * 64 / 2f / ticksPerTenMinutes) * 10;
+    }
+
+    /// <summary>Whether this NPC is waiting at its appointment right now.</summary>
+    private bool AtMeeting(NPC npc)
+    {
+        if (!this.meetings.TryGetValue(npc.Name, out Meeting? m) || !m.Applied || m.Reported || Game1.timeOfDay < m.Depart
+            || Game1.timeOfDay > m.Leave || npc.currentLocation?.Name != m.Spot.Map)
+            return false;
+        return Math.Abs(npc.TilePoint.X - m.Spot.X) + Math.Abs(npc.TilePoint.Y - m.Spot.Y) <= 2;
+    }
+
+    private void WatchMeeting(Meeting m)
+    {
+        if (Game1.getCharacterFromName(m.Npc) is not NPC npc)
+            return;
+        if (!m.Arrived && npc.controller is null && !npc.isMoving() && this.AtMeeting(npc))
+            m.Arrived = true;
+        if (m.Arrived && !m.Met && this.AtMeeting(npc) && Game1.currentLocation == npc.currentLocation && Context.IsPlayerFree
+            && Vector2.Distance(npc.Tile, Game1.player.Tile) <= MeetGreetRange)
+        {
+            m.Met = true;
+            npc.faceGeneralDirection(Game1.player.getStandingPosition());
+            npc.doEmote(Character.happyEmote);
+            npc.showTextAboveHead(VanillaDialogue.Escape(Game1.player.Name) + "！");
+        }
+        if (Game1.timeOfDay >= m.Leave)
+            this.ReportMeeting(m, m.Leave);
+    }
+
+    /// <summary>Talking to the NPC at the place counts as coming; the backend is told so the talk knows too.</summary>
+    private bool MeetingTalk(NPC npc)
+    {
+        if (!this.AtMeeting(npc))
+            return false;
+        this.meetings[npc.Name].Met = true;
+        return true;
+    }
+
+    /// <summary>When the day ends before the NPC leaves: report what happened so far, if the agreed time has come.</summary>
+    private void EndMeetings()
+    {
+        foreach (Meeting m in this.meetings.Values.Where(m => m.Applied && !m.Reported && Game1.timeOfDay >= m.Time))
+            this.ReportMeeting(m, Math.Min(Game1.timeOfDay, m.Leave));
+    }
+
+    /// <summary>Only an NPC that got there remembers waiting; one held up on the way says nothing.</summary>
+    private void ReportMeeting(Meeting m, int left)
+    {
+        m.Reported = true;
+        if (!m.Arrived)
+        {
+            this.Monitor.Log($"{m.Npc} 没走到{m.Place}，不记这次约定。", LogLevel.Info);
+            return;
+        }
+        this.Send("meet.ended", new()
+        {
+            ["npc"] = m.Npc, ["place"] = m.Place, ["time"] = m.Time, ["left"] = left, ["met"] = m.Met, ["date"] = GameState.Date(),
+        });
+    }
+}

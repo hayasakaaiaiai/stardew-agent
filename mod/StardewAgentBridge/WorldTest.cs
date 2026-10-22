@@ -29,6 +29,7 @@ internal sealed partial class ModEntry
     private string? worldTestCapture;
     private DateTime worldTestCaptureAt;
     private bool worldTestCaptureHook;
+    private bool worldTestCaptureScreen;
     private object? worldTestNative;
     private readonly List<int> worldTestHours = new();
     private bool worldTestHoursHook;
@@ -66,6 +67,7 @@ internal sealed partial class ModEntry
             ready, canChat = this.CanChat, time = ready ? Game1.timeOfDay : 0,
             date = ready ? GameState.Date() : null, weather = ready ? GameState.Weather() : null,
             location = ready ? Game1.currentLocation?.NameOrUniqueName : null,
+            player = ready ? new { x = Game1.player.TilePoint.X, y = Game1.player.TilePoint.Y, facing = Game1.player.FacingDirection } : null,
             menu = Game1.activeClickableMenu?.GetType().Name, minigame = Game1.currentMinigame?.GetType().Name,
             Game1.globalFade, Game1.fadeToBlack, Game1.fadeIn, Game1.fadeToBlackAlpha, Game1.eventUp, Game1.isWarping,
             nonce = this.loadNonce, generation = this.bridge.Generation, queue = this.lifecycle.Count,
@@ -78,13 +80,14 @@ internal sealed partial class ModEntry
                 festival.grangeJudged, festival.grangeScore,
                 dance = this.festivalWatch?.Dance, soup = this.festivalWatch?.Soup,
             },
-            native = this.worldTestNative, hours = this.worldTestHours.ToArray(),
+            native = this.worldTestNative, hours = this.worldTestHours.ToArray(), actions = ready ? this.ActionSnapshot() : null,
             reply = this.talk is null ? null : new { npc = this.talk.Npc.Name, text = this.talk.Reply, waiting = this.talk.Waiting },
             npcs = ready ? SocialNpcs.Select(id => Game1.getCharacterFromName(id)).OfType<NPC>().Select(npc => new
             {
                 id = npc.Name, name = npc.displayName, location = npc.currentLocation?.NameOrUniqueName,
                 x = npc.TilePoint.X, y = npc.TilePoint.Y, npc.ignoreScheduleToday, npc.followSchedule,
                 controller = npc.controller is not null, temporary = npc.temporaryController is not null,
+                queued = npc.queuedSchedulePaths.Count,
                 schedule = GameState.Schedule(npc),
             }).ToArray() : null,
         };
@@ -135,7 +138,8 @@ internal sealed partial class ModEntry
                 if (Game1.uniqueIDForThisGame.ToString() != this.memoryTest.UniqueId || Game1.player.Name != "记忆验收"
                     || Constants.SaveFolderName != this.memoryTest.SaveFolder || !Context.IsMainPlayer)
                     throw new InvalidOperationException("拒绝在独立验收副本以外执行世界脚本。");
-                Game1.gameTimeInterval = 0;
+                if (!this.actionTestClockRunning) Game1.gameTimeInterval = 0;
+                this.TraceActionTest();
             }
             if (this.worldTestPending.Length > 0)
             {
@@ -216,12 +220,14 @@ internal sealed partial class ModEntry
                             && Game1.activeClickableMenu is null) this.WorldComplete();
                         break;
                     case "capture": break;
+                    default: this.TickActionTestPending(); break;
                 }
                 return;
             }
             string path = Path.Combine(this.memoryTest.RunDirectory, "control.json");
             if (!File.Exists(path)) return;
-            using JsonDocument control = JsonDocument.Parse(File.ReadAllText(path));
+            using JsonDocument? control = ReadWorldControl(path);
+            if (control is null) return;
             JsonElement root = control.RootElement;
             if (root.GetProperty("requestId").GetString() != this.memoryTest.RequestId
                 || !root.TryGetProperty("world", out JsonElement command)) return;
@@ -339,13 +345,27 @@ internal sealed partial class ModEntry
                     if (Game1.currentMinigame is null) throw new InvalidOperationException("没有可退出的原版钓鱼小游戏。");
                     this.worldTestReturnTicks = 0; Game1.currentMinigame.receiveKeyPress(Keys.Escape); this.WorldWait("fishing-exit"); break;
                 case "capture":
+                    this.worldTestCaptureScreen = Flag("screen");
                     this.worldTestCapture = Path.Combine(this.memoryTest.RunDirectory, Path.GetFileName(Text("name", "world.png")));
                     this.worldTestCaptureAt = DateTime.UtcNow.AddSeconds(1);
                     this.WorldWait("capture"); break;
-                default: throw new InvalidOperationException("未知世界测试命令：" + this.worldTestOperation);
+                default:
+                    if (!this.ActionCommand(this.worldTestOperation, args)) throw new InvalidOperationException("未知世界测试命令：" + this.worldTestOperation);
+                    break;
             }
         }
         catch (Exception error) { this.WorldComplete(error.GetBaseException().ToString()); }
+    }
+
+    private static JsonDocument? ReadWorldControl(string path)
+    {
+        try
+        {
+            // The runner atomically replaces this file; do not block its rename or fail a prior command during replacement.
+            using FileStream input = new(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            return JsonDocument.Parse(input);
+        }
+        catch (IOException) { return null; }
     }
 
     private void CaptureWorldTest()
@@ -354,6 +374,12 @@ internal sealed partial class ModEntry
         string path = this.worldTestCapture; this.worldTestCapture = null;
         try
         {
+            if (this.worldTestCaptureScreen)
+            {
+                RenderTarget2D scene = Game1.game1.screen;
+                using FileStream output = File.Create(path); scene.SaveAsPng(output, scene.Width, scene.Height);
+                this.WorldComplete(); return;
+            }
             if (Game1.activeClickableMenu is not null)
             {
                 RenderTarget2D ui = Game1.game1.uiScreen;

@@ -1,4 +1,4 @@
-/** Native disposable-save acceptance for festivals, backstage scenes and daily schedules. */
+/** Native disposable-save acceptance for festivals, backstage scenes, schedules and NPC actions. */
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
@@ -16,10 +16,11 @@ import { ModelGateway } from '../src/services/model/gateway.ts';
 import { Roster } from '../src/services/roster/index.ts';
 import { SOCIAL_NPCS } from '../src/types.ts';
 import { digest } from '../src/validation.ts';
+import { runActions, runActionEdges, runActionTiming, runActionRender, runActionQueue, runActionPlaces, runActionIncoming, type ActionState } from './game-actions.ts';
 
 interface Config { RequestId: string; UniqueId: string; SaveFolder: string; SaveDirectory: string; RunDirectory: string; GamePath: string; BackendUrl: string; World: boolean; Offline: boolean; Section: string }
-interface Npc { id: string; name: string; location: string; x: number; y: number; ignoreScheduleToday: boolean; controller: boolean; temporary: boolean; schedule: ScheduleStop[] | null }
-interface State { ready: boolean; canChat: boolean; time: number; nonce: string; generation: number; location: string; weather: string; npcs: Npc[] | null;
+interface Npc { id: string; name: string; location: string; x: number; y: number; ignoreScheduleToday: boolean; controller: boolean; temporary: boolean; queued: number; schedule: ScheduleStop[] | null }
+export interface State { ready: boolean; canChat: boolean; time: number; nonce: string; generation: number; location: string; weather: string; npcs: Npc[] | null; actions?: ActionState; player?: { x: number; y: number; facing: number } | null;
   festival: { id: string; isFestival: boolean; actors: string[]; schedules: Record<string, unknown>; dance: string | null; soup: number | null; grangeScore: number; giver: string | null } | null;
   native: Record<string, unknown> | null; reply: { npc: string; text: string } | null; minigame: string | null }
 interface Command { id: number; operation: string; completed: boolean; success: boolean; error?: string; state: State }
@@ -30,12 +31,14 @@ const ROOT = resolve(import.meta.dirname, '..');
 const configPath = resolve(process.argv[2]!);
 const config = JSON.parse((await readFile(configPath, 'utf8')).replace(/^\uFEFF/, '')) as Config;
 assert.equal(config.World, true); assert.equal(config.SaveFolder, `MemoryTest_${config.UniqueId}`); assert.notEqual(config.UniqueId, '436774213');
-assert.ok(['all', 'schedules', 'backstage', 'festivals', 'content', 'fair-return'].includes(config.Section), 'Unknown native world test section.');
+assert.ok(['all', 'schedules', 'backstage', 'festivals', 'content', 'fair-return', 'actions', 'actions-edge', 'actions-timing', 'actions-checks', 'actions-places', 'actions-incoming'].includes(config.Section), 'Unknown native world test section.');
 assert.equal(resolve(config.SaveDirectory), resolve(process.env.APPDATA!, 'StardewValley/Saves', config.SaveFolder));
 assert.ok(resolve(config.RunDirectory).startsWith(resolve(ROOT, '.runtime') + '\\'));
 const directory = config.RunDirectory;
 await mkdir(join(directory, 'sources'));
-for (const file of ['tools/test-game-world.ts', 'tools/prepare-world-fixture.ps1', 'src/agent/schedule.ts', 'src/agent/dialogue.ts', 'src/agent/dialogue-facts.ts',
+for (const file of ['tools/test-game-world.ts', 'tools/game-actions.ts', 'tools/prepare-world-fixture.ps1', 'src/agent/schedule.ts', 'src/agent/dialogue.ts', 'src/agent/dialogue-facts.ts',
+  'src/agent/approach.ts', 'src/agent/meetings.ts', 'src/agent/meeting-agreement.ts', 'src/agent/nightly.ts', 'mod/StardewAgentBridge/ActionTest.cs', 'mod/StardewAgentBridge/Approach.cs', 'mod/StardewAgentBridge/Meetings.cs',
+  'mod/StardewAgentBridge/SaveSync.cs', 'mod/StardewAgentBridge/ModEntry.cs',
   'src/bridge/server.ts', 'mod/StardewAgentBridge/WorldTest.cs', 'mod/StardewAgentBridge/MemoryTest.cs', 'mod/StardewAgentBridge/Festivals.cs'])
   await copyFile(join(ROOT, file), join(directory, 'sources', file.split('/').at(-1)!));
 const json = async (file: string, value: unknown) => { await writeFile(file + '.tmp', JSON.stringify(value, null, 2)); await rename(file + '.tmp', file); };
@@ -59,6 +62,7 @@ const starts: { kind: Kind; time: number; held: boolean }[] = [];
 const reports: { day: number; usage: ReturnType<ModelGateway['usage']>; line: string }[] = [];
 const deferred = () => { let resolve!: () => void; const promise = new Promise<void>(done => { resolve = done; }); return { promise, resolve }; };
 let heldBackstage: ReturnType<typeof deferred> | undefined;
+let actionSeedNight = false;
 const fixed = (content: unknown): Completion => ({ content: JSON.stringify(content), reasoning: '', finishReason: 'stop',
   usage: { inputTokens: 120, cachedInputTokens: 60, outputTokens: 20, reasoningTokens: null }, timing: { firstReasoningMs: null, firstContentMs: 1, totalMs: 1 } });
 function model(kind: Kind): ChatModel {
@@ -73,9 +77,12 @@ function model(kind: Kind): ChatModel {
       const schedule = /今日行程[^\n]*?）：([^\n]+)/.exec(text)?.[1] ?? '';
       const remembered = /- （(?:今天|昨天|\d+ 天前)）([^\n]+)/.exec(text)?.[1] ?? '';
       result = fixed(kind === 'background' ? { memories: { a: '格斯说汤的味道不错。', b: '潘姆说巴士站的风很大。', c: '我们聊了餐吧的天气。' } }
-        : kind === 'nightly' ? { memories: [], retire: [], impression: '', plan: '', bubbles: [], letter: '', gift: false, share: '' }
+        : kind === 'nightly' ? { memories: actionSeedNight ? [{ sources: ['t2', 't3'], importance: 4 }] : [], retire: [], impression: '',
+          plan: actionSeedNight ? '想问农场主下午在海滩见面的事' : '', seek: actionSeedNight,
+          meet: actionSeedNight ? { time: '14:00', place: '海滩', sources: ['t2', 't3'] } : null, bubbles: [], letter: '', gift: false, share: '' }
         : kind === 'nearby' ? { lines: [] }
-        : { reply: remembered || (schedule ? `我的安排是：${schedule}` : '我还没有确定安排。'), emotion: 'neutral', options: ['继续聊', '换个话题', '再见'], remember: [], mood: 0, end: false });
+        : { reply: actionSeedNight && messages.at(-1)!.content.includes('明天下午') ? '好啊，那就明天下午14:00在海滩见。'
+          : remembered || (schedule ? `我的安排是：${schedule}` : '我还没有确定安排。'), emotion: 'neutral', options: ['继续聊', '换个话题', '再见'], remember: [], mood: 0, end: false });
       handlers.onContent?.(result.content);
     }
     const call = { kind, real, messages, content: result.content, usage: result.usage, timing: result.timing, thinking: real ? (kind === 'background' ? paidBackstage! : paid!).config.thinking : null };
@@ -108,7 +115,9 @@ relay.on('connection', client => {
       packets.push({ direction: 'mod', packet });
       if (parsed.type === 'town.hour' && dropNextHourAck) { dropNextHourAck = false; hourAckToDrop = { seq: parsed.seq, nonce: parsed.loadNonce }; }
       forward(raw);
-      if (parsed.type === 'festival.ended') { packets.push({ direction: 'mod', packet, injected: 'replay-identical-festival' }); forward(raw); }
+      if (parsed.type === 'festival.ended' || parsed.type === 'meet.ended') {
+        packets.push({ direction: 'mod', packet, injected: 'replay-identical-' + parsed.type }); forward(raw);
+      }
     } catch (error) { errors.push(String(error)); }
   });
   upstream.on('message', data => {
@@ -171,6 +180,12 @@ async function chapter(season: string, day: number, rain = false, year = 1) {
 }
 const modPackets = (type: string, from = 0) => packets.slice(from).filter(row => row.direction === 'mod' && !row.injected && row.packet.type === type).map(row => row.packet);
 const latestDialogue = () => calls.findLast(call => call.kind === 'dialogue')!;
+async function meetingEntries() {
+  const journal = join(directory, 'memory/scratch', digest(config.UniqueId), digest(last!.nonce) + '.jsonl');
+  const rows = (await readFile(journal, 'utf8')).trim().split('\n').slice(1)
+    .map(line => JSON.parse(line) as { changes: { log?: { meeting?: unknown } }[] });
+  return rows.filter(row => row.changes.some(change => change.log?.meeting)).length;
+}
 async function say(npc: string, text: string, label: string) {
   await rpc('talk-open', { npc }); const state = await rpc('talk-say', { text, label });
   check(label + '-native-reply', !!state.reply?.text, state.reply);
@@ -397,6 +412,21 @@ try {
   if (['all', 'backstage', 'content'].includes(config.Section)) await backstage();
   if (config.Section === 'all' || config.Section === 'festivals') await festivals();
   if (config.Section === 'fair-return') await fairReturn();
+  if (config.Section === 'all' || config.Section === 'actions') await runActions({ rpc, chapter, check, say, close, packets: modPackets, wireCount: () => packets.length,
+    latestSystem: () => latestDialogue().messages[0]!.content, seedNight: enabled => { actionSeedNight = enabled; }, meetingEntries });
+  if (config.Section === 'actions-edge') await runActionEdges({ rpc, chapter, check, say, close, packets: modPackets, wireCount: () => packets.length,
+    latestSystem: () => latestDialogue().messages[0]!.content, seedNight: enabled => { actionSeedNight = enabled; }, meetingEntries });
+  if (config.Section === 'all' || config.Section === 'actions-timing') await runActionTiming({ rpc, chapter, check, say, close, packets: modPackets, wireCount: () => packets.length,
+    latestSystem: () => latestDialogue().messages[0]!.content, seedNight: enabled => { actionSeedNight = enabled; }, meetingEntries });
+  if (config.Section === 'actions-checks') {
+    const host = { rpc, chapter, check, say, close, packets: modPackets, wireCount: () => packets.length,
+      latestSystem: () => latestDialogue().messages[0]!.content, seedNight: (enabled: boolean) => { actionSeedNight = enabled; }, meetingEntries };
+    await runActionQueue(host); await runActionRender(host);
+  }
+  if (config.Section === 'actions-places') await runActionPlaces({ rpc, chapter, check, say, close, packets: modPackets, wireCount: () => packets.length,
+    latestSystem: () => latestDialogue().messages[0]!.content, seedNight: enabled => { actionSeedNight = enabled; }, meetingEntries });
+  if (config.Section === 'all' || config.Section === 'actions-incoming') await runActionIncoming({ rpc, chapter, check, say, close, packets: modPackets, wireCount: () => packets.length,
+    latestSystem: () => latestDialogue().messages[0]!.content, seedNight: enabled => { actionSeedNight = enabled; }, meetingEntries });
   if (config.Section === 'content') await festival('spring24', 'festival-main', {}, packet => packet.dance === 'Abigail', 1, true);
   if (!config.Offline) {
     check('real-dialogue-preserves-configured-thinking', calls.filter(call => call.real && call.kind === 'dialogue').every(call => call.thinking === paid!.config.thinking));

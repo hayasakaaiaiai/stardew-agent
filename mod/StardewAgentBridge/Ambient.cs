@@ -159,6 +159,6 @@ internal sealed partial class ModEntry
             return false;
         if (this.bubbleShownAt.TryGetValue(name, out int shown) && Utility.CalculateMinutesBetweenTimes(shown, Game1.timeOfDay) < BubbleGapMinutes)
             return false;
-        return !this.sceneParticipants.Contains(name) && !this.HasBubblesLeft(name) && !ColdShoulder(name);
+        return !this.sceneParticipants.Contains(name) && !this.HasBubblesLeft(name) && !ColdShoulder(name) && !this.Approaching(name);
     }
 }

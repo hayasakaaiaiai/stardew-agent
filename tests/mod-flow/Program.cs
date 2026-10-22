@@ -472,6 +472,80 @@ Test("a festival's results are packed once it ends, wait for the conversation to
 
 FestivalReadChecks.Run(modAssembly, gameAssembly, Test);
 ScheduleReadChecks.Run(modAssembly, gameAssembly, Test);
+Test("who walks over today comes from the current load only, skips bad values, and resets with the day", () =>
+{
+    object mod = BubbleMod();
+    foreach (string field in new[] { "approachHearts", "approached" })
+        Set(mod, field, Activator.CreateInstance(modType.GetField(field, Fields)!.FieldType, StringComparer.OrdinalIgnoreCase)!);
+    var hearts = (Dictionary<string, int>)Get(mod, "approachHearts")!;
+    foreach (string nonce in new[] { "old", "current" })
+    {
+        using JsonDocument packet = JsonDocument.Parse(JsonSerializer.Serialize(new { type = "day.approach", lineageId = "farm", loadNonce = nonce, seq = 0,
+            npcs = new Dictionary<string, object?> { ["abigail"] = 0, ["sam"] = 5, ["penny"] = "5", ["haley"] = -1, ["leah"] = 15, ["emily"] = 1.5, ["maru"] = null } }));
+        Check((bool)Invoke(mod, "HandleApproach", "day.approach", packet.RootElement)!, "The packet was not recognized.");
+        Check(hearts.Count == (nonce == "current" ? 2 : 0), "An old load's list was used, or bad values were kept.");
+    }
+    Check(hearts["Abigail"] == 0 && hearts["Sam"] == 5, "Ids from the backend did not match game names.");
+    ((HashSet<string>)Get(mod, "approached")!).Add("Abigail");
+    Set(mod, "lastApproachAt", 1000);
+    Invoke(mod, "ClearApproach");
+    Check(hearts.Count == 0 && ((HashSet<string>)Get(mod, "approached")!).Count == 0 && (int)Get(mod, "lastApproachAt")! == -1 && Get(mod, "approach") is null,
+        "A new load/day kept who walks over, who came, or the gap.");
+});
+Test("walking over holds the NPC until released, so its schedule only queues meanwhile", () =>
+{
+    Type pointType = Type.GetType("Microsoft.Xna.Framework.Point, MonoGame.Framework", throwOnError: true)!;
+    Type timeType = Type.GetType("Microsoft.Xna.Framework.GameTime, MonoGame.Framework", throwOnError: true)!;
+    object path = Activator.CreateInstance(typeof(Stack<>).MakeGenericType(pointType))!;
+    path.GetType().GetMethod("Push")!.Invoke(path, new[] { Activator.CreateInstance(pointType, 3, 4) });
+    Type controllerType = modType.GetNestedType("ApproachController", BindingFlags.NonPublic)!;
+    object controller = Activator.CreateInstance(controllerType, Fields, binder: null, args: new object?[] { path, null, null, 2 }, culture: null)!;
+    Check((int)Get(controller, "finalFacingDirection")! == 2 && !(bool)Get(controller, "NPCSchedule")!, "The controller does not face back or looks like a schedule path.");
+    path.GetType().GetMethod("Clear")!.Invoke(path, null);
+    object time = Activator.CreateInstance(timeType)!;
+    bool Update() => (bool)controllerType.GetMethod("update")!.Invoke(controller, new[] { time })!;
+    Set(controller, "Hold", true);
+    Check(!Update(), "A held NPC was handed back with its path done.");
+    Set(controller, "Hold", false);
+    Check(Update(), "A released NPC was not handed back once its path was done.");
+});
+Test("today's appointments come from the current load only, skip bad rows, and keep the ones already in a schedule", () =>
+{
+    object mod = BubbleMod();
+    Set(mod, "meetings", Activator.CreateInstance(modType.GetField("meetings", Fields)!.FieldType, StringComparer.OrdinalIgnoreCase)!);
+    var meetings = (System.Collections.IDictionary)Get(mod, "meetings")!;
+    JsonDocument Packet(string nonce, params object?[] rows) => JsonDocument.Parse(JsonSerializer.Serialize(new { type = "day.meetings",
+        lineageId = "farm", loadNonce = nonce, seq = 0, meetings = rows }));
+    object?[] rows = { new { npc = "elliott", time = 700, place = "海滩" }, new { npc = "alex", time = 1405, place = "海滩" },
+        new { npc = "sebastian", time = 2110, place = "海滩" },
+        new { npc = "abigail", time = 1400, place = "海滩" }, new { npc = "sam", time = 1900, place = "星之果实餐吧" },
+        new { npc = "penny", time = 1475, place = "海滩" }, new { npc = "haley", time = 1400, place = "你家" }, new { npc = "nobody", time = 1400, place = "海滩" },
+        new { npc = 7, time = 1400, place = "海滩" }, new { npc = "leah", time = "1400", place = "海滩" }, null, "bad" };
+    foreach (string nonce in new[] { "old", "current" })
+    {
+        using JsonDocument packet = Packet(nonce, rows);
+        Check((bool)Invoke(mod, "HandleMeetings", "day.meetings", packet.RootElement)!, "The packet was not recognized.");
+        Check(meetings.Count == (nonce == "current" ? 2 : 0), "An old load's list was used, or bad rows were kept.");
+    }
+    object abigail = meetings["Abigail"]!;
+    Check((int)abigail.GetType().GetProperty("Leave")!.GetValue(abigail)! == 1530, "The NPC does not leave ninety minutes after the agreed time.");
+    Set(abigail, "Applied", true);
+    using (JsonDocument later = Packet("current", new { npc = "leah", time = 1000, place = "森林河边" }))
+        Invoke(mod, "HandleMeetings", "day.meetings", later.RootElement);
+    Check(meetings.Contains("Abigail") && meetings.Contains("Leah") && !meetings.Contains("Sam"),
+        "A newer list dropped a meeting already in a schedule, or kept one that was not.");
+    Invoke(mod, "ClearMeetings");
+    Check(meetings.Count == 0, "A new load/day kept old appointments.");
+});
+Test("appointments leave ninety minutes later but by 22:00, and set off early enough but never in the past", () =>
+{
+    int Leave(int time) => (int)modType.GetMethod("MeetingLeave", BindingFlags.Static | BindingFlags.NonPublic)!.Invoke(null, new object[] { time })!;
+    int Depart(int arrive, int travel, int now) => (int)modType.GetMethod("MeetingDeparture", BindingFlags.Static | BindingFlags.NonPublic)!
+        .Invoke(null, new object[] { arrive, travel, now })!;
+    Check(Leave(1400) == 1530 && Leave(1950) == 2120 && Leave(2100) == 2200, "Leaving time is wrong.");
+    Check(Depart(1400, 30, 900) == 1320 && Depart(1400, 0, 900) == 1350, "Not setting off early enough to arrive ten minutes early.");
+    Check(Depart(1400, 120, 1235) == 1240 && Depart(1400, 120, 1240) == 1250, "Set off in the past or at a tick already checked.");
+});
 
 Console.WriteLine($"Mod flow checks: {checks - failures}/{checks} passed.");
 return failures == 0 ? 0 : 1;

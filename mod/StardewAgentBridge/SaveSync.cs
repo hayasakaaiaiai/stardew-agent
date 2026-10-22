@@ -63,6 +63,8 @@ internal sealed partial class ModEntry
         this.ClearAmbient();
         this.ClearTown();
         this.ClearFestival();
+        this.ClearApproach();
+        this.ClearMeetings();
         this.ResetGifts();
         this.ClearFriendshipToday();
         this.ClearPresentsToday();
@@ -100,6 +102,8 @@ internal sealed partial class ModEntry
         this.ClearAmbient();
         this.ClearTown();
         this.ClearFestival();
+        this.ClearApproach();
+        this.ClearMeetings();
         this.ResetGifts();
         this.ClearFriendshipToday();
         this.ClearPresentsToday();
@@ -110,11 +114,21 @@ internal sealed partial class ModEntry
         this.Send("day.started", new() { ["date"] = GameState.Date(), ["weather"] = GameState.Weather() });
     }
 
+    private void OnDayEnding()
+    {
+        if (!this.activeLoad || this.initialSave is null || this.syncFailed)
+            return;
+        // Saving runs after vanilla resets the clock and date to the next morning.
+        this.EndMeetings();
+    }
+
     private void OnSaving()
     {
         if (!this.activeLoad || this.initialSave is null || this.syncFailed)
             return;
         this.EndTalk(null);
+        // Part of the day being saved, so it goes before save.saving.
+        this.EndMeetings();
         MemoryCommit pointer = new()
         {
             LineageId = this.lineageId, CommitId = Guid.NewGuid().ToString("N"),
@@ -144,6 +158,8 @@ internal sealed partial class ModEntry
         this.ClearAmbient();
         this.ClearTown();
         this.ClearFestival();
+        this.ClearApproach();
+        this.ClearMeetings();
         this.letters = new();
         this.talk = null; this.offerFor = null; this.startFor = null;
         this.activeLoad = false; this.memoryReady = false;
@@ -171,7 +187,7 @@ internal sealed partial class ModEntry
         fields["loadNonce"] = this.loadNonce; fields["seq"] = ++this.seq;
         if (type == "talk.say")
             fields["date"] = GameState.Date();
-        bool reliable = type is "day.started" or "save.saving" or "save.saved" or "title.returned" or "gift.given" or "scene.shown" or "town.hour" or "festival.ended";
+        bool reliable = type is "day.started" or "save.saving" or "save.saved" or "title.returned" or "gift.given" or "scene.shown" or "town.hour" or "festival.ended" or "meet.ended";
         if (reliable && !this.lifecycle.Add(this.seq, fields))
         {
             this.FailSync("记忆同步队列已满，本次读档停用 AI；原版游戏可继续，请保留日志并重新读档。");

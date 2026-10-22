@@ -1,6 +1,6 @@
 /** Uses yesterday's plan only on the first successful opening of this game day (docs/next-day-plans.md). */
 import { OPENING_LINE, type DialogueMemory } from './dialogue.ts';
-import type { NpcContext } from '../types.ts';
+import type { DayEntry, NpcContext, NpcState } from '../types.ts';
 
 export const MORNING_HEADING = '## 这次开场想提起的事';
 
@@ -41,8 +41,24 @@ export function morningBlock(plan: string, yesterday: number, today: number): st
   return `${MORNING_HEADING}\n今天是第${today}天。以下计划的日期已由程序从昨晚换算成今天的视角，按标注日期说，别照搬昨天原话里的相对日期。自然地先提起或询问，别等玩家先问。计划只是你的意向，不证明玩家同意；先核对“你记得的事”的原话，双方明确答应才能说约好了，未答复只询问，已拒绝不再当共同安排。历史原话只证明说过，不证明执行过；即使昨天答应今天备料或带来，也不能当作已做。本次只向玩家询问意向、安排或进展，不作任何已执行的行动陈述，也不编造物品、风力等未知细节。\n- ${JSON.stringify(datedPlan(plan, yesterday, today))}`;
 }
 
+/** Yesterday's plan if it can open today's first conversation: written last night, non-empty and short. */
+export function morningPlan(state: NpcState, today: number): string | undefined {
+  const plan = state.plan;
+  if (!Number.isSafeInteger(state.day) || state.day !== today - 1 || typeof plan !== 'string' || !plan.trim()
+    || Array.from(plan).length > 100) return undefined;
+  return plan;
+}
+
+/**
+ * Whether today's part of the day already has a conversation turn. Gifts, news heard, festivals and backstage scenes
+ * are written there too, and none of them means the NPC has spoken to the player.
+ */
+export function talkedToday(entries: readonly DayEntry[]): boolean {
+  return entries.some(entry => entry.changes.some(change => typeof change.log?.player === 'string'));
+}
+
 /** These are the complete utterances written by the source-grounded nightly consolidator. */
-function grounded(text: string): boolean {
+export function grounded(text: string): boolean {
   return text.split('\n').every(line => {
     const match = /^(?:农场主说|我说)：(.+)$/.exec(line);
     if (!match) return false;
@@ -67,10 +83,9 @@ export function withMorningPlan(memory: DialogueMemory, options: {
         || !context.memories.some(item => item.when === '昨天' && grounded(item.text))) return context;
       const { state, today } = await options.read();
       const day = Math.floor(options.now() / 1440);
-      if (today.length || !Number.isSafeInteger(state.day) || state.day !== day - 1
-        || typeof state.plan !== 'string' || !state.plan.trim() || Array.from(state.plan).length > 100) return context;
+      const sourcePlan = morningPlan(state, day);
+      if (talkedToday(today) || sourcePlan === undefined) return context;
       prompted = true;
-      const sourcePlan = state.plan;
       const plan = morningBlock(sourcePlan, day - 1, day);
       return { ...context, summary: [context.summary, plan].filter(Boolean).join('\n\n'),
         replyView: (reply, meta) => ({ reply: morningReply(reply, sourcePlan, day - 1, day),

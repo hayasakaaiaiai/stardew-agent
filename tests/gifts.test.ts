@@ -67,7 +67,7 @@ test('a gift that no longer fits the open day is acknowledged without a note and
 test('the night replaces conversation notes with quotes but keeps the gift note', { timeout: 10000 }, async t => {
   const h = await harness(t);
   const nightly: ChatMessage[][] = [];
-  const output: NightlyOutput = { memories: [{ sources: ['t2'], importance: 4 }], retire: [], impression: '大方的人', plan: '',
+  const output: NightlyOutput = { memories: [{ sources: ['t2'], importance: 4 }], retire: [], impression: '大方的人', plan: '', seek: false, meet: null,
     bubbles: [], letter: '', gift: false, share: '' };
   const model = { async chat(messages: ChatMessage[]): Promise<Completion> {
     nightly.push(messages);

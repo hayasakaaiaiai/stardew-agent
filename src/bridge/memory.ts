@@ -1,6 +1,7 @@
 /** Game save coordination around the unchanged M1 memory kernel (docs/game-memory.md). */
 import { mkdir, open, readdir, readFile, rename, rm } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
+import { approachHearts } from '../agent/approach.ts';
 import { type BackstageNote, FESTIVAL_DAYS } from '../agent/backstage.ts';
 import type { Consolidator } from '../agent/consolidation.ts';
 import { type Bubble, bubblesFor } from '../agent/bubbles.ts';
@@ -12,6 +13,7 @@ import { giftItemName, giftMemory } from '../agent/gifts.ts';
 import { GIVEN_TOPIC, givenMemory, withInPersonGift } from '../agent/in-person-gifts.ts';
 import { type Gossip, gossipOf, heardMemory, heardToday, shareFor, spread, type Transfer } from '../agent/news.ts';
 import { type DeliveredLetter, type Letter, letterFor, letterKey } from '../agent/letters.ts';
+import { type Meeting, meetingFor, meetingMemory, MEET_PLACES } from '../agent/meetings.ts';
 import { Nightly } from '../agent/nightly.ts';
 import { withMorningPlan } from '../agent/morning.ts';
 import { createRuntime, type SaveScope } from '../index.ts';
@@ -27,6 +29,7 @@ type GiftGiven = Extract<Event, { type: 'gift.given' }>;
 type SceneShown = Extract<Event, { type: 'scene.shown' }>;
 type TownHour = Extract<Event, { type: 'town.hour' }>;
 type FestivalEnded = Extract<Event, { type: 'festival.ended' }>;
+type MeetEnded = Extract<Event, { type: 'meet.ended' }>;
 /** Who learned what, for the log. */
 export interface Heard { npcId: string; memory: MemoryDraft }
 interface Receipt { seq: number; hash: string; reply?: TalkReply }
@@ -364,6 +367,33 @@ export class GameSave {
     });
   }
 
+  /**
+   * Writes how an appointment went into that NPC's day, like a gift (docs/npc-meetings.md). A resent message is
+   * answered from its receipt; one that no longer fits the open day is acknowledged without a note.
+   */
+  meetEnded(message: MeetEnded): Promise<string | undefined> {
+    return this.enqueue(async () => {
+      if (this.check(message)) return undefined;
+      const receipt: Receipt = { seq: message.seq, hash: digest(canonical(message)) };
+      const npcId = message.npc.toLowerCase();
+      const fits = this.state.phase === 'open' && absoluteDay(message.date) === this.day
+        && (SOCIAL_NPCS as readonly string[]).includes(npcId) && Object.hasOwn(MEET_PLACES, message.place);
+      const note = fits ? meetingMemory({ time: message.time, place: message.place, met: message.met, left: message.left }) : undefined;
+      if (note) await this.scope!.agent(npcId).record({ seq: message.seq, gameTime: gameMinutes(message.date),
+        log: { meeting: { place: message.place, time: message.time, left: message.left, met: message.met }, bridgeReceipt: JSON.parse(canonical(receipt)) },
+        memories: [note] });
+      this.addReceipt(receipt);
+      await this.persist();
+      return note?.text;
+    });
+  }
+
+  /** This NPC's appointment with the player today, written last night (docs/npc-meetings.md). */
+  async meeting(npcId: string): Promise<Meeting | undefined> {
+    const state = await this.runtime.ctx.store.call('state', { lineageId: this.initial.lineageId, headCommitId: this.state.head, npcId });
+    return meetingFor(state, this.state.day);
+  }
+
   /** Today's events in this NPC's part of the day. */
   private dayEntries(npcId: string) {
     return this.scope?.ledger.currentDay?.overlay(npcId).today ?? [];
@@ -507,14 +537,18 @@ export class GameSave {
   discard(): Promise<void> { return this.enqueue(() => this.discardNow()); }
 
   /**
-   * What last night's consolidation left for today: every NPC's bubbles (docs/npc-bubbles.md), and the one letter
-   * from the NPC whose night mattered most (docs/npc-mail.md).
+   * What last night's consolidation left for today: every NPC's bubbles (docs/npc-bubbles.md), the one letter
+   * from the NPC whose night mattered most (docs/npc-mail.md), who walks over to the player with the fewest hearts it
+   * needs (docs/npc-approach.md), and today's appointments (docs/npc-meetings.md).
    */
-  async today(): Promise<{ bubbles: Record<string, Bubble[]>; letters: DeliveredLetter[] }> {
+  async today(): Promise<{ bubbles: Record<string, Bubble[]>; letters: DeliveredLetter[]; approach: Record<string, number>;
+    meetings: (Meeting & { npc: string })[] }> {
     const { lineageId } = this.initial;
     const headCommitId = this.state.head;
     const day = this.state.day;
     const bubbles: Record<string, Bubble[]> = {};
+    const approach: Record<string, number> = {};
+    const meetings: (Meeting & { npc: string })[] = [];
     let best: { npcId: string; letter: Letter } | undefined;
     for (const npcId of SOCIAL_NPCS) {
       const state = await this.runtime.ctx.store.call('state', { lineageId, headCommitId, npcId });
@@ -522,9 +556,16 @@ export class GameSave {
       if (lines.length) bubbles[npcId] = lines;
       const letter = letterFor(state, day);
       if (letter && (!best || letter.importance > best.letter.importance)) best = { npcId, letter };
+      const meeting = meetingFor(state, day);
+      if (meeting) meetings.push({ npc: npcId, ...meeting });
+      // Only the few who chose to last night need their memories and today's part of the day.
+      if (state.seek === true && this.scope && !this.closed) {
+        const hearts = approachHearts(await this.scope.agent(npcId).context({ nowGameTime: day * 1440, limit: 10, maxChars: 4000 }), day);
+        if (hearts !== undefined) approach[npcId] = hearts;
+      }
     }
     const letters = best ? [{ key: letterKey(lineageId, headCommitId, best.npcId), npc: best.npcId, text: best.letter.text,
       ...(best.letter.item ? { item: best.letter.item } : {}) }] : [];
-    return { bubbles, letters };
+    return { bubbles, letters, approach, meetings };
   }
 }
