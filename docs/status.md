@@ -96,7 +96,7 @@ NPC 有话要说时主动走过来（`m2c-approach`，建在 `m2c-schedules` 上
 
 按约定赴约（`m2c-meetings`，建在 `m2c-approach` 上）。用户说“推送，然后继续下一步”，按 §7 第 11 条路线做第 ② 步。夜间整合多一个 `meet`：农场主明确答应明天几点在哪见才写，代码核对引用的原话里有玩家的话、有“明天”、时段和地点的说法；地点限 8 个，用原版 NPC 站过的格子。第二天 Mod 在原版日程里插两站（提前出发去约定地点、90 分钟后回到原日程那时该在的地方），跨地图走路全由原版日程寻路处理；玩家到了 6 格内他招呼一声；聊天时多一行“和农场主的约定”；等完后记下农场主来没来，跟当天保存或回滚。真实模型：规则探针 10 种对话各 3 次 30/30，实现后的代码 20/20；碰面时有这一行不再补写“坐了半天”（0/4 对 2/4），早上能说对时间（3/4 对 0/4）。夜间每位 NPC +137 输入（可缓存），对话有约定那天每轮 +17–23。194/194、类型检查、构建、Release 编译通过；见 [npc-meetings.md](npc-meetings.md)，Windows 清单在 §8。
 
-2026-10-22 按用户“有新推送了 继续测”，在 `codex/meetings-windows-tests` 纳入 `e8ec3c3 / 9c4ca4a`，保留 `770af1d`。复现并修复约定来源／时间、继承属性地点、客户端时间边界、太晚仍改日程、出发点往返、提前睡觉漏记、前置路段导致赴约排队迟到七类问题；修复 prompt 成本 0、无新增模型调用。最终 **214/214 Node、37/37 C#**、类型检查、构建和 Release 0 警告／错误通过。分批原版固定模型检查：完整动作 103/103、旧功能 105/105、海滩自然时钟及提前保存 14/14；最后规划修复后再测前置路段 4/4、八地点往返 51/51、真实队列及画面 5/5、边界 21/21。真实夜间整合 20/20（20 次 high），最终规则录制重放 20/20。原档 6 文件哈希均相同，正常 DLL／后端未部署。本分支仅本地提交，未推送、未合入 main；各批次版本、计时、加速路线范围及全部失败记录见 [本轮报告](test-results/2026-10-22-actions-windows.md)。
+2026-10-22 按用户“有新推送了 继续测”，在 `codex/meetings-windows-tests` 纳入 `e8ec3c3 / 9c4ca4a`，保留 `770af1d`。复现并修复约定来源／时间、继承属性地点、客户端时间边界、太晚仍改日程、出发点往返、提前睡觉漏记、前置路段导致赴约排队迟到七类问题；修复 prompt 成本 0、无新增模型调用。最终 **214/214 Node、37/37 C#**、类型检查、构建和 Release 0 警告／错误通过。分批原版固定模型检查：完整动作 103/103、旧功能 105/105、海滩自然时钟及提前保存 14/14；最后规划修复后再测前置路段 4/4、八地点往返 51/51、真实队列及画面 5/5、边界 21/21。真实夜间整合 20/20（20 次 high），最终规则录制重放 20/20。原档 6 文件哈希均相同，正常 DLL／后端未部署。用户随后要求“修复问题 推送”，推送前再次复跑 **214/214 Node** 与类型检查通过，修复提交 `a13dc03` 已推送到同名远端分支，未合入 main；各批次版本、计时、加速路线范围及全部失败记录见 [本轮报告](test-results/2026-10-22-actions-windows.md)。
 
 ## 3. 分支
 
@@ -136,11 +136,11 @@ GitHub 私有仓库：https://github.com/hayasakaaiaiai/stardew-agent
 | `codex/scheduler-windows-tests` | 上轮 `m2c-schedules / 9ae9da6` 与节日测试；200/200 Node、33/33 C#、完整原版 231/231；`770af1d` 已按用户授权推送 | Windows 历史验收分支 |
 | `m2c-approach` | NPC 有话要说时主动走过来，上游 `e8ec3c3`；Windows 限定场景验收见当前分支 | 已推送 |
 | `m2c-meetings` | 按约定赴约，上游 `9c4ca4a`；Windows 七类修复与验收在当前分支 | `/Users/a11/Documents/ChatGPT/stardew-agent-gifts` |
-| `codex/meetings-windows-tests` | `770af1d` + `9c4ca4a`；214/214 Node、37/37 C#，原生分批与真实夜间样本通过，七类修复；仅本地提交、未推送、未合入 main | Windows：`E:\stardew-agent` |
+| `codex/meetings-windows-tests` | `770af1d` + `9c4ca4a`；214/214 Node、37/37 C#，原生分批与真实夜间样本通过，七类修复 `a13dc03` 已推送、未合入 main | Windows：`E:\stardew-agent` |
 | `codex/offscreen-windows-tests` | `main / 35affae` + `less-fabrication / f98222c`，上一轮组合验收与赠礼开关修复；`bda43f3` 已推送，修复已摘到 `festival-memories`，未合入 main | Windows 历史验收分支 |
 | `codex/ambient-windows-tests` | 上轮三处修复 + 慢回复、原话来源、完成动作过滤、事件语义修复；完整真实 176 项通过；`5a1ef78` 已推送，已合并进 `remember-source` | Windows：`E:\stardew-agent` |
 
-Windows 当前分支 `codex/meetings-windows-tests` 从已推送的 `codex/scheduler-windows-tests / 770af1d` 出发，纳入 `m2c-meetings / 9c4ca4a`（含 `m2c-approach / e8ec3c3`）。保留 Windows `5a1ef78`、节日、调度器、后台场景、行程与事实回答修复；本轮动作验收与修复见 [报告](test-results/2026-10-22-actions-windows.md)。此前验收分支均保留。本分支未推送、未合入 main，正常后端和安装 DLL 本轮不部署。
+Windows 当前分支 `codex/meetings-windows-tests` 从已推送的 `codex/scheduler-windows-tests / 770af1d` 出发，纳入 `m2c-meetings / 9c4ca4a`（含 `m2c-approach / e8ec3c3`）。保留 Windows `5a1ef78`、节日、调度器、后台场景、行程与事实回答修复；本轮动作验收与修复见 [报告](test-results/2026-10-22-actions-windows.md)。此前验收分支均保留。本分支已按用户授权推送并设置远端跟踪，未合入 main，正常后端和安装 DLL 本轮不部署。
 
 此前 10 月 20 日按用户“拉下来测”“修复”的要求，Windows 在 `nightly-consolidation` 上完成远端 `3f70b27` 验证和事实归属修复。当时常驻后端日志确认对话 `high`、夜间整合 `low`；最新三类调用全 high 的重载状态见上，原游戏记忆库、临时日志及旧后端日志在每次更新前备份。
 
