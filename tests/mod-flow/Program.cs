@@ -815,9 +815,10 @@ Test("a trip is reported in the shape the backend accepts", () =>
 {
     Type tripType = modType.GetNestedType("Trip", BindingFlags.NonPublic)!;
     object trip = Activator.CreateInstance(tripType, nonPublic: true)!;
-    Set(trip, "Floor", 35); Set(trip, "Deepest", 40); Set(trip, "Kills", 12); Set(trip, "Rescued", true);
+    Set(trip, "Floor", 35); Set(trip, "Deepest", 40); Set(trip, "Kills", 12); Set(trip, "Rescued", true); Set(trip, "Mined", 23);
     var fields = (Dictionary<string, object?>)tripType.GetMethod("Fields")!.Invoke(trip, new object[] { true })!;
-    Check(JsonSerializer.Serialize(fields) == """{"floor":35,"deepest":40,"kills":12,"fights":true,"rescued":true}""",
+    // "mined" since the stones it breaks are counted (docs/npc-meetings-more.md §6).
+    Check(JsonSerializer.Serialize(fields) == """{"floor":35,"deepest":40,"kills":12,"fights":true,"rescued":true,"mined":23}""",
         "The trip fields differ from src/bridge/protocol.ts (mine).");
 });
 

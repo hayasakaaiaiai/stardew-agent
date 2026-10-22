@@ -70,7 +70,7 @@ export function visitMemory(helped: Helped | undefined, met: boolean): MemoryDra
 }
 
 /** A trip into a dungeon with the player, from the Mod (docs/npc-mine-companion.md); floors as the game shows them, 0 = the entrance. */
-export interface MineTrip { floor: number; deepest: number; kills: number; fights: boolean; rescued: boolean }
+export interface MineTrip { floor: number; deepest: number; kills: number; fights: boolean; rescued: boolean; mined?: number }
 
 const floorName = (place: string, floor: number) => floor ? `${place}第 ${floor} 层` : `${place}入口`;
 
@@ -78,14 +78,16 @@ const floorName = (place: string, floor: number) => floor ? `${place}第 ${floor
 export function tripText(place: string, trip: MineTrip): string {
   const deepest = trip.deepest > trip.floor ? `，最深到过第 ${trip.deepest} 层` : '';
   const fight = !trip.fights ? '，你不会打架，只跟在后面' : trip.kills ? `，你打倒了 ${trip.kills} 只怪物` : '';
-  return `你一直陪着农场主，现在在${floorName(place, trip.floor)}${deepest}${fight}`;
+  const mined = trip.mined ? `，你帮农场主敲碎了 ${trip.mined} 块石头` : '';
+  return `你一直陪着农场主，现在在${floorName(place, trip.floor)}${deepest}${fight}${mined}`;
 }
 
 /** The trip as the NPC remembers it afterwards, in its own voice. */
 function tripMemory(place: string, trip: MineTrip): string {
   const went = trip.deepest ? `下到${place}第 ${trip.deepest} 层` : `进了${place}`;
   const fight = !trip.fights ? '，我不会打架，一直跟在后面' : trip.kills ? `，打倒了 ${trip.kills} 只怪物` : '';
-  return `我陪农场主${went}${fight}${trip.rescued ? '；农场主晕倒了，我把农场主背了出来' : ''}`;
+  const mined = trip.mined ? `，帮农场主敲碎了 ${trip.mined} 块石头` : '';
+  return `我陪农场主${went}${fight}${mined}${trip.rescued ? '；农场主晕倒了，我把农场主背了出来' : ''}`;
 }
 
 /**

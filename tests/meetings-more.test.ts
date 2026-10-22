@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { festivalDay, festivalOn, namedDays, type TimedQuote, quotedChange, quotedDecline, quotedLater, quotedToday } from '../src/agent/meeting-agreement.ts';
-import { festivalClash, meetingLine, meetingMemory, MEET_PLACES, moodLine, stoodUpTopics, turnedDownNote, upcomingLine, visitLine, visitMemory } from '../src/agent/meetings.ts';
+import { festivalClash, meetingLine, meetingMemory, MEET_PLACES, moodLine, stoodUpTopics, tripText, turnedDownNote, upcomingLine, visitLine, visitMemory } from '../src/agent/meetings.ts';
+import { parseModMessage } from '../src/bridge/protocol.ts';
 import { connect, harness, meetingsSent, openTalk, WORLD } from './helpers/bridge.ts';
 
 const at = (time: number) => (speaker: '玩家' | 'NPC', text: string, id = speaker + text): TimedQuote => ({ id, speaker, text, time });
@@ -205,4 +206,18 @@ test('come to help unasked: the talk on the farm says so, and the memory keeps i
   await wire.until('ack', wire.inbox.length);
   assert.ok(h.logs.includes('阿比盖尔记下了：我没约就去了农场主的农场帮忙，浇了 120 格水、收了 35 个作物放进农舍门口的箱子；农场主来了。'));
   await wire.close();
+});
+
+test('the stones it broke underground are said in the talk and kept in the memory; an older Mod sends none (docs/npc-meetings-more.md §6)', () => {
+  const trip = { floor: 35, deepest: 40, kills: 12, fights: true, rescued: false, mined: 23 };
+  assert.equal(tripText('矿洞', trip), '你一直陪着农场主，现在在矿洞第 35 层，最深到过第 40 层，你打倒了 12 只怪物，你帮农场主敲碎了 23 块石头');
+  assert.equal(tripText('矿洞', { ...trip, mined: 0 }), '你一直陪着农场主，现在在矿洞第 35 层，最深到过第 40 层，你打倒了 12 只怪物');
+  assert.equal(meetingMemory({ time: 1000, place: '矿洞', met: true, left: 1500, trip }).text,
+    '约好 10:00 在矿洞见面，农场主来了，我陪农场主下到矿洞第 40 层，打倒了 12 只怪物，帮农场主敲碎了 23 块石头。');
+  const base = { type: 'meet.ended', lineageId: 'farm', loadNonce: 'n', seq: 3, npc: 'Abigail', place: '矿洞', time: 1000, left: 1500, met: true,
+    date: { year: 1, season: 'spring', day: 2, time: 1500 } };
+  assert.deepEqual((parseModMessage(JSON.stringify({ ...base, mine: trip })) as { mine?: unknown }).mine, trip);
+  const { mined: _, ...older } = trip;
+  assert.ok(parseModMessage(JSON.stringify({ ...base, mine: older })));
+  for (const mined of [-1, 1.5, '3']) assert.throws(() => parseModMessage(JSON.stringify({ ...base, mine: { ...trip, mined } })), String(mined));
 });

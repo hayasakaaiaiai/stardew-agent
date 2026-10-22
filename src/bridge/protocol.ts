@@ -245,7 +245,9 @@ export function parseModMessage(raw: string): ModMessage {
     const m = value as Record<string, unknown> | null | undefined;
     if (m !== undefined && (!m || typeof m !== 'object' || Array.isArray(m)
       || ['floor', 'deepest', 'kills'].some(key => !Number.isSafeInteger(m[key]) || (m[key] as number) < 0 || (m[key] as number) > 100000)
-      || (m.floor as number) > (m.deepest as number) || typeof m.fights !== 'boolean' || typeof m.rescued !== 'boolean')) fail('mine is invalid');
+      || (m.floor as number) > (m.deepest as number) || typeof m.fights !== 'boolean' || typeof m.rescued !== 'boolean'
+      // Stones it broke, from a Mod that mines (docs/npc-meetings-more.md §6).
+      || m.mined !== undefined && (!Number.isSafeInteger(m.mined) || (m.mined as number) < 0 || (m.mined as number) > 100000))) fail('mine is invalid');
   };
   const isName = (value: unknown) => typeof value === 'string' && value.length > 0 && value.length <= 50 && !/[\u0000-\u001f]/u.test(value);
   const outing = (value: unknown) => {
