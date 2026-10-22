@@ -154,6 +154,11 @@ internal sealed partial class ModEntry
         public string? MovedTo;
         /// <summary>The one it moved to: its notice was already shown.</summary>
         public bool Moved;
+        /// <summary>
+        /// Not agreed: a close NPC came to help on the farm on its own (docs/npc-meetings-more.md §5). Not the backend's,
+        /// so its lists leave it alone; no friendship either way.
+        /// </summary>
+        public bool Surprise;
     }
 
     /// <summary>Where a schedule has an NPC at some time: the end of a route, with how it stands there.</summary>
@@ -227,7 +232,8 @@ internal sealed partial class ModEntry
         // Who asks the player out today is chosen once the day's appointments are known (Invites.cs).
         this.meetingsArrived = true;
         // One agreed today that could not go stays given up, so a resend does not tell the player twice.
-        foreach (string pending in this.meetings.Where(pair => !pair.Value.Applied && !(pair.Value.Failed && pair.Value.SameDay)).Select(pair => pair.Key).ToList())
+        foreach (string pending in this.meetings.Where(pair => !pair.Value.Applied && !(pair.Value.Failed && pair.Value.SameDay) && !pair.Value.Surprise)
+            .Select(pair => pair.Key).ToList())
             this.meetings.Remove(pending);
         foreach (JsonElement item in list.EnumerateArray())
         {
@@ -256,6 +262,9 @@ internal sealed partial class ModEntry
                 }
                 continue;
             }
+            // Already coming to help on its own: that is today's (docs/npc-meetings-more.md §5).
+            if (name is not null && this.meetings.TryGetValue(name, out Meeting? coming) && coming.Surprise)
+                continue;
             // The same NPC at another time or place today: moved (docs/npc-meetings-more.md §1).
             if (name is not null && this.meetings.TryGetValue(name, out Meeting? same) && !same.Reported
                 && (same.Agreed != hhmm || same.Place != place.GetString()))
@@ -276,6 +285,8 @@ internal sealed partial class ModEntry
     /// <summary>Puts appointments into today's schedules, then watches them: arrival, the player coming, the end.</summary>
     private void TickMeetings()
     {
+        // Who asks the player out today, and who comes to help unasked, once the day's appointments are known (Invites.cs).
+        this.TodayInviter();
         if (!this.config.NpcMeetings || this.meetings.Count == 0 || !Context.IsWorldReady || !this.activeLoad || Game1.eventUp)
             return;
         foreach (Meeting m in this.meetings.Values.ToList())
@@ -838,7 +849,9 @@ internal sealed partial class ModEntry
             fields["outing"] = m.Out.Fields();
         // Stood up, as the friendship below judges it but whatever the setting: the NPC minds for a few days
         // (docs/npc-meetings-more.md §2), and does not ask the player out meanwhile.
-        if (!m.Met && !m.CalledOff && !m.ComesLate && !m.Spouse && m.Helped is null)
+        if (m.Surprise)
+            fields["surprise"] = true;
+        if (!m.Met && !m.CalledOff && !m.ComesLate && !m.Spouse && m.Helped is null && !m.Surprise)
         {
             fields["stoodUp"] = true;
             Game1.player.modData[StoodUpKey + m.Npc] = ((int)Game1.Date.TotalDays).ToString();
@@ -846,7 +859,7 @@ internal sealed partial class ModEntry
         // Kept, it warms the NPC like a kind word; stood up, it stings like a slight (docs/npc-meeting-friendship.md).
         // Spouses and roommates never gain or lose appointment friendship, even when the player comes.
         // Called off beforehand, the NPC itself late or chores done on the farm: nobody was stood up.
-        if (this.config.MeetingsChangeFriendship && !m.Spouse && (m.Trip.Actor ?? Game1.getCharacterFromName(m.Npc)) is NPC npc
+        if (this.config.MeetingsChangeFriendship && !m.Spouse && !m.Surprise && (m.Trip.Actor ?? Game1.getCharacterFromName(m.Npc)) is NPC npc
             && (m.Met || !m.CalledOff && !m.ComesLate && m.Helped is null))
         {
             (int gain, int loss) = FriendshipStep(GameState.Hearts(npc), GameState.Relation(npc));

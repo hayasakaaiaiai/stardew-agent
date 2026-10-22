@@ -252,6 +252,8 @@ internal sealed partial class ModEntry : Mod
                 fields["mine"] = trip;
             if (this.MeetingOuting(npc) is { } outing)
                 fields["outing"] = outing;
+            if (this.meetings.TryGetValue(npc.Name, out Meeting? visiting) && visiting.Surprise)
+                fields["visit"] = true;
         }
         if (this.InvitesToday(npc))
             fields["invite"] = this.talk.Inviting = true;

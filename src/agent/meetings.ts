@@ -60,6 +60,15 @@ export function helpedText(helped: Helped): string {
   return parts.length ? parts.join('、') : '农场里没什么要干的活';
 }
 
+/** Come to help on the farm unasked (docs/npc-meetings-more.md §5): "你今天没约就自己来农场主的农场帮忙；你来了以后已经……". */
+export const visitLine = (helped: Helped) => `你今天没约就自己来农场主的农场帮忙；你来了以后已经${helpedText(helped)}`;
+
+/** What it remembers of coming to help unasked; no appointment, so nobody was stood up. */
+export function visitMemory(helped: Helped | undefined, met: boolean): MemoryDraft {
+  return { text: `我没约就去了农场主的农场帮忙${helped ? `，${helpedText(helped)}` : ''}；农场主${met ? '来了' : '不在'}。`, importance: 2, kind: 'observation',
+    subjects: ['player'], visibility: 'private' };
+}
+
 /** A trip into a dungeon with the player, from the Mod (docs/npc-mine-companion.md); floors as the game shows them, 0 = the entrance. */
 export interface MineTrip { floor: number; deepest: number; kills: number; fights: boolean; rescued: boolean }
 

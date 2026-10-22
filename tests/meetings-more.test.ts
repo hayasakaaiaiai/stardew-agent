@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { festivalDay, festivalOn, namedDays, type TimedQuote, quotedChange, quotedDecline, quotedLater, quotedToday } from '../src/agent/meeting-agreement.ts';
-import { festivalClash, meetingLine, meetingMemory, MEET_PLACES, moodLine, stoodUpTopics, turnedDownNote, upcomingLine } from '../src/agent/meetings.ts';
+import { festivalClash, meetingLine, meetingMemory, MEET_PLACES, moodLine, stoodUpTopics, turnedDownNote, upcomingLine, visitLine, visitMemory } from '../src/agent/meetings.ts';
 import { connect, harness, meetingsSent, openTalk, WORLD } from './helpers/bridge.ts';
 
 const at = (time: number) => (speaker: '玩家' | 'NPC', text: string, id = speaker + text): TimedQuote => ({ id, speaker, text, time });
@@ -184,5 +184,25 @@ test('"你生日那天" said to the NPC names its birthday', { timeout: 15000 },
   const note = '阿比盖尔记下了：约好春季 3 日（周三）14:00 在海滩见面。';
   for (let i = 0; i < 300 && !h.logs.includes(note); i++) await new Promise(resolve => setTimeout(resolve, 10));
   assert.ok(h.logs.includes(note), h.logs.filter(line => line.includes('阿比盖尔')).join('\n'));
+  await wire.close();
+});
+
+test('come to help unasked: the talk on the farm says so, and the memory keeps it without an appointment (docs/npc-meetings-more.md §5)', { timeout: 15000 }, async t => {
+  const helped = { watered: 120, harvested: 35, fed: 0, ponds: 0 };
+  assert.equal(visitLine(helped), '你今天没约就自己来农场主的农场帮忙；你来了以后已经浇了 120 格水、收了 35 个作物放进农舍门口的箱子');
+  assert.equal(visitMemory(helped, false).text, '我没约就去了农场主的农场帮忙，浇了 120 格水、收了 35 个作物放进农舍门口的箱子；农场主不在。');
+  const h = await harness(t);
+  const server = await h.start();
+  const wire = await connect(server);
+  await wire.until('day.meetings', 0);
+  const day = (time: number) => ({ ...WORLD.date, time });
+  wire.send({ ...openTalk(1), world: { ...WORLD, date: day(1000) }, atMeeting: true, helped, visit: true }); await wire.until('talk.reply', wire.inbox.length);
+  const system = h.fake.sent.at(-1)![0]!.content;
+  assert.match(system, /- 你今天没约就自己来农场主的农场帮忙；你来了以后已经浇了 120 格水/);
+  assert.doesNotMatch(system, /和农场主的约定/);
+  wire.send({ type: 'talk.close', npc: 'Abigail' }); await wire.until('ack', wire.inbox.length);
+  wire.send({ type: 'meet.ended', npc: 'Abigail', place: '农场', time: 900, arrived: 900, left: 1030, met: true, helped, surprise: true, date: day(1030) });
+  await wire.until('ack', wire.inbox.length);
+  assert.ok(h.logs.includes('阿比盖尔记下了：我没约就去了农场主的农场帮忙，浇了 120 格水、收了 35 个作物放进农舍门口的箱子；农场主来了。'));
   await wire.close();
 });

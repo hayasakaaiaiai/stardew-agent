@@ -5,7 +5,8 @@ import { BACKSTAGE_PER_DAY, BACKSTAGE_TOPIC, type BackstagePerson, backstageHour
 import { AMBIENT_CALLS_PER_DAY, type AmbientLine, type AmbientPerson, ambientPrompt, parseAmbient } from '../agent/ambient.ts';
 import type { Consolidator } from '../agent/consolidation.ts';
 import { OPENING_LINE, runTurn, type Standing, type WorldState } from '../agent/dialogue.ts';
-import { farInvitation, farInvitationLine, festivalClash, invitationLine, meetingLine, MEETS_PER_DAY, upcomingLine, withBirthday, yearDay } from '../agent/meetings.ts';
+import { farInvitation, farInvitationLine, festivalClash, invitationLine, meetingLine, MEETS_PER_DAY, upcomingLine, visitLine, withBirthday,
+  yearDay } from '../agent/meetings.ts';
 import { newsFor } from '../agent/news.ts';
 import { parseScene, type SceneLine, type SceneNews, SCENES_PER_DAY, SCENE_GAP_MINUTES, scenePrompt } from '../agent/scene.ts';
 import { nextStop, restOfDay, scheduleReplies, type ScheduleStop } from '../agent/schedule.ts';
@@ -385,11 +386,12 @@ export class BridgeServer {
         ? invitationLine(message.world.date.time) : undefined;
       if (invitation) this.log(`${this.options.roster.get(npcId).name}开口约农场主`);
       const mood = await save.mood(npcId);
+      const visit = message.visit === true && message.helped ? visitLine(message.helped) : undefined;
       const talk: OpenTalk = { npcId, inPersonGifts: message.inPersonGifts !== false, ...(message.birthday ? { birthday: yearDay(message.birthday) } : {}),
         standing: { hearts: message.hearts, relation: message.relation, seenEvents: new Set(message.seenEvents) },
         world: { ...worldState(message.world, save.player, this.cardName),
           ...(schedule ? { schedule, scheduleFacts: scheduleReplies(message.schedule!, message.world.date.time)! } : {}),
-          ...(meeting ? { meeting } : {}), ...(invitation ? { invitation } : {}), ...(mood ? { mood } : {}) } };
+          ...(meeting && !visit ? { meeting } : {}), ...(visit ? { visit } : {}), ...(invitation ? { invitation } : {}), ...(mood ? { mood } : {}) } };
       session.open.set(message.npc, talk);
       void this.turn(session, talk, message, OPENING_LINE, send);
       return;

@@ -32,6 +32,8 @@ export interface WorldState {
   mood?: string;
   /** This turn's line, when the player asks to meet somewhere ordinary on a festival day (docs/npc-meetings-more.md §3). */
   festival?: string;
+  /** Come to help on the farm unasked, and what it did there (docs/npc-meetings-more.md §5). */
+  visit?: string;
   player: { name: string; gender: 'male' | 'female'; farm: string };
   /** Facts the cards' natural-language conditions depend on, e.g. 肯特 → 还在前线. */
   facts: Record<string, string>;
@@ -175,6 +177,7 @@ function situation({ npcName, world, standing, memory }: PromptInput): string {
     `- 地点：${world.location}`,
     ...(world.schedule ? [`- 今日行程（覆盖平日习惯和先前台词，不另加去处）：${world.schedule}`] : []),
     ...(world.meeting ? [`- 和农场主的约定：${world.meeting}`] : []),
+    ...(world.visit ? [`- ${world.visit}`] : []),
     ...(world.farInvitation ? [world.farInvitation] : []),
     ...(world.invitation ? [world.invitation] : []),
     ...(world.mood ? [world.mood] : []),

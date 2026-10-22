@@ -744,6 +744,24 @@ Test("a festival is a place an appointment can be at, the evening ones at 22:00,
     Check(!(bool)meetingType.GetProperty("Ordinary")!.GetValue(meetings["Sam"])!, "Going to a festival together became an outing.");
 });
 
+Test("about one day in seven someone comes to help unasked, and the backend's lists neither drop nor move that visit", () =>
+{
+    bool Day(ulong game, int day) => (bool)modType.GetMethod("VisitDay", BindingFlags.Static | BindingFlags.NonPublic)!.Invoke(null, new object[] { game, day })!;
+    int days = Enumerable.Range(1, 3000).Count(day => Day(436774213UL, day));
+    Check(days > 330 && days < 530, $"Not about one day in seven: {days} of 3000 (docs/npc-meetings-more.md §5).");
+    object mod = BubbleMod();
+    Set(mod, "meetings", Activator.CreateInstance(modType.GetField("meetings", Fields)!.FieldType, StringComparer.OrdinalIgnoreCase)!);
+    var meetings = (System.Collections.IDictionary)Get(mod, "meetings")!;
+    Type meetingType = modType.GetNestedType("Meeting", BindingFlags.NonPublic)!;
+    object visit = Activator.CreateInstance(meetingType, "Abigail", 900, "农场", false)!;
+    Set(visit, "Surprise", true);
+    meetings["Abigail"] = visit;
+    using JsonDocument packet = JsonDocument.Parse(JsonSerializer.Serialize(new { type = "day.meetings", lineageId = "farm", loadNonce = "current", seq = 0,
+        meetings = new[] { new { npc = "abigail", time = 1500, place = "海滩", sameDay = true } } }));
+    Invoke(mod, "HandleMeetings", "day.meetings", packet.RootElement);
+    Check(meetings["Abigail"] == visit && Get(visit, "MoveTo") is null, "The visit was dropped or taken for a move.");
+});
+
 Test("farm chores are worded like the backend, and the farm is a place an appointment can be at", () =>
 {
     Type doneType = modAssembly.GetType("StardewAgentBridge.FarmHelp+Done", throwOnError: true)!;

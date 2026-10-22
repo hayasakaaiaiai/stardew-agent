@@ -103,6 +103,8 @@ export type ModMessage =
     invite?: boolean;
     /** Its birthday, so "你生日那天" names a day (docs/npc-meetings-more.md §3). */
     birthday?: { season: Season; day: number };
+    /** It came to help on the farm unasked; `helped` says what it did (docs/npc-meetings-more.md §5). */
+    visit?: boolean;
     world: WorldSnapshot;
   } & Envelope)
   | ({ type: 'talk.say'; npc: string; text: string; date: GameDate } & Envelope)
@@ -125,7 +127,7 @@ export type ModMessage =
    * (docs/npc-meeting-friendship.md). Reliable, acknowledged.
    */
   | ({ type: 'meet.ended'; npc: string; place: string; time: number; arrived?: number; left: number; met: boolean; helped?: Helped; mine?: MineTrip;
-    outing?: Outing; friendship?: number; stoodUp?: boolean; date: GameDate } & Envelope);
+    outing?: Outing; friendship?: number; stoodUp?: boolean; surprise?: boolean; date: GameDate } & Envelope);
 
 export interface FestivalEnded {
   festival: Festival;
@@ -311,6 +313,7 @@ export function parseModMessage(raw: string): ModMessage {
       if (data.schedule !== undefined && !isSchedule(data.schedule)) fail('schedule must be a list of stops');
       if (data.atMeeting !== undefined && typeof data.atMeeting !== 'boolean') fail('atMeeting must be a boolean');
       if (data.invite !== undefined && typeof data.invite !== 'boolean') fail('invite must be a boolean');
+      if (data.visit !== undefined && typeof data.visit !== 'boolean') fail('visit must be a boolean');
       if (data.birthday !== undefined) {
         const birthday = data.birthday as Record<string, unknown> | null;
         if (!birthday || typeof birthday !== 'object' || !SEASONS.has(birthday.season as Season) || !Number.isSafeInteger(birthday.day)
@@ -340,6 +343,7 @@ export function parseModMessage(raw: string): ModMessage {
       mine(data.mine);
       outing(data.outing);
       if (data.stoodUp !== undefined && typeof data.stoodUp !== 'boolean') fail('stoodUp must be a boolean');
+      if (data.surprise !== undefined && typeof data.surprise !== 'boolean') fail('surprise must be a boolean');
       date(data.date);
       break;
     }

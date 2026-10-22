@@ -23,6 +23,11 @@ internal sealed partial class ModEntry
     private const string StoodUpKey = "StardewAgent/stoodUp/";
     private const int StoodUpDays = 3;
 
+    /// <summary>About one day in this many, someone comes to help on the farm unasked (docs/npc-meetings-more.md §5).</summary>
+    private const int VisitEveryDays = 7;
+    /// <summary>When it reaches the farm, as an appointment there would say.</summary>
+    private const int VisitTime = 900;
+
     /// <summary>Today's, once worked out after the day's appointments arrived: the NPC that asks, or null for nobody.</summary>
     private string? inviter;
     private int inviterDay = -1;
@@ -80,10 +85,13 @@ internal sealed partial class ModEntry
         return relation is not ("married" or "roommate") && (GameState.Hearts(npc) >= InviteHearts || relation is "dating" or "engaged");
     }
 
-    /// <summary>Today's, worked out once the day's appointments are known; null on most days.</summary>
+    /// <summary>
+    /// Today's, worked out once the day's appointments are known; null on most days. Who comes to help unasked is
+    /// worked out at the same time (ComeToHelp), whatever the invitations' setting.
+    /// </summary>
     private string? TodayInviter()
     {
-        if (!this.config.NpcInvites || !this.config.NpcMeetings || !Context.IsWorldReady || !this.activeLoad)
+        if (!this.config.NpcMeetings || !Context.IsWorldReady || !this.activeLoad)
             return null;
         int today = (int)Game1.Date.TotalDays;
         if (this.inviterDay == today)
@@ -92,11 +100,30 @@ internal sealed partial class ModEntry
             return null;
         this.inviterDay = today;
         ulong game = Game1.uniqueIDForThisGame;
-        this.inviter = !Utility.isFestivalDay(Game1.dayOfMonth, Game1.season) && InviteDay(game, today)
+        this.inviter = this.config.NpcInvites && !Utility.isFestivalDay(Game1.dayOfMonth, Game1.season) && InviteDay(game, today)
             ? ChooseInviter(game, today, SocialNpcs.Where(name => this.MayInvite(name, today))) : null;
         if (this.inviter is not null)
             this.Monitor.Log($"今天想约农场主的：{this.inviter}。", LogLevel.Info);
+        this.ComeToHelp(game, today);
         return this.inviter;
+    }
+
+    /// <summary>A different draw from the invitations', for the same save and day.</summary>
+    internal static bool VisitDay(ulong game, int day) => InviteMix(game ^ InviteMix((ulong)day ^ 0x5A5A5A5A)) % VisitEveryDays == 0;
+
+    /// <summary>
+    /// About one day in seven, one close NPC comes to help on the farm unasked (docs/npc-meetings-more.md §5): not on a
+    /// festival, not the one asking today, not one already meeting the player, not one stood up lately.
+    /// </summary>
+    private void ComeToHelp(ulong game, int today)
+    {
+        if (Utility.isFestivalDay(Game1.dayOfMonth, Game1.season) || !VisitDay(game, today) || this.meetings.Count >= MeetsPerDay)
+            return;
+        string? visitor = ChooseInviter(game ^ 0x5A5A5A5A, today, SocialNpcs.Where(name => name != this.inviter && this.MayInvite(name, today)));
+        if (visitor is null)
+            return;
+        this.meetings[visitor] = new Meeting(visitor, VisitTime, FarmPlace, sameDay: false) { Surprise = true };
+        this.Monitor.Log($"{visitor} 今天自己来农场帮忙。", LogLevel.Info);
     }
 
     /// <summary>Walks over like one with something to say, until it has asked or the day is over.</summary>

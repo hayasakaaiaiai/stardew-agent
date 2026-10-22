@@ -16,7 +16,7 @@ import { type DeliveredLetter, type Letter, letterFor, letterKey } from '../agen
 import { callOffIn, changeIn, LATER_TOPIC, laterCallOffNote, laterIn, type LaterMeeting, laterMeetings, laterMovedNote, laterNote, type Meeting, meetingFor,
   meetingMemory, MEET_PLACES, movedLabel, movedNote,
   MEETS_PER_DAY, declinedIn, invitedIn, MOOD_TOPIC, moodLine, openedAtMeeting, stoodUpTopics, todayAgreement, todayMeeting,
-  turnedDownNote, yearDay } from '../agent/meetings.ts';
+  turnedDownNote, visitMemory, yearDay } from '../agent/meetings.ts';
 import type { CallOff } from '../agent/meeting-agreement.ts';
 import { Nightly } from '../agent/nightly.ts';
 import { withMorningPlan } from '../agent/morning.ts';
@@ -559,12 +559,14 @@ export class GameSave {
       const kept = fits && !(same?.calledOff && !same.sentHome) ? meetingMemory({ ...agreed, place: message.place, met: message.met, left: message.left,
         ...(same?.sentHome ? { calledOff: same.calledOff! } : {}), ...(message.helped ? { helped: message.helped } : {}), ...(trip ? { trip } : {}), ...(outing ? { outing } : {}) })
         : undefined;
+      // Come to help unasked: no appointment to keep (docs/npc-meetings-more.md §5).
+      const visited = fits && message.surprise === true ? visitMemory(message.helped, message.met) : undefined;
       // Stood up, as the Mod judges it: it minds for a few days (docs/npc-meetings-more.md §2).
-      const note = kept && message.stoodUp === true && !message.met
-        ? { ...kept, topics: stoodUpTopics(this.day, { time: agreed.time, place: message.place }, message.left) } : kept;
+      const note = visited ?? (kept && message.stoodUp === true && !message.met
+        ? { ...kept, topics: stoodUpTopics(this.day, { time: agreed.time, place: message.place }, message.left) } : kept);
       // The Mod's change counts against the day's range like a conversation's (docs/npc-meeting-friendship.md).
       if (note) await this.scope!.agent(npcId).record({ seq: message.seq, gameTime: gameMinutes(message.date),
-        log: { meeting: { place: message.place, time: message.time, ...(message.arrived !== undefined ? { arrived: message.arrived } : {}), left: message.left, met: message.met, ...(message.helped ? { helped: { ...message.helped } } : {}),
+        log: { meeting: { place: message.place, time: message.time, ...(message.surprise ? { surprise: true } : {}), ...(message.arrived !== undefined ? { arrived: message.arrived } : {}), left: message.left, met: message.met, ...(message.helped ? { helped: { ...message.helped } } : {}),
           ...(trip ? { mine: trip } : {}), ...(outing ? { outing } : {}) }, ...(message.friendship ? { friendship: message.friendship } : {}), bridgeReceipt: JSON.parse(canonical(receipt)) },
         memories: [note] });
       this.addReceipt(receipt);
