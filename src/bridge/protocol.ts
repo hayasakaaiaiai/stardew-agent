@@ -114,8 +114,9 @@ export type ModMessage =
   /** What happened at a festival the player just left (docs/festival-memories.md); game names. Reliable, acknowledged. */
   | ({ type: 'festival.ended' } & FestivalEnded & Envelope)
   /**
-   * An appointment the NPC went to is over (docs/npc-meetings.md); `left` is HHMM. `friendship` is what the Mod changed for
-   * it, within the day's range shared with conversations (docs/npc-meeting-friendship.md). Reliable, acknowledged.
+   * An appointment the NPC went to is over (docs/npc-meetings.md); `left` is HHMM, `arrived` when it got there (Windows
+   * call-off acceptance). `friendship` is what the Mod changed for it, within the day's range shared with conversations
+   * (docs/npc-meeting-friendship.md). Reliable, acknowledged.
    */
   | ({ type: 'meet.ended'; npc: string; place: string; time: number; arrived?: number; left: number; met: boolean; helped?: Helped; mine?: MineTrip;
     friendship?: number; date: GameDate } & Envelope);

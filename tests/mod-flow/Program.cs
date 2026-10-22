@@ -594,6 +594,13 @@ Test("a called-off appointment is marked for undoing, never added, and one not y
     Check((bool)Get(leah, "Failed")! && (bool)Get(leah, "Reported")! && (bool)Get(leah, "CalledOff")!, "One never applied could still be applied or reported.");
 });
 
+Test("one that walking cannot get there in time may appear there half an hour early, never in the past", () =>
+{
+    int Warp(int time, int now) => (int)modType.GetMethod("WarpDeparture", BindingFlags.Static | BindingFlags.NonPublic)!.Invoke(null, new object[] { time, now })!;
+    Check(Warp(1400, 600) == 1330, "Not half an hour before the agreed time (docs/npc-meeting-warp.md).");
+    Check(Warp(1000, 1030) == 1040 && Warp(1500, 1450) == 1500, "Right away, or too late to wait: not the next tick.");
+});
+
 Test("today's wait follows observed arrival, while tomorrow's keeps the agreed deadline and neither passes 22:00", () =>
 {
     Type meetingType = modType.GetNestedType("Meeting", BindingFlags.NonPublic)!;

@@ -87,7 +87,7 @@ internal sealed partial class ModEntry
             reply = this.talk is null ? null : new { npc = this.talk.Npc.Name, text = this.talk.Reply, waiting = this.talk.Waiting },
             npcs = ready ? SocialNpcs.Select(id => Game1.getCharacterFromName(id)).OfType<NPC>().Select(npc => new
             {
-                id = npc.Name, name = npc.displayName, location = npc.currentLocation?.NameOrUniqueName,
+                id = npc.Name, name = npc.displayName, location = npc.currentLocation?.NameOrUniqueName, speed = npc.speed,
                 x = npc.TilePoint.X, y = npc.TilePoint.Y, npc.ignoreScheduleToday, npc.followSchedule,
                 controller = npc.controller is not null, temporary = npc.temporaryController is not null,
                 queued = npc.queuedSchedulePaths.Count, destroys = npc.willDestroyObjectsUnderfoot,

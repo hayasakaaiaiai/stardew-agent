@@ -36,7 +36,11 @@ test('an appointment for the day after tomorrow, or a weekday that close, is kep
   assert.deepEqual(later('后天晚上一起去星之果实餐吧？', '嘿，这主意不错！餐吧的披萨我惦记好久了。后天晚上我肯定到。'), { day: 41, time: 1900, place: '星之果实餐吧' });
   assert.deepEqual(later('周五上午来我农场帮忙浇水吧？', '嘿，明天上午？行啊！浇水正好练练臂力，我就当加练了。'), { day: 40, time: 1000, place: '农场' },
     '“明天” in the reply is the Friday named');
+  assert.deepEqual(later('周六晚上八点海边见？', '好啊，八点见。'), { day: 41, time: 2000, place: '海滩' }, 'a bare hour follows the evening said');
+  assert.deepEqual(later('后天上午陪我下矿吧？', '好啊。', '那就后天再去。', '嗯。'), { day: 41, time: 1000, place: '矿洞' },
+    'naming the same day again moves nothing');
   for (const lines of [
+    ['后天上午陪我下矿吧？', '好啊。', '改明天吧。', '好。'],
     ['明天下午两点海边见？', '好啊。'],
     ['大后天下午海边见？', '好啊。'],
     ['下周三下午一起去海边吧？', '好啊。'],
