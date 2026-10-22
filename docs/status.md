@@ -124,7 +124,9 @@ Windows 随后收到 `m2c-same-day-meetings / 8ed15be` 与包含下矿修复的 
 
 Windows 本轮按用户“测一下之后修复”，在 `codex/meetings-animals-windows-tests` 整合 `m2c-farm-animals / f10021d`（包含赴约好感与约到后天）及之前 `edb6d80` 的五类修复，新增七类修复：未来裸钟点的时段、下个月日期、今天的数字日期、另一日取消误伤今天、地面产品堆叠转存、实际迟到判定、原版实际好感点数记账。初轮提交 `d775dbb`，258/258 Node、45/45 C#、类型检查与构建通过；限定原生 228/228，7 次真实保存、46 次读档、原档 6 文件 SHA256 一致。用户随后确认配偶规则“按文档”，并要求“之后推送”：配偶和室友赴约均不加、不扣，保留约定记忆；专章八种组合 57/57、原好感回归 57/57，共 114/114 追加补验通过，补验与失败证据见 [报告](test-results/2026-10-22-meetings-animals-windows.md)。该轮分支 `b1c34f4` 已推送，未合入 main。真实模型 0 次、固定 prompt 增量 0；正常 DLL 哈希未变，常驻后端未重载。
 
-Windows 后续按用户“测一下之后修复”，在 `codex/meeting-warp-windows-tests` 从 `b1c34f4` 整合 `m2c-farm-animals / c8e9821`。原生复现到期后仍传送并误扣 5 点，已改为恢复原日程、不报告赴约或失约；正常钟速还复现 1430 约 1500 海滩见、实际 1510 到。用户选“入口进来，必要时临时快走，争取准时”，已实现最高临时步速 4 及抵达／取消／到期／清理时恢复，原版钟速复测 1500 抵达并恢复步速 2。最终 258/258 Node、46/46 C#、类型检查与构建通过；限定原生 263/263，3 次真实保存、49 次读档，原档 6 文件 SHA256 不变，表内各批源码和 DLL 与最终一致。脚本、失败和完整结果见 [传送赴约报告](test-results/2026-10-22-meeting-warp-windows.md)。本轮保持本地修复，main 不合并，正常安装和后端不部署。
+Windows 后续按用户“测一下之后修复”，在 `codex/meeting-warp-windows-tests` 从 `b1c34f4` 整合 `m2c-farm-animals / c8e9821`。原生复现到期后仍传送并误扣 5 点，已改为恢复原日程、不报告赴约或失约；正常钟速还复现 1430 约 1500 海滩见、实际 1510 到。用户选“入口进来，必要时临时快走，争取准时”，已实现最高临时步速 4 及抵达／取消／到期／清理时恢复，原版钟速复测 1500 抵达并恢复步速 2。最终 258/258 Node、46/46 C#、类型检查与构建通过；限定原生 263/263，3 次真实保存、49 次读档，原档 6 文件 SHA256 不变，表内各批源码和 DLL 与最终一致。脚本、失败和完整结果见 [传送赴约报告](test-results/2026-10-22-meeting-warp-windows.md)。该轮 `ab9eb06` 已按用户要求推送，main 不合并，正常安装和后端不部署。
+
+Windows 随后收到 `m2c-farm-animals / c5728f3`，将它与已推送的 `ab9eb06` 在 `codex/animals-merge-windows-tests` 整合，保留入口快走、步速恢复和过期保护。采用开发分支等价的 `agreedClocks` 形式，4,608 组日期对话的 23,040 次 API 结果比较无差异。最终 **258/258 Node、46/46 C#**、类型检查、构建及 Mod Release 0 警告／错误通过；限定原生 **316/316**，**8 次真实保存、62 次读档**，每批归档的 38 个源码／脚本和 DLL 均与最终文件一致，原档 6 文件 SHA256 未变。未发现新增产品缺陷，合并回归结果见 [本轮记录](test-results/2026-10-22-animals-merge-windows.md)；当前仅本地验收，不推送、部署或合入 main。
 
 ## 3. 分支
 
@@ -174,8 +176,9 @@ GitHub 私有仓库：https://github.com/hayasakaaiaiai/stardew-agent
 | `codex/call-off-windows-tests` | 纳入 `3fa263a`，修复当天钟点／省略时段／改日期、半路取消站位及实际抵达／等待；含原生脚本和报告，推送目标为本功能分支 | Windows：`E:\stardew-agent` |
 | `m2c-later-meetings` | `f68309b`（约到后天），已纳入最新 Windows 分支；原分支尚不含本轮七类修复 | 上游分支 |
 | `m2c-meeting-friendship` | 赴约和爽约影响好感，已纳入最新 Windows 分支；实际迟到与原版实际点数修复见报告 | 上游分支 |
-| `m2c-farm-animals` | 最新 `c8e9821` 合并旧 Windows 修复并新增传送赴约，Windows 后续修复与验收在 `codex/meeting-warp-windows-tests` | `/Users/a11/Documents/ChatGPT/stardew-agent-gifts` |
-| `codex/meeting-warp-windows-tests` | `b1c34f4` + `c8e9821`；修复过期误传送／误扣好感，按用户选择入口临时快走和恢复；258/258 Node、46/46 C#、263/263 限定原生，见 [报告](test-results/2026-10-22-meeting-warp-windows.md)；本地验收分支 | Windows：`E:\stardew-agent` |
+| `m2c-farm-animals` | 最新 `c5728f3` 合并 `b1c34f4` 的日期、赴约好感、配偶豁免和动物活修复；未包含 `ab9eb06`，整合回归在 `codex/animals-merge-windows-tests` | `/Users/a11/Documents/ChatGPT/stardew-agent-gifts` |
+| `codex/animals-merge-windows-tests` | `ab9eb06` + `c5728f3`；保留入口快走和过期保护，日期解析等价合并；258/258 Node、46/46 C#、316/316 限定原生，8 次保存／62 次读档，见 [报告](test-results/2026-10-22-animals-merge-windows.md)；未推送 | Windows：`E:\stardew-agent` |
+| `codex/meeting-warp-windows-tests` | `b1c34f4` + `c8e9821`；修复过期误传送／误扣好感，按用户选择入口临时快走和恢复；258/258 Node、46/46 C#、263/263 限定原生，见 [报告](test-results/2026-10-22-meeting-warp-windows.md)；`ab9eb06` 已推送 | Windows：`E:\stardew-agent` |
 | `codex/meetings-animals-windows-tests` | `edb6d80` + `f10021d`；初轮 258/258 Node、45/45 C#、228/228 限定原生；追加配偶／室友赴约豁免、专章 57/57、原好感回归 57/57，`b1c34f4` 已推送，见 [报告](test-results/2026-10-22-meetings-animals-windows.md) | Windows：`E:\stardew-agent` |
 | `codex/offscreen-windows-tests` | `main / 35affae` + `less-fabrication / f98222c`，上一轮组合验收与赠礼开关修复；`bda43f3` 已推送，修复已摘到 `festival-memories`，未合入 main | Windows 历史验收分支 |
 | `codex/ambient-windows-tests` | 上轮三处修复 + 慢回复、原话来源、完成动作过滤、事件语义修复；完整真实 176 项通过；`5a1ef78` 已推送，已合并进 `remember-source` | Windows：`E:\stardew-agent` |
@@ -338,6 +341,7 @@ dotnet build mod/StardewAgentBridge   # 编译 Mod，编译完自动装进游戏
 | `docs/npc-farm-animals.md` | 农场动物活：用户定的四样和规则、照原版的做法、实测、测试和 Windows 清单 |
 | `docs/npc-meeting-warp.md` | 传送赴约、入口临时快走和步速恢复，实际到场／取消／过期的 Windows 验收及准时性边界 |
 | `docs/test-results/2026-10-22-meeting-warp-windows.md` | 过期误传送误扣、入口快走的原版钟速对照、逐地点入口、保存回滚、失败及覆盖边界 |
+| `docs/test-results/2026-10-22-animals-merge-windows.md` | `c5728f3` 合并回归、日期解析等价性、保留入口快走和过期保护、好感与动物活、存档保护 |
 | `docs/npc-meetings.md` | 按约定赴约：夜间 `meet` 字段与原话核对、8 个地点的格子、在原版日程里插两站的做法、实测、测试和 Windows 清单 |
 | `docs/npc-approach.md` | NPC 有话要说时主动走过来：谁会来（`seek` 与关键词实测）、原版寻路和日程的依据、等候与走回、测试和 Windows 清单 |
 | `docs/npc-schedules.md` | NPC 知道自己今天的行程：原版日程怎么读、写进哪些 prompt、token 和真实模型对照、Windows 清单 |

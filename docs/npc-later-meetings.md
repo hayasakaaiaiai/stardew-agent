@@ -75,7 +75,7 @@
 
 ## 4. 做法
 
-- `meeting-agreement.ts`：把“谁答应去哪”抽成 `agreedPlace`，今天的 `agreedIn`、后天以内的 `agreedLater` 共用（2026-10-22 合并 Windows 修复后，两边共用它的钟点读法 `readClocks`：只有没说时段的钟点跟着说出的时段走，“周六晚上八点 / 八点见”是 20:00；它的“改到明天就撤销”在约到后天时看说的是不是同一天，“后天再去”不算改）；`namedDays` 按日历换算；`quotedLater`、`quotedLaterCallOff`；`quotedToday`、`quotedCallOff` 多一个 `today`，说的是别的日子就不碰今天的。
+- `meeting-agreement.ts`：把“谁答应去哪”抽成 `agreedPlace`，今天的 `agreedIn`、后天以内的 `agreedLater` 共用；合并 `c5728f3` 后，两边的钟点读法统一为 `agreedClocks`：只有没说时段的钟点跟着说出的时段走，“周六晚上八点 / 八点见”是 20:00；它的“改到明天就撤销”在约到后天时看说的是不是同一天，“后天再去”不算改。`namedDays` 按日历换算；`quotedLater`、`quotedLaterCallOff`；`quotedToday`、`quotedCallOff` 多一个 `today`，说的是别的日子就不碰今天的。
 - `meetings.ts`：`laterNote`、`laterCallOffNote`、`laterMeetings`（按标签读回，同一天最后一条记录说了算）、`dayLabel`、`upcomingLine`、`farInvitation` 和那一行的写法。
 - `memory.ts`：`talk.close` 时一次记下今天的约定、改口，以及后天以内的新约定和取消（同一条日志）；`meeting()` 在没有昨晚的约定时读当天的那条记录；记了谁有这类记录（每次读档扫一次，之后随记随加），日常的约定列表不用每次查 34 位 NPC。
 - `server.ts`：聊天那一轮按玩家的话加婉拒行；对话开场没有今天的约定时写最近的一个；约定列表按读取顺序发，慢的旧列表不会盖掉刚改的新列表（读得早的旧列表仍可能先到，Mod 随后会收到新列表；端到端测试因此改为等内容正确的那份，2026-10-22 连跑 6 次通过）。
@@ -123,3 +123,5 @@
 独立存档里实际启动 SMAPI，**17/17** 通过：当天不发布未来约定；重连和两次真实睡觉后，到那天只发布未取消的普通约定（没有 `sameDay`）；20:00 餐吧约定实际沿原版路线走到并碰面、报告；远日期提示只在当轮；未保存回滚；春 27 日约“下个月1号上午八点”，过两晚及重读后在夏 1 日发布 08:00 矿洞约定。最后一项只验证日期与发布，不能据此认定所有 08:00 的自然行程都赶得上。
 
 脚本入口 `tools/test-game-world.ps1 -Offline -Section later-meetings`；固定模型、真实调用 0。prompt 格式、固定 token 和调用次数都未增加；原 §3 的真实模型数字是上游原始样本，本轮不重复将它算作新实测。失败记录、脚本修正和总检查结果见 [Windows 报告](test-results/2026-10-22-meetings-animals-windows.md)。
+
+后续合并 `c5728f3` 和 `ab9eb06` 时统一钟点读法为 `agreedClocks`，4,608 组受控对话的新旧解析结果一致；本章原生 **17/17** 重跑通过，包含四次真实睡觉、跨季及取消、重连、未保存回滚。精确记录见 [合并回归报告](test-results/2026-10-22-animals-merge-windows.md)。
