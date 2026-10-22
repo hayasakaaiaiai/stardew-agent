@@ -19,10 +19,18 @@ function number(word: string): number {
   return digits[word] ?? NaN;
 }
 
+/**
+ * "一点" is one o'clock only after a period or a day ("下午一点", "明天一点"), as "一点钟/一点整/一点左右", or opening a
+ * clause ("一点海边见"); otherwise it is a little: "早一点", "人少一点", "一点都不", "一点印象都没有" (docs/npc-meetings-more.md §0).
+ */
+const oneOClock = (before: string, after: string) => /[午晨上天]$/.test(before) || /^(?:钟|整|左右)/.test(after)
+  || /(?:^|[，,。！!？?；;…\s])$/.test(before) && !/^[都也儿点些的小]/.test(after);
+
 function clockTimes(text: string): { time: number; ambiguous: boolean }[] {
   const matches = [...text.matchAll(/(\d{1,2})[:：](\d{2})/g)].map(match => ({ hour: Number(match[1]), minute: Number(match[2]), clock: true }));
   for (const match of text.matchAll(/([零〇一二两三四五六七八九十\d]{1,3})(?:点|时)(半|一刻|三刻|[零〇一二两三四五六七八九十\d]{1,3}分)?/g)) {
     const suffix = match[2];
+    if (match[1] === '一' && match[0] === '一点' && !oneOClock(text.slice(0, match.index), text.slice(match.index! + match[0].length))) continue;
     matches.push({ hour: number(match[1]!), minute: suffix === '半' ? 30 : suffix === '一刻' ? 15 : suffix === '三刻' ? 45 : suffix ? number(suffix.slice(0, -1)) : 0, clock: false });
   }
   return matches.map(({ hour, minute, clock }) => {
@@ -295,8 +303,6 @@ export interface Invitation { day: number; time: number; place: string }
 const TODAY_WORDS = /今天|今早|晚点|晚些/;
 // A deadline or someone else's hour is not when they meet: "下午四点前我都有空", "十一点开始上课".
 const NOT_THE_TIME = /[零〇一二两三四五六七八九十\d]{1,3}(?:点|时)(?:半|一刻|三刻|[零〇一二两三四五六七八九十\d]{1,3}分)?(?=(?:以|之)?[前后]|开始|结束|上课|上班|下班|关门|开门)/g;
-// "人少一点", "早一点" is a little, not one o'clock.
-const A_BIT = /([少多早晚快慢近远好静热冷凉])一点/g;
 // Saying yes to being asked out takes a plain word for it: "嗯……我得看看农场的活儿" is a hedge (measured, docs/npc-invites.md §5).
 const PLAIN_YES = /好|行|可以|没问题|当然|一言为定|说定|乐意|愿意|奉陪|算我一个|一定(?:去|来|到)|走吧|去啊|去呀/;
 const HEDGE = /看看|看情况|不一定|说不准|尽量|争取|看能不能|有空(?:的话|就)|忙完/;
@@ -319,7 +325,7 @@ export function quotedInvite(lines: readonly TimedQuote[], places: Readonly<Reco
   const npc = [ask, ...(reply?.speaker === 'NPC' ? [reply] : [])];
   const named = (text: string) => Object.keys(places).filter(place => places[place]!.test(text));
   // A greeting names no time ("晚上好"), and "今晚的风" no day.
-  const sentences = npc.map(quote => (quote.text.replace(/(?:早上|上午|中午|下午|晚上)好|晚安/g, '').replace(NOT_THE_TIME, '').replace(A_BIT, '$1')
+  const sentences = npc.map(quote => (quote.text.replace(/(?:早上|上午|中午|下午|晚上)好|晚安/g, '').replace(NOT_THE_TIME, '')
     .match(/[^。！!？?；;…\n]+[。！!？?；;…\n]*/g) ?? []).filter(sentence => named(sentence).length || times(sentence).length
       || ASKING.test(sentence)).join(''));
   const [offered = [], settled = []] = sentences.map(named);
@@ -329,7 +335,7 @@ export function quotedInvite(lines: readonly TimedQuote[], places: Readonly<Reco
   if (placesSaid.length !== 1 || days.size > 1) return null;
   const day = [...days][0] ?? today;
   if (day < today || day > today + LATER_DAYS) return null;
-  const timed = [...sentences, answer.text.replace(NOT_THE_TIME, '').replace(A_BIT, '$1')].map(text => text.replace(/今晚/g, '今天晚上').replace(/今早/g, '今天早上'));
+  const timed = [...sentences, answer.text.replace(NOT_THE_TIME, '')].map(text => text.replace(/今晚/g, '今天晚上').replace(/今早/g, '今天早上'));
   const agreed = answer.time;
   const clocks = readClocks(timed, time => day === today && time <= later(agreed, 10) && time < 1200 ? time + 1200 : time);
   const periods = timed.flatMap(text => PERIODS.filter(([period]) => period.test(text))).map(([, time]) => time);
