@@ -150,9 +150,10 @@ export type BackendMessage =
   /**
    * Today's appointments with the player, by NPC id; HHMM and a place the Mod knows (docs/npc-meetings.md); seq is 0.
    * `sameDay` ones were agreed today and may come late; resent when a conversation settles one
-   * (docs/npc-same-day-meetings.md).
+   * (docs/npc-same-day-meetings.md). `calledOff` ones were taken back, or the NPC sent home, in a later conversation
+   * (docs/npc-call-off.md).
    */
-  | ({ type: 'day.meetings'; meetings: { npc: string; time: number; place: string; sameDay?: true }[] } & Envelope)
+  | ({ type: 'day.meetings'; meetings: { npc: string; time: number; place: string; sameDay?: true; calledOff?: true }[] } & Envelope)
   /** At most one letter for the mailbox this morning (docs/npc-mail.md); seq is 0. */
   | ({ type: 'day.letters'; letters: DeliveredLetter[] } & Envelope)
   | ({ type: 'talk.delta'; npc: string; text: string } & Envelope)

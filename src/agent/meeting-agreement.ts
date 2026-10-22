@@ -158,3 +158,45 @@ export function quotedToday(lines: readonly TimedQuote[], places: Readonly<Recor
   return lines.slice(foundEnd + 1).some(quote => (agrees(quote) || /还是|改|换|一起|见|约/.test(quote.text))
     && times(quote.text).some(other => other !== found.time && other > later(agreed, 10))) ? null : found;
 }
+
+/** Who took today's appointment back, or sent the other home: the player or the NPC (docs/npc-call-off.md). */
+export type CallOff = '玩家' | 'NPC';
+
+// Plain words only, unlike REFUSED above: a wrong call-off walks the NPC away. Questions and conditions never count.
+const PLAYER_OFF = /不(?:去|来)了|别(?:去|来|等(?:我)?)了|不用(?:去|来)了|改天(?:再)?去|下次(?:再)?去/;
+// Sending company home; one that says it is staying ("凭什么让我先走？再往下一点点嘛") stays until the player insists.
+const SEND_HOME = /你(?:先)?(?:回去|回家|走)吧|你可以(?:回去|回家|走)了|不用(?:再)?(?:陪|帮|等)(?:我)?了|今天(?:就)?(?:到这|先这样)/;
+const STAY = /才不|不要|不走|不回|凭什么|赶我|再(?:往下|走|待|呆|玩)|还没(?:看够|玩够|走够)|别赶/;
+const PLAYER_CANCEL = /取消|算了/;
+// The NPC only when it says it cannot come; the player too.
+const NPC_OFF = /去不了|来不了|不能去了|不能来了|没法去|没办法去|去不成|来不成/;
+const ABOUT = /约|见面|今天|待会|等会|一会|上午|中午|下午|傍晚|晚上/;
+const ON_AGAIN = /还是(?:去|一起|见|要)|开玩笑|逗你/;
+
+/**
+ * Whether the conversation that just ended took back today's appointment at `words`, or sent the NPC home, and who
+ * did; null if not, or if it was taken up again afterwards in the same conversation.
+ */
+export function quotedCallOff(lines: readonly TimedQuote[], words: RegExp, places: Readonly<Record<string, RegExp>>): CallOff | null {
+  const off = (quote: TimedQuote) => {
+    const text = quote.text;
+    // Another day's plans ("明天没法去农场") leave today's alone.
+    if (/[吗？?]/.test(text) || CONDITIONAL.test(text) || TOMORROW.test(text) && !/今天/.test(text)) return false;
+    return quote.speaker === '玩家'
+      // "今天就算了吧", "矿洞那边取消吧": in the same clause, not "算了，我回农场了".
+      ? PLAYER_OFF.test(text) || SEND_HOME.test(text) || text.split(/[，,。！!；;]+/).some(clause => PLAYER_CANCEL.test(clause) && (words.test(clause) || ABOUT.test(clause)))
+        // "不去矿洞那边了", "今天不下矿了".
+        || new RegExp(`不(?:去|来)?.{0,2}(?:${words.source}).{0,4}了`).test(text) || NPC_OFF.test(text) && (words.test(text) || ABOUT.test(text) || /(?:不了|不成|不能去|不能来)了[。！!～~]?$/.test(text))
+      : NPC_OFF.test(text) && (words.test(text) || ABOUT.test(text));
+  };
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (!off(lines[i]!)) continue;
+    const after = lines.slice(i + 1);
+    const again = after.findIndex(quote => quote.speaker === '玩家' && ON_AGAIN.test(quote.text));
+    if (quotedToday(after, places) || again >= 0 && after.slice(again + 1).some(quote => quote.speaker === 'NPC' && agrees(quote))) return null;
+    const answer = after.find(quote => quote.speaker === 'NPC');
+    if (SEND_HOME.test(lines[i]!.text) && answer && STAY.test(answer.text) && !/(?:好吧|行吧|那).{0,10}(?:回去|走)/.test(answer.text)) return null;
+    return lines[i]!.speaker;
+  }
+  return null;
+}

@@ -430,6 +430,13 @@ internal sealed partial class ModEntry
         ScheduleStop target = now < m.Leave ? m.Back : StopBefore(npc, now, inclusive: true);
         if (now < m.Leave)
             schedule.Remove(m.Leave);
+        this.RouteTo(m, npc, target);
+    }
+
+    /// <summary>From where it stands to a stop of its schedule through vanilla's schedule pathing, setting off now.</summary>
+    private void RouteTo(Meeting m, NPC npc, ScheduleStop target)
+    {
+        int now = Game1.timeOfDay;
         try
         {
             SchedulePathDescription route = npc.pathfindToNextScheduleLocation(npc.dayScheduleName.Value ?? "meeting", npc.currentLocation.NameOrUniqueName,

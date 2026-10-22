@@ -572,6 +572,28 @@ Test("an appointment agreed today may be from 6:00, is put off to when the NPC c
     Check(meetings["Abigail"] == abigail && meetings.Contains("Leah"), "A resend tried again one given up, or dropped a new one.");
 });
 
+Test("a called-off appointment is marked for undoing, never added, and one not yet in a schedule is simply given up", () =>
+{
+    object mod = BubbleMod();
+    Set(mod, "meetings", Activator.CreateInstance(modType.GetField("meetings", Fields)!.FieldType, StringComparer.OrdinalIgnoreCase)!);
+    var meetings = (System.Collections.IDictionary)Get(mod, "meetings")!;
+    JsonDocument Packet(params object[] rows) => JsonDocument.Parse(JsonSerializer.Serialize(new { type = "day.meetings", lineageId = "farm",
+        loadNonce = "current", seq = 0, meetings = rows }));
+    using (JsonDocument packet = Packet(new { npc = "abigail", time = 1000, place = "矿洞" }, new { npc = "leah", time = 1400, place = "海滩" }))
+        Invoke(mod, "HandleMeetings", "day.meetings", packet.RootElement);
+    object abigail = meetings["Abigail"]!, leah = meetings["Leah"]!;
+    Set(abigail, "Applied", true);
+    using (JsonDocument later = Packet(new { npc = "abigail", time = 1000, place = "矿洞", calledOff = true },
+        new { npc = "leah", time = 1400, place = "海滩", calledOff = true }, new { npc = "sam", time = 1500, place = "海滩", calledOff = true }))
+        Invoke(mod, "HandleMeetings", "day.meetings", later.RootElement);
+    Check(meetings["Abigail"] == abigail && (bool)Get(abigail, "CallOff")!, "One under way was not marked to be undone (src/bridge/memory.ts wire).");
+    Check(!meetings.Contains("Leah") && !meetings.Contains("Sam"), "One not yet in a schedule, or one never sent, came back called off.");
+    Check(((System.Collections.IDictionary)Get(abigail, "Replaced")!).Count == 0, "Nothing was replaced, so nothing should be put back.");
+    Set(leah, "CallOff", true);
+    Invoke(mod, "CallOffMeeting", leah);
+    Check((bool)Get(leah, "Failed")! && (bool)Get(leah, "Reported")! && (bool)Get(leah, "CalledOff")!, "One never applied could still be applied or reported.");
+});
+
 Test("farm chores are worded like the backend, and the farm is a place an appointment can be at", () =>
 {
     Type doneType = modAssembly.GetType("StardewAgentBridge.FarmHelp+Done", throwOnError: true)!;

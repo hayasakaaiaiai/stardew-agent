@@ -13,7 +13,8 @@ namespace StardewAgentBridge;
 /// NPCs keep yesterday's appointments with the player (docs/npc-meetings.md): two stops go into today's vanilla
 /// schedule, there and back, so the game's own schedule pathing walks them across maps. When it is over, the backend
 /// is told whether the player came, so the NPC remembers. One agreed in a conversation today comes the same way, late
-/// rather than not at all (docs/npc-same-day-meetings.md).
+/// rather than not at all (docs/npc-same-day-meetings.md). One taken back in a later conversation is undone, and company
+/// sent home goes (docs/npc-call-off.md).
 /// </summary>
 internal sealed partial class ModEntry
 {
@@ -92,6 +93,11 @@ internal sealed partial class ModEntry
         /// <summary>The vanilla object-breaking walk, switched off on the farm; null when not changed.</summary>
         public bool? Destroys;
         public ApproachController? Hold;
+        /// <summary>The original stops the appointment replaced, put back when it is called off.</summary>
+        public readonly Dictionary<int, SchedulePathDescription> Replaced = new();
+        /// <summary>A conversation took it back or sent the NPC home; undone on the next tick, once.</summary>
+        public bool CallOff;
+        public bool CalledOff;
     }
 
     /// <summary>Where a schedule has an NPC at some time: the end of a route, with how it stands there.</summary>
@@ -164,6 +170,13 @@ internal sealed partial class ModEntry
                 || !item.TryGetProperty("place", out JsonElement place) || place.ValueKind != JsonValueKind.String || !MeetPlaces.ContainsKey(place.GetString()!))
                 continue;
             string? name = SocialNpcs.FirstOrDefault(npc => npc.Equals(id.GetString(), StringComparison.OrdinalIgnoreCase));
+            // Called off: undo one under way; one not yet in a schedule was dropped above and stays dropped.
+            if (item.TryGetProperty("calledOff", out JsonElement off) && off.ValueKind == JsonValueKind.True)
+            {
+                if (name is not null && this.meetings.TryGetValue(name, out Meeting? known))
+                    known.CallOff = true;
+                continue;
+            }
             if (name is not null && !this.meetings.ContainsKey(name) && this.meetings.Count < MeetsPerDay)
                 this.meetings[name] = new Meeting(name, hhmm, place.GetString()!, sameDay);
         }
@@ -177,7 +190,9 @@ internal sealed partial class ModEntry
             return;
         foreach (Meeting m in this.meetings.Values)
         {
-            if (!m.Applied && !m.Failed)
+            if (m.CallOff && !m.CalledOff)
+                this.CallOffMeeting(m);
+            else if (!m.Applied && !m.Failed)
                 this.ApplyMeeting(m);
             else if (m.Applied && !m.Reported)
                 this.WatchMeeting(m);
@@ -306,7 +321,10 @@ internal sealed partial class ModEntry
         if (go.route is not { Count: > 0 } || ret.route is not { Count: > 0 })
             return "原版寻路找不到路";
         foreach (int replaced in schedule.Keys.Where(time => time >= replaceFrom && time <= m.Leave).ToList())
+        {
+            m.Replaced[replaced] = schedule[replaced];
             schedule.Remove(replaced);
+        }
         go.time = depart;
         ret.time = m.Leave;
         m.Depart = depart;
@@ -315,6 +333,75 @@ internal sealed partial class ModEntry
         schedule[m.Leave] = ret;
         this.Monitor.Log($"{m.Npc} 今天 {depart} 从{from.Map}出发，{m.Time} 前到{m.Place}（{spot.Map} {spot.X},{spot.Y}），{m.Leave} 回{back.Map}。", LogLevel.Info);
         return null;
+    }
+
+    /// <summary>
+    /// Undone after a conversation took it back or sent the NPC home (docs/npc-call-off.md). Before they met, the NPC
+    /// goes back to its original schedule; together, it leaves the farm, says goodbye underground, or heads off from the
+    /// place. Only a meeting reports how it went: one taken back beforehand the backend remembered then.
+    /// </summary>
+    private void CallOffMeeting(Meeting m)
+    {
+        m.CalledOff = true;
+        if (!m.Applied || m.Reported || Game1.getCharacterFromName(m.Npc) is not NPC npc)
+        {
+            m.Failed |= !m.Applied;
+            m.Reported = true;
+            return;
+        }
+        this.Monitor.Log($"{m.Npc} 今天在{m.Place}的约定{(m.Met ? "提前结束" : "取消")}了。", LogLevel.Info);
+        if (m.Trip.Following)
+        {
+            // A word, then out by the door, as at 22:00 (MineCompanion.cs).
+            npc.Halt();
+            npc.faceGeneralDirection(Game1.player.getStandingPosition());
+            npc.showTextAboveHead("那我先回去了。");
+            m.Trip.Bye = ByeTicks;
+            return;
+        }
+        if (m.Farm && !m.Spouse && m.Stage >= 1)
+        {
+            if (m.Stage == 1)
+            {
+                (Point arrival, _, Point exit) = FarmGates();
+                this.LeaveFarm(m, npc, Game1.getFarm(), exit, arrival);
+            }
+            return;
+        }
+        if (m.Spouse)
+        {
+            // Its days are vanilla's own: home from the door once out of sight; on the farm it is home already.
+            if (m.Dungeon && m.Arrived)
+            {
+                if (npc.temporaryController == m.Trip.Hold)
+                    npc.temporaryController = null;
+                m.Trip.Hold = null;
+                npc.speed = 2;
+                m.Trip.HomeBound = true;
+            }
+        }
+        else
+            this.RestoreSchedule(m, npc);
+        if (m.Met)
+            this.ReportMeeting(m, Game1.timeOfDay);
+        else
+        {
+            m.Reported = true;
+            Game1.addHUDMessage(new HUDMessage($"和{npc.displayName}的约定取消了", HUDMessage.error_type));
+        }
+    }
+
+    /// <summary>The original stops back in place; from where it stands to where they have it now, if it has set off.</summary>
+    private void RestoreSchedule(Meeting m, NPC npc)
+    {
+        if (npc.Schedule is not { } schedule)
+            return;
+        schedule.Remove(m.Depart);
+        schedule.Remove(m.Leave);
+        foreach ((int time, SchedulePathDescription stop) in m.Replaced)
+            schedule[time] = stop;
+        if (Game1.timeOfDay >= m.Depart)
+            this.RouteTo(m, npc, StopBefore(npc, Game1.timeOfDay, inclusive: true));
     }
 
     /// <summary>The same estimate as vanilla's arrival-time schedules (NPC.parseMasterScheduleImpl): two pixels a tick.</summary>

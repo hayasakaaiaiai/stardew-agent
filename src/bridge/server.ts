@@ -269,7 +269,7 @@ export class BridgeServer {
     }
   }
 
-  /** Only the appointments, after a conversation settled one for today (docs/npc-same-day-meetings.md). */
+  /** Only the appointments, after a conversation settled one for today or called it off (docs/npc-same-day-meetings.md, docs/npc-call-off.md). */
   private async sendMeetings(session: Session): Promise<void> {
     const save = session.save;
     if (!save || save.closed) return;
@@ -424,7 +424,11 @@ export class BridgeServer {
     });
     send({ type: 'ack', ...envelope(message) });
     if (agreed) {
-      this.log(`${this.cardName(agreed.npc)}答应了今天的约定：${agreed.soon ? `${clock(agreed.time)} 说好马上去` : clock(agreed.time)} ${agreed.place}`);
+      const name = this.cardName(agreed.npc);
+      this.log(!agreed.by ? `${name}答应了今天的约定：${agreed.soon ? `${clock(agreed.time)} 说好马上去` : clock(agreed.time)} ${agreed.place}`
+        : agreed.sentHome ? `${name}${agreed.by === '玩家' ? '被农场主送回去了' : '说要先回去了'}（${agreed.place}）`
+        : `${name}今天在${agreed.place}的约定取消了：${agreed.by === '玩家' ? '农场主说不去了' : `${name}说去不了了`}`);
+      if (agreed.note) this.log(`${name}记下了：${agreed.note}`);
       void this.sendMeetings(session);
     }
     if (message.type === 'save.saved' && save.head !== head && this.options.gateway) this.log(this.options.gateway.report(day));

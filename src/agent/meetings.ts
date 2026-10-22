@@ -4,7 +4,7 @@
  */
 import { clock } from './schedule.ts';
 import { OPENING_LINE } from './dialogue.ts';
-import { quotedAgreement, quotedPeriodTime, quotedToday, type TimedQuote } from './meeting-agreement.ts';
+import { type CallOff, quotedAgreement, quotedCallOff, quotedPeriodTime, quotedToday, type TimedQuote } from './meeting-agreement.ts';
 import type { DayEntry, MemoryDraft, NpcState } from '../types.ts';
 
 /** The places the Mod has a standing tile for (Meetings.cs), with how people say them. */
@@ -76,6 +76,10 @@ export interface Meeting {
   soon?: true;
   /** The Mod has reported how it went. */
   ended?: true;
+  /** Taken back, or the NPC sent home, in a later conversation, by whom (docs/npc-call-off.md). */
+  calledOff?: CallOff;
+  /** Called off while they were together: the Mod reports it, and the memory says so. */
+  sentHome?: true;
 }
 
 /** What the nightly model wrote, before its quotes are checked. */
@@ -131,22 +135,31 @@ const agreedText = (meeting: Meeting) => meeting.soon ? `约好马上去${meetin
  * dungeon. One agreed today may arrive late, so it lasts until the Mod reports it over.
  */
 export function meetingLine(meeting: Meeting | undefined, now: number, here: boolean, helped?: Helped, trip?: MineTrip): string | undefined {
-  if (!meeting || !trip && (meeting.sameDay ? meeting.ended || now >= MEET_END : now > meetingLeave(meeting.time))) return undefined;
+  if (!meeting || meeting.calledOff || !trip && (meeting.sameDay ? meeting.ended || now >= MEET_END : now > meetingLeave(meeting.time))) return undefined;
   const agreed = meeting.soon ? `今天 ${clock(meeting.time)} ${agreedText(meeting)}` : `今天 ${clock(meeting.time)} 在${meeting.place}见面`;
   if (trip) return `${agreed}；${tripText(meeting.place, trip)}`;
   return `${agreed}${here ? '，现在就在这里碰面了' : ''}${helped ? `；你来了以后已经${helpedText(helped)}` : ''}`;
 }
 
-/** What the NPC remembers once the appointment is over. */
-export function meetingMemory(meeting: Meeting & { met: boolean; left: number; helped?: Helped; trip?: MineTrip }): MemoryDraft {
+/**
+ * What the NPC remembers once the appointment is over, or once it was called off before they met; `arrived` is when one
+ * agreed today got there late.
+ */
+export function meetingMemory(meeting: Meeting & { met: boolean; left: number; helped?: Helped; trip?: MineTrip; arrived?: number }): MemoryDraft {
+  const late = meeting.arrived ? `，我 ${clock(meeting.arrived)} 才到` : '';
+  const sent = meeting.met && meeting.calledOff ? meeting.calledOff === '玩家' ? '，后来农场主让我先回去了' : '，后来我先回去了' : '';
   if (meeting.trip) {
     // A rescue is the kind of thing one remembers for a long time.
-    return { text: `${agreedText(meeting)}，农场主来了，${tripMemory(meeting.place, meeting.trip)}。`,
+    return { text: `${agreedText(meeting)}${late}，农场主来了，${tripMemory(meeting.place, meeting.trip)}${sent}。`,
       importance: meeting.trip.rescued ? 4 : 3, kind: 'observation', subjects: ['player'], visibility: 'private' };
   }
-  const agreed = `${agreedText(meeting)}${meeting.helped ? `，我${helpedText(meeting.helped)}` : ''}`;
+  if (meeting.calledOff && !meeting.met) {
+    return { text: `${agreedText(meeting)}，后来${meeting.calledOff === '玩家' ? '农场主说不去了' : '我跟农场主说去不了了'}。`, importance: 2,
+      kind: 'observation', subjects: ['player'], visibility: 'private' };
+  }
+  const agreed = `${agreedText(meeting)}${late}${meeting.helped ? `，我${helpedText(meeting.helped)}` : ''}`;
   return meeting.met
-    ? { text: `${agreed}，农场主来了。`, importance: 2, kind: 'observation', subjects: ['player'], visibility: 'private' }
+    ? { text: `${agreed}，农场主来了${sent}。`, importance: 2, kind: 'observation', subjects: ['player'], visibility: 'private' }
     : { text: `${agreed}，我等到 ${clock(meeting.left)}，农场主没来。`, importance: 3, kind: 'observation', subjects: ['player'], visibility: 'private' };
 }
 
@@ -160,7 +173,7 @@ function hhmm(gameTime: number): number {
   return time < 600 ? time + 2400 : time;
 }
 
-type TurnLog = { player: string; npc: string };
+type TurnLog = { player: string; npc: string; atMeeting?: true };
 const turnOf = (entry: DayEntry, npcId: string) => {
   const log = entry.changes.find(change => change.npcId === npcId)?.log as Partial<TurnLog> | undefined;
   return log && typeof log.player === 'string' && typeof log.npc === 'string' ? log as TurnLog : undefined;
@@ -185,16 +198,34 @@ export function todayAgreement(entries: readonly DayEntry[], npcId: string): Mee
   return found && { time: found.time, place: found.place, sameDay: true, ...(found.soon ? { soon: true as const } : {}) };
 }
 
-/** Today's appointment agreed in a conversation, read back from the day's log, with whether the Mod has reported it. */
-export function sameDayMeeting(entries: readonly DayEntry[], npcId: string): Meeting | undefined {
-  let meeting: Meeting | undefined;
+/** Whether the conversation that just ended was held at the appointment, with the NPC there or along. */
+export function openedAtMeeting(entries: readonly DayEntry[], npcId: string): boolean {
+  const opening = entries.findLast(entry => turnOf(entry, npcId)?.player === OPENING_LINE);
+  return opening !== undefined && turnOf(opening, npcId)!.atMeeting === true;
+}
+
+/** Whether the conversation that just ended took today's appointment back, or sent the NPC home (docs/npc-call-off.md). */
+export function callOffIn(entries: readonly DayEntry[], npcId: string, meeting: Meeting): CallOff | null {
+  return quotedCallOff(lastConversation(entries, npcId), MEET_PLACES[meeting.place]!, MEET_PLACES);
+}
+
+/**
+ * Today's appointment: last night's, or else one agreed in a conversation today (docs/npc-same-day-meetings.md), with
+ * what the day's log says became of it: reported over by the Mod, or called off in a later conversation
+ * (docs/npc-call-off.md).
+ */
+export function todayMeeting(nightly: Meeting | undefined, entries: readonly DayEntry[], npcId: string): Meeting | undefined {
+  let meeting = nightly && { ...nightly };
   for (const entry of entries) {
     const log = entry.changes.find(change => change.npcId === npcId)?.log as Record<string, unknown> | undefined;
     const agreed = log?.meetToday as Record<string, unknown> | undefined;
+    const off = log?.meetCalledOff as Record<string, unknown> | undefined;
     if (!meeting && agreed && typeof agreed.place === 'string' && Object.hasOwn(MEET_PLACES, agreed.place)
       && Number.isSafeInteger(agreed.time) && (agreed.time as number) % 10 === 0 && (agreed.time as number) % 100 <= 59)
       meeting = { time: agreed.time as number, place: agreed.place, sameDay: true, ...(agreed.soon === true ? { soon: true as const } : {}) };
     else if (meeting && log?.meeting) meeting.ended = true;
+    else if (meeting && off && (off.by === '玩家' || off.by === 'NPC'))
+      Object.assign(meeting, { calledOff: off.by }, off.met === true ? { sentHome: true } : {});
   }
   return meeting;
 }

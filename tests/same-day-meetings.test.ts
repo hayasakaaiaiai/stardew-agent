@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { quotedToday, type TimedQuote } from '../src/agent/meeting-agreement.ts';
-import { lastConversation, MEET_PLACES, meetingLine, meetingMemory, sameDayMeeting } from '../src/agent/meetings.ts';
+import { lastConversation, MEET_PLACES, meetingLine, meetingMemory, todayMeeting } from '../src/agent/meetings.ts';
 import { OPENING_LINE } from '../src/agent/dialogue.ts';
 import type { DayEntry } from '../src/types.ts';
 import { connect, harness, initial, openTalk, WORLD } from './helpers/bridge.ts';
@@ -71,10 +71,10 @@ test('only the conversation that just ended is checked, with the time each line 
     [['NPC', '又是你。', 1000], ['玩家', '今天天气真好。', 1010], ['NPC', '是啊。', 1010]], 'the opening line is not the player’s');
   assert.equal(lastConversation([turn(1, 70, '陪我下矿吧？', '好啊。')], 'abigail')[0]!.time, 2510, 'after midnight counts on from 24:00');
   const logged = [{ seq: 5, gameTime: 0, changes: [{ npcId: 'abigail', log: { meetToday: { time: 1000, place: '矿洞', soon: true } } }] }];
-  assert.deepEqual(sameDayMeeting(logged, 'abigail'), { time: 1000, place: '矿洞', sameDay: true, soon: true });
-  assert.deepEqual(sameDayMeeting([...logged, { seq: 6, gameTime: 0, changes: [{ npcId: 'abigail', log: { meeting: { met: true } } }] }], 'abigail'),
+  assert.deepEqual(todayMeeting(undefined, logged, 'abigail'), { time: 1000, place: '矿洞', sameDay: true, soon: true });
+  assert.deepEqual(todayMeeting(undefined, [...logged, { seq: 6, gameTime: 0, changes: [{ npcId: 'abigail', log: { meeting: { met: true } } }] }], 'abigail'),
     { time: 1000, place: '矿洞', sameDay: true, soon: true, ended: true });
-  assert.equal(sameDayMeeting([{ ...logged[0]!, changes: [{ npcId: 'abigail', log: { meetToday: { time: 1000, place: '你家' } } }] }], 'abigail'), undefined);
+  assert.equal(todayMeeting(undefined, [{ ...logged[0]!, changes: [{ npcId: 'abigail', log: { meetToday: { time: 1000, place: '你家' } } }] }], 'abigail'), undefined);
 });
 
 test('the NPC knows it agreed to go right away, until the Mod reports the appointment over', () => {

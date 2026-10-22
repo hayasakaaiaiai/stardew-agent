@@ -141,9 +141,13 @@ internal sealed partial class ModEntry
             npc.willDestroyObjectsUnderfoot = destroys;
         m.Destroys = null;
         m.Stage = 3;
-        // The way back was computed from this very spot and has been waiting in the queue.
-        ResumeSchedule(npc);
-        this.ReportMeeting(m, m.Leave);
+        // The way back was computed from this very spot and has been waiting in the queue; sent home early, it is not
+        // due yet, so the NPC heads back now (docs/npc-call-off.md).
+        if (m.CalledOff && Game1.timeOfDay < m.Leave)
+            this.RejoinSchedule(m, npc);
+        else
+            ResumeSchedule(npc);
+        this.ReportMeeting(m, Math.Min(Game1.timeOfDay, m.Leave));
     }
 
     /// <summary>A spouse is already home: the chores at the agreed time, if it is on the farm or in the farmhouse then.</summary>
