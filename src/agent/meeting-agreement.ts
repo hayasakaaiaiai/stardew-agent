@@ -182,8 +182,11 @@ function timedText(window: readonly TimedQuote[], places: Readonly<Record<string
       .join('，').replace(/今晚/g, '今天晚上').replace(/今早/g, '今天早上'));
 }
 
-/** A bare hour inherits an explicit period; only today's ambiguous clock may move to the evening after it has passed. */
-function agreedClocks(timed: readonly string[], agreed?: number): number[] {
+/**
+ * Concrete times in the lines (fixed in the Windows call-off acceptance): only a bare hour inherits the period said, or
+ * the same hour said outright; explicit morning and 24-hour clocks never move to the evening. `bare` settles the rest.
+ */
+function readClocks(timed: readonly string[], bare: (time: number) => number): number[] {
   const parsed = timed.flatMap(clockTimes);
   const periods = timed.flatMap(text => PERIODS.filter(([period]) => period.test(text)));
   return parsed.map(clock => {
@@ -193,7 +196,7 @@ function agreedClocks(timed: readonly string[], agreed?: number): number[] {
     const inPeriod = [clock.time % 1200, clock.time % 1200 + 1200].filter(time => periods.length
       && periods.every(([, , start, end]) => time >= start && time < end));
     if (inPeriod.length === 1) return inPeriod[0]!;
-    return agreed !== undefined && clock.time <= later(agreed, 10) && clock.time < 1200 ? clock.time + 1200 : clock.time;
+    return bare(clock.time);
   });
 }
 
@@ -202,20 +205,20 @@ const namesOtherDay = (text: string, today?: number) => DATE_WORDS.test(text) &&
 
 /** Today's appointment in one stretch: a concrete time or a period still ahead, or else right away. */
 function agreedIn(window: readonly TimedQuote[], after: readonly TimedQuote[], places: Readonly<Record<string, RegExp>>, today?: number): TodayAgreement | null {
-  // "周六下午两点海边见" is not today, unless today is Saturday (docs/npc-later-meetings.md).
+  if (after.some(quote => changesDay(quote.text))) return null;
   const agreement = agreedPlace(window, after, places, text => ANOTHER_DAY.test(text) || namesOtherDay(text, today));
   if (!agreement) return null;
   const { place } = agreement;
   const agreed = window.at(-1)!.time;
   const timed = timedText(window, places);
-  // Only a bare hour can inherit the agreed period. Explicit morning and 24-hour clocks never move to the evening.
-  const periods = timed.flatMap(text => PERIODS.filter(([period]) => period.test(text)));
-  const clocks = agreedClocks(timed, agreed);
+  // A bare morning hour already gone means the same hour tonight.
+  const clocks = readClocks(timed, time => time <= later(agreed, 10) && time < 1200 ? time + 1200 : time);
   if (clocks.length) {
     if (clocks.some(value => value !== clocks[0]) || clocks[0]! <= later(agreed, 10) || clocks[0]! < EARLIEST || clocks[0]! > LATEST) return null;
     return { time: clocks[0]!, place, soon: false };
   }
   // "上午还要上课，下午见" at ten: the period still ahead is the one meant.
+  const periods = timed.flatMap(text => PERIODS.filter(([period]) => period.test(text)));
   const ahead = periods.filter(([, time]) => time > later(agreed, 10));
   if (ahead.length) return ahead.some(([, time]) => time !== ahead[0]![1]) || ahead[0]![1] > LATEST ? null : { time: ahead[0]![1], place, soon: false };
   // Only a period under way, or none: right away. One already over is a slip, not an appointment.
@@ -268,7 +271,8 @@ function agreedLater(window: readonly TimedQuote[], after: readonly TimedQuote[]
   const agreement = agreedPlace(window, after, places, text => VAGUE.test(text), movedTo);
   if (!agreement) return null;
   const timed = timedText(window, places);
-  const clocks = agreedClocks(timed);
+  // A bare hour on a later day keeps the hour said when nothing tells morning from evening.
+  const clocks = readClocks(timed, time => time);
   const periods = timed.flatMap(text => PERIODS.filter(([period]) => period.test(text))).map(([, time]) => time);
   const found = clocks.length ? clocks : periods;
   if (!found.length || found.some(time => time !== found[0]) || found[0]! < EARLIEST || found[0]! > LATEST) return null;

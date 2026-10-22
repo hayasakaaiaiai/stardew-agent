@@ -26,8 +26,13 @@ export async function runMeetingFriendship(h: FriendshipHost) {
     const plan = meeting(state);
     if (met) await rpc('warp', { map: plan.spot.map, x: plan.spot.x + 4, y: plan.spot.y });
     else if (plan.spot.map === 'Town') await rpc('warp', { map: 'Town', x: 50, y: 68 });
-    await rpc('action-schedule-due', { time: plan.Depart }); await rpc('clock', { time: actual });
-    await rpc('action-route-wait', { time: plan.Depart, speed: 8 }); state = await rpc('wait', { ticks: 60 });
+    if (plan.Warp) {
+      await rpc('clock', { time: actual }); await rpc('action-meeting-wait', { speed: 8 });
+    } else {
+      await rpc('action-schedule-due', { time: plan.Depart }); await rpc('clock', { time: actual });
+      await rpc('action-route-wait', { time: plan.Depart, speed: 8 });
+    }
+    state = await rpc('wait', { ticks: 60 });
     check('friendship-real-arrival-and-player-presence', meeting(state).Arrived && meeting(state).ArrivedAt === actual && meeting(state).Met === met, state.actions);
     await rpc('clock', { time: meeting(state).Leave }); state = await rpc('wait', { ticks: 60 });
     check('friendship-native-meeting-reported', meeting(state).Reported, state.actions);
