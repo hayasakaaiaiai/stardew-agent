@@ -493,6 +493,9 @@ export class GameSave {
         && (SOCIAL_NPCS as readonly string[]).includes(npcId) && Object.hasOwn(MEET_PLACES, message.place);
       // Only one who came along can have been in the dungeon with the player.
       const trip = message.mine && message.met ? { ...message.mine } : undefined;
+      // Only one who met the player went about with them (docs/npc-outing.md).
+      const outing = message.outing && message.met
+        ? { ...message.outing, places: [...message.outing.places], fishNames: [...message.outing.fishNames] } : undefined;
       // One agreed today is remembered as agreed, and as late when it was (docs/npc-same-day-meetings.md); one sent home
       // says so, and one taken back before they met was remembered then (docs/npc-call-off.md).
       const known = fits ? await this.meeting(npcId) : undefined;
@@ -500,12 +503,12 @@ export class GameSave {
       const agreed = same?.sameDay ? { time: same.time, ...(same.soon ? { soon: same.soon } : {}),
         ...(!same.soon && message.arrived !== undefined && message.arrived > same.time ? { arrived: message.arrived } : {}) } : { time: message.time };
       const note = fits && !(same?.calledOff && !same.sentHome) ? meetingMemory({ ...agreed, place: message.place, met: message.met, left: message.left,
-        ...(same?.sentHome ? { calledOff: same.calledOff! } : {}), ...(message.helped ? { helped: message.helped } : {}), ...(trip ? { trip } : {}) })
+        ...(same?.sentHome ? { calledOff: same.calledOff! } : {}), ...(message.helped ? { helped: message.helped } : {}), ...(trip ? { trip } : {}), ...(outing ? { outing } : {}) })
         : undefined;
       // The Mod's change counts against the day's range like a conversation's (docs/npc-meeting-friendship.md).
       if (note) await this.scope!.agent(npcId).record({ seq: message.seq, gameTime: gameMinutes(message.date),
         log: { meeting: { place: message.place, time: message.time, ...(message.arrived !== undefined ? { arrived: message.arrived } : {}), left: message.left, met: message.met, ...(message.helped ? { helped: { ...message.helped } } : {}),
-          ...(trip ? { mine: trip } : {}) }, ...(message.friendship ? { friendship: message.friendship } : {}), bridgeReceipt: JSON.parse(canonical(receipt)) },
+          ...(trip ? { mine: trip } : {}), ...(outing ? { outing } : {}) }, ...(message.friendship ? { friendship: message.friendship } : {}), bridgeReceipt: JSON.parse(canonical(receipt)) },
         memories: [note] });
       this.addReceipt(receipt);
       await this.persist();

@@ -83,7 +83,7 @@ internal sealed partial class ModEntry
         foreach (NPC npc in Game1.currentLocation.characters)
         {
             if (!this.bubbles.TryGetValue(npc.Name, out List<(string Text, string Emote)>? lines)
-                || Vector2.Distance(npc.Tile, player) > BubbleRangeTiles || this.Approaching(npc.Name))
+                || Vector2.Distance(npc.Tile, player) > BubbleRangeTiles || this.Approaching(npc.Name) || this.OnOuting(npc.Name))
                 continue;
             if (this.bubbleShownAt.TryGetValue(npc.Name, out int shownAt)
                 && Utility.CalculateMinutesBetweenTimes(shownAt, Game1.timeOfDay) < BubbleGapMinutes)

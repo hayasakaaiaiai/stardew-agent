@@ -148,6 +148,7 @@ internal sealed partial class ModEntry
     {
         if (!e.IsLocalPlayer || !this.config.NpcMeetings)
             return;
+        this.OutingWarped(e);
         foreach (Meeting m in this.meetings.Values.Where(m => m.Dungeon && m.Applied && !m.Reported))
         {
             if ((m.Trip.Actor ?? Game1.getCharacterFromName(m.Npc)) is not NPC npc)
@@ -439,24 +440,27 @@ internal sealed partial class ModEntry
     /// From where it stands now to where the original schedule has it at this time, through vanilla's schedule pathing;
     /// the way back from the door at the end of the appointment is dropped, and so is anything queued underground.
     /// </summary>
-    private void RejoinSchedule(Meeting m, NPC npc)
+    private void RejoinSchedule(Meeting m, NPC npc, bool warpInSight = true)
     {
         if (npc.Schedule is not { } schedule)
             return;
         if (m.CalledOff)
         {
-            this.RestoreSchedule(m, npc);
+            this.RestoreSchedule(m, npc, warpInSight);
             return;
         }
         int now = Game1.timeOfDay;
         ScheduleStop target = now < m.Leave ? m.Back : OriginalStop(m, now);
         if (now < m.Leave)
             schedule.Remove(m.ReturnAt);
-        this.RouteTo(m, npc, target);
+        this.RouteTo(m, npc, target, warpInSight);
     }
 
-    /// <summary>From where it stands to a stop of its schedule through vanilla's schedule pathing, setting off now.</summary>
-    private void RouteTo(Meeting m, NPC npc, ScheduleStop target)
+    /// <summary>
+    /// From where it stands to a stop of its schedule through vanilla's schedule pathing, setting off now. With no way
+    /// there it is put there directly; unless `warpInSight`, only once the player cannot see it go (Outing.cs).
+    /// </summary>
+    private void RouteTo(Meeting m, NPC npc, ScheduleStop target, bool warpInSight = true)
     {
         int now = Game1.timeOfDay;
         try
@@ -472,6 +476,12 @@ internal sealed partial class ModEntry
             npc.lastAttemptedSchedule = now;
             npc.queuedSchedulePaths.Add(route);
             ResumeSchedule(npc);
+        }
+        catch (Exception ex) when (!warpInSight && npc.currentLocation == Game1.currentLocation)
+        {
+            this.Monitor.Log($"{m.Npc} 回不到原日程（{ex.Message}），等玩家看不见时直接回到 {target.Map}。", LogLevel.Info);
+            npc.queuedSchedulePaths.Clear();
+            m.Out.GoBack = target;
         }
         catch (Exception ex)
         {

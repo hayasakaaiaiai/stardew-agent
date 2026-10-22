@@ -112,6 +112,10 @@ internal sealed partial class ModEntry
         public int ReturnAt;
         public bool ReturnManually;
         public readonly Trip Trip = new();
+        /// <summary>Together after meeting somewhere ordinary (Outing.cs).</summary>
+        public readonly Outing Out = new();
+        /// <summary>Neither the farm nor a dungeon door: once met, the NPC goes about with the player (docs/npc-outing.md).</summary>
+        public bool Ordinary => !this.Farm && !this.Dungeon;
         /// <summary>A farm visit: 0 on the way, 1 on the farm, 2 walking out, 3 gone.</summary>
         public int Stage;
         /// <summary>Which of the place's spots, counting others meeting there today.</summary>
@@ -156,6 +160,7 @@ internal sealed partial class ModEntry
                 RestoreWarpSpeed(m, npc);
         this.ReleaseFarmVisitors();
         this.ReleaseCompanions();
+        this.ReleaseOutings();
         this.meetings.Clear();
     }
 
@@ -477,6 +482,12 @@ internal sealed partial class ModEntry
             m.Trip.Bye = ByeTicks;
             return;
         }
+        if (m.Out.Together)
+        {
+            // The same word, then off from wherever they are (Outing.cs).
+            this.OutingBye(m, npc, "那我先回去了。");
+            return;
+        }
         if (m.Farm && !m.Spouse && m.Stage >= 1)
         {
             if (m.Stage == 1)
@@ -510,7 +521,7 @@ internal sealed partial class ModEntry
     }
 
     /// <summary>The original stops back in place; from where it stands to where they have it now, if it has set off.</summary>
-    private void RestoreSchedule(Meeting m, NPC npc)
+    private void RestoreSchedule(Meeting m, NPC npc, bool warpInSight = true)
     {
         RestoreWarpSpeed(m, npc);
         if (npc.Schedule is not { } schedule)
@@ -520,7 +531,7 @@ internal sealed partial class ModEntry
         foreach ((int time, SchedulePathDescription stop) in m.Replaced)
             schedule[time] = stop;
         if (Game1.timeOfDay >= m.Depart)
-            this.RouteTo(m, npc, OriginalStop(m, Game1.timeOfDay));
+            this.RouteTo(m, npc, OriginalStop(m, Game1.timeOfDay), warpInSight);
     }
 
     /// <summary>Observe arrival once. Today's ninety-minute wait follows this clock, not a path-length estimate.</summary>
@@ -583,7 +594,7 @@ internal sealed partial class ModEntry
     {
         if (!this.meetings.TryGetValue(npc.Name, out Meeting? m) || !m.Applied || m.Reported)
             return false;
-        if (m.Trip.Following)
+        if (m.Trip.Following || m.Out.Together)
             return true;
         if (Game1.timeOfDay < m.Depart || Game1.timeOfDay > m.Leave)
             return false;
@@ -621,9 +632,18 @@ internal sealed partial class ModEntry
             this.WatchSpouseCompanion(m, npc);
             return;
         }
+        // Together, or was: the outing sees it out (Outing.cs).
+        if (m.Out.Started)
+            return;
         if (!m.Arrived && npc.controller is null && !npc.isMoving() && this.AtMeeting(npc))
             this.RecordArrival(m, npc);
         this.GreetAtMeeting(m, npc);
+        if (m.Met && m.Arrived && m.Ordinary && this.config.MeetingsGoTogether && Game1.timeOfDay < m.Leave
+            && npc.currentLocation == Game1.currentLocation && Context.IsPlayerFree && this.talk?.Npc != npc)
+        {
+            this.StartOuting(m, npc);
+            return;
+        }
         if (Game1.timeOfDay >= m.Leave)
         {
             if (m.ReturnManually)
@@ -685,6 +705,8 @@ internal sealed partial class ModEntry
             fields["helped"] = HelpedFields(done);
         if (m.Trip.Joined)
             fields["mine"] = m.Trip.Fields(Fighters.Contains(m.Npc));
+        if (m.Out.Started)
+            fields["outing"] = m.Out.Fields();
         // Kept, it warms the NPC like a kind word; stood up, it stings like a slight (docs/npc-meeting-friendship.md).
         // Spouses and roommates never gain or lose appointment friendship, even when the player comes.
         // Called off beforehand, the NPC itself late or chores done on the farm: nobody was stood up.

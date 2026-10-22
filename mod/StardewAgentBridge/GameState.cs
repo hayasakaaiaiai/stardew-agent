@@ -82,7 +82,7 @@ internal static class GameState
     }
 
     /// <summary>The place as the game shows it, within the protocol's 50 characters; the map name if it has none.</summary>
-    private static string PlaceName(string map)
+    internal static string PlaceName(string map)
     {
         string? shown = Game1.getLocationFromName(map)?.DisplayName;
         string name = string.IsNullOrWhiteSpace(shown) ? map : shown;

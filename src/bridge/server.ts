@@ -377,7 +377,8 @@ export class BridgeServer {
       }
       const schedule = restOfDay(message.schedule ?? [], message.world.date.time);
       // Today's, or else the nearest one ahead (docs/npc-later-meetings.md).
-      const meeting = meetingLine(await save.meeting(npcId), message.world.date.time, message.atMeeting === true, message.helped, message.mine)
+      const meeting = meetingLine(await save.meeting(npcId), message.world.date.time, message.atMeeting === true, message.helped, message.mine,
+        message.outing)
         ?? upcomingLine(await save.upcoming(npcId), save.day);
       const talk: OpenTalk = { npcId, inPersonGifts: message.inPersonGifts !== false,
         standing: { hearts: message.hearts, relation: message.relation, seenEvents: new Set(message.seenEvents) },

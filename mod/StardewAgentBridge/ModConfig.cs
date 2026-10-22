@@ -58,4 +58,10 @@ internal sealed class ModConfig
     /// as conversations (docs/npc-meeting-friendship.md).
     /// </summary>
     public bool MeetingsChangeFriendship { get; set; } = true;
+
+    /// <summary>
+    /// Whether an NPC met somewhere ordinary stays with the player until it leaves: it follows them, stands beside them
+    /// when they stop or fish, and shows an emote at what they do (docs/npc-outing.md). Off, it waits at the place.
+    /// </summary>
+    public bool MeetingsGoTogether { get; set; } = true;
 }
