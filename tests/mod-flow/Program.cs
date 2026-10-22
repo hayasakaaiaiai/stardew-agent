@@ -594,25 +594,6 @@ Test("a called-off appointment is marked for undoing, never added, and one not y
     Check((bool)Get(leah, "Failed")! && (bool)Get(leah, "Reported")! && (bool)Get(leah, "CalledOff")!, "One never applied could still be applied or reported.");
 });
 
-Test("an appointment moves friendship by the backend's tiers: one step up when kept, one down when stood up", () =>
-{
-    (int, int) Step(int hearts, string relation) => ((int, int))modType.GetMethod("FriendshipStep", BindingFlags.Static | BindingFlags.NonPublic)!
-        .Invoke(null, new object[] { hearts, relation })!;
-    // src/agent/friendship.ts STEPS: gain and loss per mood step.
-    Check(Step(0, "stranger") == (5, 20) && Step(1, "friend") == (5, 20) && Step(2, "friend") == (10, 15) && Step(4, "friend") == (10, 15)
-        && Step(5, "friend") == (15, 10) && Step(7, "friend") == (15, 10) && Step(8, "friend") == (20, 5) && Step(14, "friend") == (20, 5),
-        "The tiers differ from the backend's (src/agent/friendship.ts STEPS).");
-    Check(Step(3, "dating") == (20, 5) && Step(0, "married") == (20, 5) && Step(2, "roommate") == (20, 5) && Step(6, "engaged") == (20, 5),
-        "A close relation is not on the top tier.");
-});
-
-Test("one that walking cannot get there in time may appear there half an hour early, never in the past", () =>
-{
-    int Warp(int time, int now) => (int)modType.GetMethod("WarpDeparture", BindingFlags.Static | BindingFlags.NonPublic)!.Invoke(null, new object[] { time, now })!;
-    Check(Warp(1400, 600) == 1330, "Not half an hour before the agreed time (docs/npc-meeting-warp.md).");
-    Check(Warp(1000, 1030) == 1040 && Warp(1500, 1450) == 1500, "Right away, or too late to wait: not the next tick.");
-});
-
 Test("today's wait follows observed arrival, while tomorrow's keeps the agreed deadline and neither passes 22:00", () =>
 {
     Type meetingType = modType.GetNestedType("Meeting", BindingFlags.NonPublic)!;
@@ -626,6 +607,40 @@ Test("today's wait follows observed arrival, while tomorrow's keeps the agreed d
     Check(Leave(today) == 1930, "A late arrival lost part of its wait.");
     Set(today, "ArrivedAt", 2150);
     Check(Leave(today) == 2200, "An observed arrival kept the NPC after 22:00.");
+});
+
+Test("an appointment moves friendship by the backend's tiers: one step up when kept, one down when stood up", () =>
+{
+    (int, int) Step(int hearts, string relation) => ((int, int))modType.GetMethod("FriendshipStep", BindingFlags.Static | BindingFlags.NonPublic)!
+        .Invoke(null, new object[] { hearts, relation })!;
+    // src/agent/friendship.ts STEPS: gain and loss per mood step.
+    Check(Step(0, "stranger") == (5, 20) && Step(1, "friend") == (5, 20) && Step(2, "friend") == (10, 15) && Step(4, "friend") == (10, 15)
+        && Step(5, "friend") == (15, 10) && Step(7, "friend") == (15, 10) && Step(8, "friend") == (20, 5) && Step(14, "friend") == (20, 5),
+        "The tiers differ from the backend's (src/agent/friendship.ts STEPS).");
+    Check(Step(3, "dating") == (20, 5) && Step(0, "married") == (20, 5) && Step(2, "roommate") == (20, 5) && Step(6, "engaged") == (20, 5),
+        "A close relation is not on the top tier.");
+});
+
+Test("only an observed late arrival excuses a same-day no-show, independent of the estimated clock", () =>
+{
+    Type meetingType = modType.GetNestedType("Meeting", BindingFlags.NonPublic)!;
+    object m = Activator.CreateInstance(meetingType, "Abigail", 1500, "海滩", true)!;
+    bool Late() => (bool)meetingType.GetProperty("ComesLate")!.GetValue(m)!;
+    Set(m, "ReceivedAt", 1000);
+    Check(!Late(), "A route estimate counted as an observed late arrival.");
+    meetingType.GetProperty("Time")!.SetValue(m, 1740); Set(m, "ArrivedAt", 1500);
+    Check(!Late(), "An on-time arrival inherited its late estimate.");
+    meetingType.GetProperty("Time")!.SetValue(m, 1500); Set(m, "ArrivedAt", 1600);
+    Check(Late(), "An actually late arrival inherited its on-time estimate.");
+    Set(m, "ReceivedAt", 1500);
+    Check(!Late(), "An immediate invitation was treated as a missed future clock.");
+});
+
+Test("one that walking cannot get there in time may appear there half an hour early, never in the past", () =>
+{
+    int Warp(int time, int now) => (int)modType.GetMethod("WarpDeparture", BindingFlags.Static | BindingFlags.NonPublic)!.Invoke(null, new object[] { time, now })!;
+    Check(Warp(1400, 600) == 1330, "Not half an hour before the agreed time (docs/npc-meeting-warp.md).");
+    Check(Warp(1000, 1030) == 1040 && Warp(1500, 1450) == 1500, "Right away, or too late to wait: not the next tick.");
 });
 
 Test("farm chores are worded like the backend, and the farm is a place an appointment can be at", () =>

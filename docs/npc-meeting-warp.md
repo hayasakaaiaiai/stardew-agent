@@ -44,6 +44,7 @@ Windows 验收还发现，晚到时记忆和等待时间都容易算错（已由
 - C# 流程检查新增 1 项：`WarpDeparture` 是约定前 30 分钟、最早下一个十分钟。
 - 合并后 Mac 上 252/252（连跑两次）、类型检查、构建、Mod Release 0 警告 0 错误；C# 流程检查共 45 项（Windows 的 43 项加赴约好感分档、传送时刻各 1 项）能编译，要在 Windows 跑。
 - 游戏里的传送要在 Windows 上测。
+- 之后合并 Windows 第二轮 `codex/meetings-animals-windows-tests`（`b1c34f4`）：它从加传送之前的代码出发，赴约好感里“实际迟到”改成 `Meeting.ComesLate` 属性、配偶整条好感分支排除，和这里的 `Warp`/`Warped` 并存；合并后 Mac 258/258、类型检查、构建、Mod Release 0 警告 0 错误，C# 流程检查 46 项能编译。
 
 ## 6. Windows 游戏内测试清单（用户来做）
 
@@ -55,7 +56,12 @@ Windows 验收还发现，晚到时记忆和等待时间都容易算错（已由
 6. 已经传送过去等着的约定，你在她到之前说“今天不去了”：她回原日程该在的地方，原站照常（Windows 的取消归程）。
 7. 赴约好感：传送到了、你来了加分，你没来扣分。
 
-Windows 现有脚本里有两处断言要跟着改：`same-day-late-fixed-time-reschedules-native-route` 等“14:30 在沙漠约三点海边”一组原来期望推迟到达时间、真实走过去，现在应是传送准时到；`same-day-too-late-native-client-rejects-instead-of-walking`（20:30 说“现在去矿洞”）原来期望去不了，现在 20:40 可以传送过去。
+Windows 现有脚本里有两组断言要跟着改（`tools/game-same-day-meetings.ts`）：
+
+- “14:30 在沙漠约三点海边”：`same-day-late-fixed-time-reschedules-native-route` 原来期望 `Time > 1500`、走原版路线，`same-day-late-fixed-time-reaches-native-beach` 原来等路线走完；现在 `Time` 仍是 1500、`Warp` 为真、`Depart` 是 14:40，脚本把玩家传到海滩旁边，所以她从海滩的出入口进来再走到等的位置。
+- “20:30 说现在去矿洞”：`same-day-too-late-native-client-rejects-instead-of-walking` 和 `same-day-too-late-uses-native-failure-hud` 原来期望去不了、提示“今天去不了矿洞了”；现在 20:40 可以传送过去，提示“和阿比盖尔约好马上在矿洞见”。
+
+`tools/game-meeting-friendship.ts` 的 `actually-on-time-despite-late-estimate`（沙漠 14:30 约三点海边、玩家不来）现在也走传送，预期 −5 不变，但到达时刻由传送决定，要重跑确认。
 
 ## 7. 这次不做
 

@@ -115,9 +115,9 @@ export function namedDays(text: string, today: number): number[] {
     else if (!match[1] && ahead < 0) ahead += 7;
     days.push(today + ahead);
   }
-  for (const match of text.matchAll(/([\d一二三四五六七八九十]{1,3})号/g)) {
-    const date = number(match[1]!);
-    days.push(date > seasonDay && date <= 28 ? today + date - seasonDay : 0);
+  for (const match of text.matchAll(/(?:(下个?月)\s*)?([\d一二三四五六七八九十]{1,3})号/g)) {
+    const date = number(match[2]!);
+    days.push(date >= 1 && date <= 28 && (match[1] || date >= seasonDay) ? today - seasonDay + date + (match[1] ? 28 : 0) : 0);
   }
   return days;
 }
@@ -182,11 +182,8 @@ function timedText(window: readonly TimedQuote[], places: Readonly<Record<string
       .join('，').replace(/今晚/g, '今天晚上').replace(/今早/g, '今天早上'));
 }
 
-/**
- * Concrete times in the lines (fixed in the Windows call-off acceptance): only a bare hour inherits the period said, or
- * the same hour said outright; explicit morning and 24-hour clocks never move to the evening. `bare` settles the rest.
- */
-function readClocks(timed: readonly string[], bare: (time: number) => number): number[] {
+/** A bare hour inherits an explicit period; only today's ambiguous clock may move to the evening after it has passed. */
+function agreedClocks(timed: readonly string[], agreed?: number): number[] {
   const parsed = timed.flatMap(clockTimes);
   const periods = timed.flatMap(text => PERIODS.filter(([period]) => period.test(text)));
   return parsed.map(clock => {
@@ -196,7 +193,7 @@ function readClocks(timed: readonly string[], bare: (time: number) => number): n
     const inPeriod = [clock.time % 1200, clock.time % 1200 + 1200].filter(time => periods.length
       && periods.every(([, , start, end]) => time >= start && time < end));
     if (inPeriod.length === 1) return inPeriod[0]!;
-    return bare(clock.time);
+    return agreed !== undefined && clock.time <= later(agreed, 10) && clock.time < 1200 ? clock.time + 1200 : clock.time;
   });
 }
 
@@ -211,14 +208,14 @@ function agreedIn(window: readonly TimedQuote[], after: readonly TimedQuote[], p
   const { place } = agreement;
   const agreed = window.at(-1)!.time;
   const timed = timedText(window, places);
-  // A bare morning hour already gone means the same hour tonight.
-  const clocks = readClocks(timed, time => time <= later(agreed, 10) && time < 1200 ? time + 1200 : time);
+  // Only a bare hour can inherit the agreed period. Explicit morning and 24-hour clocks never move to the evening.
+  const periods = timed.flatMap(text => PERIODS.filter(([period]) => period.test(text)));
+  const clocks = agreedClocks(timed, agreed);
   if (clocks.length) {
     if (clocks.some(value => value !== clocks[0]) || clocks[0]! <= later(agreed, 10) || clocks[0]! < EARLIEST || clocks[0]! > LATEST) return null;
     return { time: clocks[0]!, place, soon: false };
   }
   // "上午还要上课，下午见" at ten: the period still ahead is the one meant.
-  const periods = timed.flatMap(text => PERIODS.filter(([period]) => period.test(text)));
   const ahead = periods.filter(([, time]) => time > later(agreed, 10));
   if (ahead.length) return ahead.some(([, time]) => time !== ahead[0]![1]) || ahead[0]![1] > LATEST ? null : { time: ahead[0]![1], place, soon: false };
   // Only a period under way, or none: right away. One already over is a slip, not an appointment.
@@ -271,8 +268,7 @@ function agreedLater(window: readonly TimedQuote[], after: readonly TimedQuote[]
   const agreement = agreedPlace(window, after, places, text => VAGUE.test(text), movedTo);
   if (!agreement) return null;
   const timed = timedText(window, places);
-  // A bare hour on a later day keeps the hour said when nothing tells morning from evening.
-  const clocks = readClocks(timed, time => time);
+  const clocks = agreedClocks(timed);
   const periods = timed.flatMap(text => PERIODS.filter(([period]) => period.test(text))).map(([, time]) => time);
   const found = clocks.length ? clocks : periods;
   if (!found.length || found.some(time => time !== found[0]) || found[0]! < EARLIEST || found[0]! > LATEST) return null;
@@ -315,10 +311,10 @@ function offLine(quote: TimedQuote, words: RegExp): boolean {
 }
 
 /** The last line, among those `about` admits, that calls it off and was not taken up again afterwards, and who said it. */
-function lastCallOff(lines: readonly TimedQuote[], words: RegExp, about: (text: string) => boolean,
+function lastCallOff(lines: readonly TimedQuote[], words: RegExp, about: (quote: TimedQuote) => boolean,
   again: (after: readonly TimedQuote[]) => boolean): CallOff | null {
   for (let i = lines.length - 1; i >= 0; i--) {
-    if (!about(lines[i]!.text) || !offLine(lines[i]!, words)) continue;
+    if (!about(lines[i]!) || !offLine(lines[i]!, words)) continue;
     const after = lines.slice(i + 1);
     const onAgain = after.findIndex(quote => quote.speaker === '玩家' && ON_AGAIN.test(quote.text));
     if (again(after) || onAgain >= 0 && after.slice(onAgain + 1).some(quote => quote.speaker === 'NPC' && agrees(quote))) return null;
@@ -335,11 +331,13 @@ function lastCallOff(lines: readonly TimedQuote[], words: RegExp, about: (text: 
  * "周六不去海边了") leave today's alone.
  */
 export function quotedCallOff(lines: readonly TimedQuote[], words: RegExp, places: Readonly<Record<string, RegExp>>, today?: number): CallOff | null {
-  return lastCallOff(lines, words, text => !((TOMORROW.test(text) || namesOtherDay(text, today)) && !/今天/.test(text)),
+  const otherDay = (text: string) => TOMORROW.test(text) || namesOtherDay(text, today);
+  return lastCallOff(lines, words, quote => !otherDay(quote.text) || quote.text.split(/[，,。！!；;]+/).some(clause => /今天/.test(clause)
+    && !otherDay(clause) && offLine({ ...quote, text: clause }, words)),
     after => quotedToday(after, places, today) !== null);
 }
 
 /** Whether the conversation took back the appointment on later `day` at `words`; the line must name that day (docs/npc-later-meetings.md). */
 export function quotedLaterCallOff(lines: readonly TimedQuote[], words: RegExp, places: Readonly<Record<string, RegExp>>, day: number, today: number): CallOff | null {
-  return lastCallOff(lines, words, text => namedDays(text, today).includes(day), after => quotedLater(after, places, today)?.day === day);
+  return lastCallOff(lines, words, quote => namedDays(quote.text, today).includes(day), after => quotedLater(after, places, today)?.day === day);
 }

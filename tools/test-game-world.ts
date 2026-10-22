@@ -21,6 +21,9 @@ import { runFarmChores, runFarmVisits, runFarmSave, type FarmState } from './gam
 import { runMineCore, runMineRescue, runMineEdges, runMineWorlds, runMineSave, type MineState } from './game-mine-companion.ts';
 import { runSameDay, runSameDayEdges } from './game-same-day-meetings.ts';
 import { runCallOff, runArrivalProbe } from './game-call-off.ts';
+import { runFarmAnimals } from './game-farm-animals.ts';
+import { runMeetingFriendship, runFriendshipBoundaries, runSpouseFriendship } from './game-meeting-friendship.ts';
+import { runLaterMeetings } from './game-later-meetings.ts';
 
 interface Config { RequestId: string; UniqueId: string; SaveFolder: string; SaveDirectory: string; RunDirectory: string; GamePath: string; BackendUrl: string; World: boolean; Offline: boolean; Section: string }
 interface Npc { id: string; name: string; location: string; x: number; y: number; ignoreScheduleToday: boolean; controller: boolean; temporary: boolean; queued: number; destroys: boolean; schedule: ScheduleStop[] | null }
@@ -35,14 +38,14 @@ const ROOT = resolve(import.meta.dirname, '..');
 const configPath = resolve(process.argv[2]!);
 const config = JSON.parse((await readFile(configPath, 'utf8')).replace(/^\uFEFF/, '')) as Config;
 assert.equal(config.World, true); assert.equal(config.SaveFolder, `MemoryTest_${config.UniqueId}`); assert.notEqual(config.UniqueId, '436774213');
-assert.ok(['all', 'schedules', 'backstage', 'festivals', 'content', 'fair-return', 'actions', 'actions-edge', 'actions-timing', 'actions-checks', 'actions-places', 'actions-incoming', 'farm-help', 'farm-chores', 'farm-visits', 'farm-save', 'mine', 'mine-core', 'mine-rescue', 'mine-edges', 'mine-worlds', 'mine-dungeons', 'mine-save', 'same-day', 'same-day-core', 'same-day-edges', 'call-off', 'call-off-arrival', 'call-off-arrival-save'].includes(config.Section), 'Unknown native world test section.');
+assert.ok(['all', 'schedules', 'backstage', 'festivals', 'content', 'fair-return', 'actions', 'actions-edge', 'actions-timing', 'actions-checks', 'actions-places', 'actions-incoming', 'farm-help', 'farm-chores', 'farm-visits', 'farm-save', 'mine', 'mine-core', 'mine-rescue', 'mine-edges', 'mine-worlds', 'mine-dungeons', 'mine-save', 'same-day', 'same-day-core', 'same-day-edges', 'call-off', 'call-off-arrival', 'call-off-arrival-save', 'farm-animals', 'meeting-spouses', 'meeting-friendship', 'later-meetings', 'friendship-boundaries'].includes(config.Section), 'Unknown native world test section.');
 assert.equal(resolve(config.SaveDirectory), resolve(process.env.APPDATA!, 'StardewValley/Saves', config.SaveFolder));
 assert.ok(resolve(config.RunDirectory).startsWith(resolve(ROOT, '.runtime') + '\\'));
 const directory = config.RunDirectory;
 await mkdir(join(directory, 'sources'));
-for (const file of ['tools/test-game-world.ts', 'tools/game-actions.ts', 'tools/game-farm-help.ts', 'tools/game-mine-companion.ts', 'tools/game-same-day-meetings.ts', 'tools/game-call-off.ts', 'mod/StardewAgentBridge/MineCompanion.cs', 'mod/StardewAgentBridge/MineTest.cs', 'mod/StardewAgentBridge/FarmHelp.cs', 'mod/StardewAgentBridge/FarmVisits.cs', 'mod/StardewAgentBridge/FarmTest.cs', 'tools/prepare-world-fixture.ps1', 'src/agent/schedule.ts', 'src/agent/dialogue.ts', 'src/agent/dialogue-facts.ts',
+for (const file of ['tools/test-game-world.ts', 'tools/game-actions.ts', 'tools/game-farm-help.ts', 'tools/game-mine-companion.ts', 'tools/game-same-day-meetings.ts', 'tools/game-call-off.ts', 'tools/game-farm-animals.ts', 'tools/game-meeting-friendship.ts', 'tools/game-later-meetings.ts', 'mod/StardewAgentBridge/AnimalTest.cs', 'mod/StardewAgentBridge/MineCompanion.cs', 'mod/StardewAgentBridge/MineTest.cs', 'mod/StardewAgentBridge/FarmHelp.cs', 'mod/StardewAgentBridge/FarmVisits.cs', 'mod/StardewAgentBridge/FarmTest.cs', 'tools/prepare-world-fixture.ps1', 'src/agent/schedule.ts', 'src/agent/dialogue.ts', 'src/agent/dialogue-facts.ts',
   'src/agent/approach.ts', 'src/agent/meetings.ts', 'src/agent/meeting-agreement.ts', 'src/agent/nightly.ts', 'mod/StardewAgentBridge/ActionTest.cs', 'mod/StardewAgentBridge/Approach.cs', 'mod/StardewAgentBridge/Meetings.cs',
-  'mod/StardewAgentBridge/SaveSync.cs', 'mod/StardewAgentBridge/ModEntry.cs',
+  'mod/StardewAgentBridge/SaveSync.cs', 'mod/StardewAgentBridge/ModEntry.cs', 'mod/StardewAgentBridge/Friendship.cs',
   'src/bridge/server.ts', 'src/bridge/protocol.ts', 'src/bridge/memory.ts', 'mod/StardewAgentBridge/ModConfig.cs', 'mod/StardewAgentBridge/GameState.cs',
   'mod/StardewAgentBridge/WorldTest.cs', 'mod/StardewAgentBridge/MemoryTest.cs', 'mod/StardewAgentBridge/Festivals.cs'])
   await copyFile(join(ROOT, file), join(directory, 'sources', file.split('/').at(-1)!));
@@ -80,6 +83,7 @@ let actionSeedNight = false;
 let actionSeedFarm = false;
 let actionSeedMine = '';
 let actionTodayReply = '';
+let actionTodayMood = 0;
 const seedNight = (enabled: boolean, farm = false, mine = '') => { actionSeedNight = enabled; actionSeedFarm = farm; actionSeedMine = mine; };
 const fixed = (content: unknown): Completion => ({ content: JSON.stringify(content), reasoning: '', finishReason: 'stop',
   usage: { inputTokens: 120, cachedInputTokens: 60, outputTokens: 20, reasoningTokens: null }, timing: { firstReasoningMs: null, firstContentMs: 1, totalMs: 1 } });
@@ -102,7 +106,7 @@ function model(kind: Kind): ChatModel {
         : { reply: actionTodayReply || (actionSeedNight && actionSeedMine ? `好啊，明天上午一起探险，${actionSeedMine}门口见。`
           : actionSeedNight && actionSeedFarm ? '好啊，明天上午我来农场帮你浇水。'
           : actionSeedNight && messages.at(-1)!.content.includes('明天下午') ? '好啊，那就明天下午14:00在海滩见。'
-          : remembered || (schedule ? `我的安排是：${schedule}` : '我还没有确定安排。')), emotion: 'neutral', options: ['继续聊', '换个话题', '再见'], remember: [], mood: 0, end: false });
+          : remembered || (schedule ? `我的安排是：${schedule}` : '我还没有确定安排。')), emotion: 'neutral', options: ['继续聊', '换个话题', '再见'], remember: [], mood: actionTodayMood, end: false });
       handlers.onContent?.(result.content);
     }
     const call = { kind, real, messages, content: result.content, usage: result.usage, timing: result.timing, thinking: real ? (kind === 'background' ? paidBackstage! : paid!).config.thinking : null };
@@ -464,13 +468,19 @@ try {
     if (['all', 'mine', 'mine-worlds', 'mine-dungeons'].includes(config.Section)) await runMineWorlds(host, config.Section !== 'mine-dungeons');
     if (['all', 'mine', 'mine-save'].includes(config.Section)) await runMineSave(host);
   }
-  if (['same-day', 'same-day-core', 'same-day-edges', 'call-off', 'call-off-arrival', 'call-off-arrival-save'].includes(config.Section)) {
+  if (['same-day', 'same-day-core', 'same-day-edges', 'call-off', 'call-off-arrival', 'call-off-arrival-save', 'farm-animals', 'meeting-spouses', 'meeting-friendship', 'later-meetings', 'friendship-boundaries'].includes(config.Section)) {
     const host = { rpc, chapter, check, say, close, packets: modPackets, wireCount: () => packets.length,
     latestSystem: () => latestDialogue().messages[0]!.content, seedNight, meetingEntries,
     setReply: (text: string) => { actionTodayReply = text; },
+    setMood: (mood: number) => { actionTodayMood = mood; },
     dayMeetings: (from = 0) => packets.slice(from).filter(row => row.direction === 'backend' && row.packet.type === 'day.meetings').map(row => row.packet),
     restart: async () => { await server.close(); server = await BridgeServer.start(options); await rpc('wait', { ticks: 120 }); } };
-    if (config.Section.startsWith('call-off-arrival')) await runArrivalProbe(host, config.Section === 'call-off-arrival-save');
+    if (config.Section === 'meeting-spouses') await runSpouseFriendship(host);
+    else if (config.Section === 'friendship-boundaries') await runFriendshipBoundaries(host);
+    else if (config.Section === 'later-meetings') await runLaterMeetings(host);
+    else if (config.Section === 'meeting-friendship') await runMeetingFriendship(host);
+    else if (config.Section === 'farm-animals') await runFarmAnimals(host);
+    else if (config.Section.startsWith('call-off-arrival')) await runArrivalProbe(host, config.Section === 'call-off-arrival-save');
     else if (config.Section === 'call-off') await runCallOff(host);
     else {
       if (config.Section !== 'same-day-edges') await runSameDay(host);

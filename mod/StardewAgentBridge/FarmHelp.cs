@@ -163,11 +163,18 @@ internal static class FarmHelp
         {
             if (!obj.IsSpawnedObject || !wanted(obj))
                 continue;
-            if (!HasRoom(farm, 1) || Store(farm, obj.getOne()) is not null)
+            Item copy = obj.getOne();
+            copy.Stack = obj.Stack;
+            Item? left = Store(farm, copy);
+            int stored = obj.Stack - (left?.Stack ?? 0);
+            if (left is null)
+                location.objects.Remove(tile);
+            else
+                obj.Stack = left.Stack;
+            Game1.stats.ItemsForaged += (uint)stored;
+            count += stored;
+            if (left is not null)
                 break;
-            location.objects.Remove(tile);
-            Game1.stats.ItemsForaged++;
-            count++;
         }
         return count;
     }

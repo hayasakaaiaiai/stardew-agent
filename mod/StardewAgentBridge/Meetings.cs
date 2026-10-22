@@ -64,7 +64,9 @@ internal sealed partial class ModEntry
         /// <summary>The time as agreed, before any putting off.</summary>
         public int Agreed { get; }
         /// <summary>When the Mod got it; one agreed today at or before this is "right away".</summary>
-        public int Received;
+        public int ReceivedAt;
+        /// <summary>Only observed lateness excuses a no-show; the route estimate can be early or late.</summary>
+        public bool ComesLate => this.SameDay && this.Agreed > this.ReceivedAt && this.ArrivedAt > this.Agreed;
         /// <summary>
         /// Walking cannot get there in time, so it appears there once the player cannot see it go
         /// (docs/npc-meeting-warp.md); `Warped` once it has.
@@ -231,7 +233,7 @@ internal sealed partial class ModEntry
 
     private void ApplyMeeting(Meeting m)
     {
-        m.Received = Game1.timeOfDay;
+        m.ReceivedAt = Game1.timeOfDay;
         NPC? npc = Game1.getCharacterFromName(m.Npc);
         string relation = npc is null ? "stranger" : GameState.Relation(npc);
         bool spouse = relation is "married" or "roommate";
@@ -286,7 +288,7 @@ internal sealed partial class ModEntry
         }
         m.Applied = true;
         if (m.SameDay && npc is not null)
-            Game1.addHUDMessage(new HUDMessage(m.Agreed <= m.Received ? $"和{npc.displayName}约好马上在{m.Place}见"
+            Game1.addHUDMessage(new HUDMessage(m.Agreed <= m.ReceivedAt ? $"和{npc.displayName}约好马上在{m.Place}见"
                 : $"和{npc.displayName}约好 {m.Time / 100}:{m.Time % 100:00} 在{m.Place}见", HUDMessage.newQuest_type));
     }
 
@@ -643,11 +645,10 @@ internal sealed partial class ModEntry
         if (m.Trip.Joined)
             fields["mine"] = m.Trip.Fields(Fighters.Contains(m.Npc));
         // Kept, it warms the NPC like a kind word; stood up, it stings like a slight (docs/npc-meeting-friendship.md).
-        // Called off beforehand, the NPC itself got there after the time agreed, a spouse at home or chores done on the
-        // farm: nobody was stood up.
-        bool cameLate = m.SameDay && m.Agreed > m.Received && m.ArrivedAt > m.Agreed;
-        if (this.config.MeetingsChangeFriendship && (m.Trip.Actor ?? Game1.getCharacterFromName(m.Npc)) is NPC npc
-            && (m.Met || !m.CalledOff && !cameLate && !m.Spouse && m.Helped is null))
+        // Spouses and roommates never gain or lose appointment friendship, even when the player comes.
+        // Called off beforehand, the NPC itself late or chores done on the farm: nobody was stood up.
+        if (this.config.MeetingsChangeFriendship && !m.Spouse && (m.Trip.Actor ?? Game1.getCharacterFromName(m.Npc)) is NPC npc
+            && (m.Met || !m.CalledOff && !m.ComesLate && m.Helped is null))
         {
             (int gain, int loss) = FriendshipStep(GameState.Hearts(npc), GameState.Relation(npc));
             int changed = this.ChangeFriendshipToday(npc, m.Met ? gain : -loss, m.Met ? $"和{npc.displayName}赴约" : $"{npc.displayName}在{m.Place}没等到农场主");

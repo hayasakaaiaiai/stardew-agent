@@ -149,3 +149,34 @@ test('the nightly model cannot retire a note that keeps an appointment', async (
   const [change] = await nightlyConsolidator({ roster, model })(input, new AbortController().signal);
   assert.deepEqual(change!.retireMemoryIds, ['plain']);
 });
+
+test('future appointments share the per-day limit and a cancellation frees a slot without replacing the NPC’s first agreement', { timeout: 20000 }, async t => {
+  const h = await harness(t);
+  const original = h.fake.model.chat.bind(h.fake.model);
+  h.fake.model.chat = async (...args: Parameters<typeof original>) => {
+    const result = await original(...args);
+    return { ...result, content: JSON.stringify({ ...JSON.parse(result.content), reply: args[0].at(-1)!.content.startsWith('后天不去')
+      ? '好吧，那就不去了。' : '好啊，说定了。' }) };
+  };
+  const wire = await connect(await h.start());
+  async function converse(npc: string, text: string) {
+    wire.send({ ...openTalk(1, npc), world: { ...WORLD, date: { ...WORLD.date, day: 1, time: 1000 } } }); await wire.until('talk.reply', wire.inbox.length);
+    wire.send({ type: 'talk.say', npc, text, date: { ...WORLD.date, day: 1, time: 1000 } }); await wire.until('talk.reply', wire.inbox.length);
+    wire.send({ type: 'talk.close', npc }); await wire.until('ack', wire.inbox.length);
+  }
+  await converse('Abigail', '后天下午两点海边见？');
+  await converse('Abigail', '后天上午十点矿洞见？');
+  await converse('Sam', '后天下午三点镇广场见？');
+  await converse('Leah', '后天晚上六点星之果实餐吧见？');
+  await converse('Penny', '后天下午四点博物馆见？');
+  assert.ok(!h.logs.some(line => line.startsWith('潘妮记下了')), 'the fourth appointment exceeds the daily limit');
+  assert.ok(!h.logs.some(line => line.startsWith('阿比盖尔记下了') && line.includes('矿洞')), 'the first agreement must stay');
+  await converse('Sam', '后天不去镇广场了。');
+  await converse('Penny', '后天下午四点博物馆见？');
+  assert.ok(h.logs.some(line => line.startsWith('潘妮记下了')), 'the cancelled appointment frees its day’s slot');
+  const first = await sleep(wire, 'A', 1), from = wire.inbox.length;
+  await sleep(wire, 'B', 2, first.commitId);
+  const expected = [{ npc: 'abigail', time: 1400, place: '海滩' }, { npc: 'leah', time: 1800, place: '星之果实餐吧' }, { npc: 'penny', time: 1600, place: '博物馆' }];
+  assert.deepEqual(await meetingsSent(wire, from, expected), expected);
+  await wire.close();
+});

@@ -44,9 +44,34 @@ internal sealed partial class ModEntry
         int after = Math.Clamp(before + points, FriendshipDayMin, FriendshipDayMax);
         if (after == before)
             return 0;
+        if (!Game1.player.friendshipData.TryGetValue(npc.Name, out Friendship friendship))
+            return 0;
+        int previousPoints = friendship.Points;
+        int requested = after - before;
+        if (requested > 0 && Game1.player.stats.Get("Book_Friendship") != 0 && !npc.Equals(Game1.player.getSpouse()))
+        {
+            // Never let the book bonus cross the daily cap before vanilla checks achievements and sends mail.
+            // Integer rounding may skip a value (10 becomes 11); two smaller native changes can reach it exactly.
+            int target = previousPoints + Math.Min((int)(requested * 1.1f), FriendshipDayMax - before);
+            while (friendship.Points < target)
+            {
+                int room = target - friendship.Points, amount = room;
+                while ((int)(amount * 1.1f) > room) amount--;
+                int was = friendship.Points;
+                Game1.player.changeFriendship(amount, npc);
+                if (friendship.Points <= was) break;
+            }
+        }
+        else
+            Game1.player.changeFriendship(requested, npc);
+        // Vanilla can clamp at zero/the heart ceiling or apply a book bonus. Count what it actually changed.
+        after = Math.Clamp(before + friendship.Points - previousPoints, FriendshipDayMin, FriendshipDayMax);
+        int changed = after - before;
+        friendship.Points = previousPoints + changed;
+        if (changed == 0)
+            return 0;
         this.friendshipToday[npc.Name] = after;
-        Game1.player.changeFriendship(after - before, npc);
-        this.Monitor.Log($"{what}，好感 {after - before:+#;-#}（今天合计 {after:+#;-#;0}）。", LogLevel.Info);
-        return after - before;
+        this.Monitor.Log($"{what}，好感 {changed:+#;-#}（今天合计 {after:+#;-#;0}）。", LogLevel.Info);
+        return changed;
     }
 }

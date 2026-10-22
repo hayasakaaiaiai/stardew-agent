@@ -1,6 +1,6 @@
 # 约到后天：约定最多到后天，更远的 NPC 婉拒
 
-> 状态：用户 2026-10-22 说“继续做下一步 不用问我 做好了推送”；做的过程中用户定了范围：“约定只支持今天和接下来 2 天以内吧 如果约定超过这个时间 npc 会拒绝”。其余按推荐自行决定（§2）。已实现（§6），等 Windows 验收（§7）。分支 `m2c-later-meetings`，建在 `m2c-meeting-friendship` 上，目录 `/Users/a11/Documents/ChatGPT/stardew-agent-gifts`。这是 `npc-meetings.md` §9 推迟的“后天及以后的约定”，按用户的范围只做到后天。
+> 状态：用户 2026-10-22 说“继续做下一步 不用问我 做好了推送”；做的过程中用户定了范围：“约定只支持今天和接下来 2 天以内吧 如果约定超过这个时间 npc 会拒绝”。其余按推荐自行决定（§2）。已实现（§6）；Windows 限定脚本验收及修复见 §9，原清单见 §7。分支 `m2c-later-meetings`，建在 `m2c-meeting-friendship` 上，目录 `/Users/a11/Documents/ChatGPT/stardew-agent-gifts`。这是 `npc-meetings.md` §9 推迟的“后天及以后的约定”，按用户的范围只做到后天。
 
 ## 1. 为什么做
 
@@ -75,7 +75,7 @@
 
 ## 4. 做法
 
-- `meeting-agreement.ts`：把“谁答应去哪”抽成 `agreedPlace`，今天的 `agreedIn`、后天以内的 `agreedLater` 共用（2026-10-22 合并 Windows 修复后，两边共用它的钟点读法 `readClocks`：只有没说时段的钟点跟着说出的时段走，“周六晚上八点 / 八点见”是 20:00；它的“改到明天就撤销”在约到后天时看说的是不是同一天，“后天再去”不算改）；`namedDays` 按日历换算；`quotedLater`、`quotedLaterCallOff`；`quotedToday`、`quotedCallOff` 多一个 `today`，说的是别的日子就不碰今天的。
+- `meeting-agreement.ts`：把“谁答应去哪”抽成 `agreedPlace`，今天的 `agreedIn`、后天以内的 `agreedLater` 共用（2026-10-22 合并 Windows 修复后，两边共用它的钟点读法 `agreedClocks`（Windows 第二轮也独立修了同一处，合并时用它的名字）：只有没说时段的钟点跟着说出的时段走，“周六晚上八点 / 八点见”是 20:00；它的“改到明天就撤销”在约到后天时看说的是不是同一天，“后天再去”不算改）；`namedDays` 按日历换算；`quotedLater`、`quotedLaterCallOff`；`quotedToday`、`quotedCallOff` 多一个 `today`，说的是别的日子就不碰今天的。
 - `meetings.ts`：`laterNote`、`laterCallOffNote`、`laterMeetings`（按标签读回，同一天最后一条记录说了算）、`dayLabel`、`upcomingLine`、`farInvitation` 和那一行的写法。
 - `memory.ts`：`talk.close` 时一次记下今天的约定、改口，以及后天以内的新约定和取消（同一条日志）；`meeting()` 在没有昨晚的约定时读当天的那条记录；记了谁有这类记录（每次读档扫一次，之后随记随加），日常的约定列表不用每次查 34 位 NPC。
 - `server.ts`：聊天那一轮按玩家的话加婉拒行；对话开场没有今天的约定时写最近的一个；约定列表按读取顺序发，慢的旧列表不会盖掉刚改的新列表（读得早的旧列表仍可能先到，Mod 随后会收到新列表；端到端测试因此改为等内容正确的那份，2026-10-22 连跑 6 次通过）。
@@ -115,3 +115,11 @@
 - 改约（“周六改成周日吧”）：要先取消再约；只改时间不说地点会被当成拿不准。
 - 节日、生日这类日子的说法（“花舞节那天”“你生日那天”）。
 - 只说“周末”：说不准是周六还是周日，不认。
+
+## 9. Windows 修复与脚本验收（2026-10-22）
+
+`codex/meetings-animals-windows-tests` 纳入 `f10021d`，保留之前当天赴约、取消及实际抵达的修复。修复未来约定裸钟点没有继承明确时段、下个月日期误算成本月、数字日期不能指今天，以及“今天说一下，后天不去了”误取消今天四类问题。跨季、跨年、上午不能被今天的时钟推成晚上均有回归；原有未来约定端到端另补每天最多 3 个、每位 NPC 每天 1 个、取消释放名额。
+
+独立存档里实际启动 SMAPI，**17/17** 通过：当天不发布未来约定；重连和两次真实睡觉后，到那天只发布未取消的普通约定（没有 `sameDay`）；20:00 餐吧约定实际沿原版路线走到并碰面、报告；远日期提示只在当轮；未保存回滚；春 27 日约“下个月1号上午八点”，过两晚及重读后在夏 1 日发布 08:00 矿洞约定。最后一项只验证日期与发布，不能据此认定所有 08:00 的自然行程都赶得上。
+
+脚本入口 `tools/test-game-world.ps1 -Offline -Section later-meetings`；固定模型、真实调用 0。prompt 格式、固定 token 和调用次数都未增加；原 §3 的真实模型数字是上游原始样本，本轮不重复将它算作新实测。失败记录、脚本修正和总检查结果见 [Windows 报告](test-results/2026-10-22-meetings-animals-windows.md)。
