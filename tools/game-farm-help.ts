@@ -68,7 +68,7 @@ async function arrive(h: Host, hearts = 8, natural = false, fromNight = false) {
   if (fromNight) {
     await rpc('config', { NpcMeetings: true }); await rpc('action-observe', { npc: 'Abigail' });
     state = await rpc('wait', { ticks: 60 });
-    check('farm-real-day-packet-after-night', state.actions!.meetings.some(meeting => meeting.Place === '农场'), state.actions);
+    check('farm-real-day-packet-after-night', state.actions!.meetings.some(meeting => meeting.Place === '农场' && meeting.Time === 1000), state.actions);
   } else state = await rpc('action-meetings', { meetings: [{ npc: 'abigail', place: '农场', time: 1000 }] });
   const meeting = state.actions!.meetings[0]!;
   check('farm-native-plan-applies-' + hearts, meeting.Applied && !meeting.Failed, state.actions);
@@ -87,7 +87,7 @@ async function arrive(h: Host, hearts = 8, natural = false, fromNight = false) {
 export async function runFarmVisits(h: Host) {
   const { rpc, chapter, check } = h;
   await chapter('spring', 1); await rpc('action-reset'); h.seedNight(true, true);
-  await h.say('Abigail', '明天上午10:00来农场帮我浇浇水好吗？', 'farm-night-agreement'); await h.close(); await rpc('sleep'); h.seedNight(false);
+  await h.say('Abigail', '明天上午来农场帮我浇浇水好吗？', 'farm-night-agreement'); await h.close(); await rpc('sleep'); h.seedNight(false);
   let state = await arrive(h, 8, true, true);
   const originalDestroys = state.actions!.meetings[0]!.Destroys;
   check('farm-native-walk-keeps-fence-and-house', state.npcs!.find(npc => npc.id === 'Abigail')!.destroys === false
@@ -140,7 +140,7 @@ export async function runFarmVisits(h: Host) {
 export async function runFarmSave(h: Host) {
   const { rpc, chapter, check } = h;
   await chapter('spring', 1); await rpc('action-reset'); await rpc('farm-fixture'); h.seedNight(true, true);
-  await h.say('Abigail', '明天上午10:00来农场帮我浇浇水好吗？', 'farm-save-agreement'); await h.close(); await rpc('sleep'); h.seedNight(false);
+  await h.say('Abigail', '明天上午来农场帮我浇浇水好吗？', 'farm-save-agreement'); await h.close(); await rpc('sleep'); h.seedNight(false);
   await rpc('title'); let before = await rpc('load');
   await rpc('farm-run'); await rpc('title'); let state = await rpc('load');
   check('farm-unsaved-real-reload-restores-all-farm-state', signature(state) === signature(before), { before: farm(before), after: farm(state) });

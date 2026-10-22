@@ -3,7 +3,7 @@
  * The model only names the time, the place and the quoted lines; code checks the quotes and the Mod walks the NPC there.
  */
 import { clock } from './schedule.ts';
-import { quotedAgreement } from './meeting-agreement.ts';
+import { quotedAgreement, quotedPeriodTime } from './meeting-agreement.ts';
 import type { MemoryDraft, NpcState } from '../types.ts';
 
 /** The places the Mod has a standing tile for (Meetings.cs), with how people say them. */
@@ -72,7 +72,9 @@ export function checkMeet(draft: MeetDraft | null, sources: readonly { id: strin
   if (quoted.some(source => !source) || !quoted.some(source => source!.speaker === '玩家')) return null;
   const text = quoted.map(source => source!.text).join('\n');
   if (!TOMORROW.test(text) || !TIME_WORDS.test(text) || !words.test(text)) return null;
-  const time = Number(match[1]) * 100 + Math.floor(Number(match[2]) / 10) * 10;
+  const proposed = Number(match[1]) * 100 + Math.floor(Number(match[2]) / 10) * 10;
+  if (proposed < EARLIEST || proposed > LATEST) return null;
+  const time = quotedPeriodTime(quoted as typeof sources, proposed);
   return time >= EARLIEST && time <= LATEST && quotedAgreement(quoted as typeof sources, sources, words, time) ? { time, place: draft.place } : null;
 }
 

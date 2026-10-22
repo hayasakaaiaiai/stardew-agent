@@ -91,9 +91,9 @@ function model(kind: Kind): ChatModel {
       result = fixed(kind === 'background' ? { memories: { a: '格斯说汤的味道不错。', b: '潘姆说巴士站的风很大。', c: '我们聊了餐吧的天气。' } }
         : kind === 'nightly' ? { memories: actionSeedNight ? [{ sources: ['t2', 't3'], importance: 4 }] : [], retire: [], impression: '',
           plan: actionSeedNight ? actionSeedFarm ? '想问农场主上午来农场帮忙的事' : '想问农场主下午在海滩见面的事' : '', seek: actionSeedNight,
-          meet: actionSeedNight ? { time: actionSeedFarm ? '10:00' : '14:00', place: actionSeedFarm ? '农场' : '海滩', sources: ['t2', 't3'] } : null, bubbles: [], letter: '', gift: false, share: '' }
+          meet: actionSeedNight ? { time: actionSeedFarm ? '09:00' : '14:00', place: actionSeedFarm ? '农场' : '海滩', sources: ['t2', 't3'] } : null, bubbles: [], letter: '', gift: false, share: '' }
         : kind === 'nearby' ? { lines: [] }
-        : { reply: actionSeedNight && actionSeedFarm ? '好啊，明天上午10:00我来农场帮你浇水。'
+        : { reply: actionSeedNight && actionSeedFarm ? '好啊，明天上午我来农场帮你浇水。'
           : actionSeedNight && messages.at(-1)!.content.includes('明天下午') ? '好啊，那就明天下午14:00在海滩见。'
           : remembered || (schedule ? `我的安排是：${schedule}` : '我还没有确定安排。'), emotion: 'neutral', options: ['继续聊', '换个话题', '再见'], remember: [], mood: 0, end: false });
       handlers.onContent?.(result.content);

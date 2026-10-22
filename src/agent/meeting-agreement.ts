@@ -32,6 +32,14 @@ function times(text: string, includePeriods = true): number[] {
   return includePeriods ? PERIODS.filter(([words]) => words.test(text)).map(([, time]) => time) : [];
 }
 
+/** Apply the documented default only to one agreed period, never to a concrete or conflicting clock. */
+export function quotedPeriodTime(quoted: readonly Quote[], proposed: number): number {
+  if (quoted.some(quote => times(quote.text, false).length)) return proposed;
+  const periods = quoted.flatMap(quote => PERIODS.filter(([words]) => words.test(quote.text)));
+  if (!periods.length || periods.some(([, time, start, end]) => time !== periods[0]![1] || proposed < start || proposed >= end)) return proposed;
+  return periods[0]![1];
+}
+
 /** Both parties must show intent, and every quoted concrete time must agree with the proposed ten-minute slot. */
 export function quotedAgreement(quoted: readonly Quote[], all: readonly Quote[], placeWords: RegExp, time: number): boolean {
   const text = quoted.map(quote => quote.text).join('\n');

@@ -5,6 +5,34 @@ import { checkMeet, meetingFor, meetDraft } from '../src/agent/meetings.ts';
 const quotes = (player: string, npc: string) => [{ id: 't1', speaker: '玩家' as const, text: player }, { id: 't2', speaker: 'NPC' as const, text: npc }];
 const proposal = (time = '14:00', place = '海滩', sources = ['t1', 't2']) => meetDraft({ time, place, sources });
 
+test('an agreed period uses its documented clock when the model chooses another clock in that period', () => {
+  for (const [period, modelTime, time] of [
+    ['早上', '10:00', 900], ['上午', '09:00', 1000], ['中午', '11:00', 1200],
+    ['下午', '15:00', 1400], ['傍晚', '18:00', 1700], ['晚上', '20:00', 1900],
+  ] as const) {
+    assert.deepEqual(checkMeet(proposal(modelTime), quotes(`明天${period}海边见面？`, `好啊，明天${period}海边见。`)),
+      { time, place: '海滩' }, period);
+  }
+  assert.deepEqual(checkMeet(proposal('09:00'), quotes('明天上午九点海边见面？', '好啊，明天上午海边见。')),
+    { time: 900, place: '海滩' }, 'a concrete clock overrides the period default');
+});
+
+test('period normalization never repairs an explicit conflict, an invalid model clock, or missing consent', () => {
+  const morning = quotes('明天上午海边见面？', '好啊，明天上午海边见。');
+  for (const modelTime of ['14:00', '07:30', '21:10', '09:75']) assert.equal(checkMeet(proposal(modelTime), morning), null, modelTime);
+  for (const [player, npc] of [
+    ['明天上午十点海边见面？', '好啊，明天上午海边见。'],
+    ['明天上午海边见面？', '好啊，明天早上海边见。'],
+    ['明天上午海边见面？', '好啊，明天下午海边见。'],
+    ['明天上午海边见面？', '不行，我明天不去海边。'],
+    ['如果明天上午有空，我们海边见面吧。', '好啊。'],
+    ['今天的天气不错。', '明天上午海边见面？'],
+    ['明天去海边见面，几点还没定。', '好啊。'],
+  ]) assert.equal(checkMeet(proposal('09:00'), quotes(player!, npc!)), null, `${player} / ${npc}`);
+  assert.equal(checkMeet(proposal('09:00', '海滩', ['t1']), morning), null);
+  assert.equal(checkMeet(proposal('09:00'), [...morning, { id: 't3', speaker: '玩家', text: '明天海边我还是不去了。' }]), null);
+});
+
 test('a malformed meeting cannot use inherited object properties or crash nightly consolidation', () => {
   for (const place of ['constructor', 'toString', '__proto__']) {
     assert.equal(checkMeet(proposal('14:00', place), quotes('明天下午海边见。', '好啊，明天下午海边见。')), null);

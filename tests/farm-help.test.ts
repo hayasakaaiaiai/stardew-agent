@@ -61,7 +61,7 @@ test('the Mod reports the chores only as whole counts', () => {
 const nightly = {
   async chat(messages: ChatMessage[]): Promise<Completion> {
     const output = { memories: [{ sources: ['t2'], importance: 3 }], retire: [], impression: '', plan: '明天上午去农场帮忙', bubbles: [], letter: '',
-      gift: false, share: '', meet: { time: '10:00', place: '农场', sources: ['t2', 't3'] } };
+      gift: false, share: '', meet: { time: '09:00', place: '农场', sources: ['t2', 't3'] } };
     void messages;
     return { content: JSON.stringify(output), reasoning: '', finishReason: 'stop', usage: null, timing: { firstReasoningMs: null, firstContentMs: 1, totalMs: 1 } };
   },
