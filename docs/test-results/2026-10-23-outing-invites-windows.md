@@ -1,6 +1,6 @@
 # 一起逛和主动邀约的 Windows 验收
 
-本地分支 `codex/outing-windows-tests`，纳入 `m2c-outing / 2578824` 和 `m2c-invites / 7c47124`。用户随后要求继续检查新分支，发现 `m2c-meetings-more / 83bedb4`，接着纳入约定线收尾的组合验收。本轮尚未推送，也未合并 main。
+本地分支 `codex/outing-windows-tests`，纳入 `m2c-outing / 2578824` 和 `m2c-invites / 7c47124`。用户随后要求继续检查新分支，发现 `m2c-meetings-more / 83bedb4`，接着纳入约定线收尾的组合验收。本轮修复 `e808287` 已按用户 2026-10-23 的“推送”指令推送到 `codex/outing-windows-tests`，远端提交核对一致；未合并 main，正常游戏未部署。
 
 ## 已复现的修复
 

@@ -1,6 +1,6 @@
 # 约定线收尾的 Windows 验收
 
-用户要求继续测试修复、发现新分支就下载测试，本轮拉取 `m2c-meetings-more / 83bedb4`，纳入本地 `codex/outing-windows-tests`，保留一起逛与主动邀约的 Windows 修复。未推送，也未合并 main。前两项功能见[一起逛和主动邀约报告](2026-10-23-outing-invites-windows.md)。
+用户要求继续测试修复、发现新分支就下载测试，本轮拉取 `m2c-meetings-more / 83bedb4`，纳入本地 `codex/outing-windows-tests`，保留一起逛与主动邀约的 Windows 修复。修复 `e808287` 已按用户 2026-10-23 的“推送”指令推送到 `codex/outing-windows-tests`，远端提交核对一致；未合并 main。前两项功能见[一起逛和主动邀约报告](2026-10-23-outing-invites-windows.md)。
 
 ## 复现与修复
 
