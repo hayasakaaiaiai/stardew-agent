@@ -5,7 +5,7 @@ import { BACKSTAGE_PER_DAY, BACKSTAGE_TOPIC, type BackstagePerson, backstageHour
 import { AMBIENT_CALLS_PER_DAY, type AmbientLine, type AmbientPerson, ambientPrompt, parseAmbient } from '../agent/ambient.ts';
 import type { Consolidator } from '../agent/consolidation.ts';
 import { OPENING_LINE, runTurn, type Standing, type WorldState } from '../agent/dialogue.ts';
-import { farInvitation, farInvitationLine, meetingLine, upcomingLine } from '../agent/meetings.ts';
+import { farInvitation, farInvitationLine, invitationLine, meetingLine, MEETS_PER_DAY, upcomingLine } from '../agent/meetings.ts';
 import { newsFor } from '../agent/news.ts';
 import { parseScene, type SceneLine, type SceneNews, SCENES_PER_DAY, SCENE_GAP_MINUTES, scenePrompt } from '../agent/scene.ts';
 import { nextStop, restOfDay, scheduleReplies, type ScheduleStop } from '../agent/schedule.ts';
@@ -380,11 +380,15 @@ export class BridgeServer {
       const meeting = meetingLine(await save.meeting(npcId), message.world.date.time, message.atMeeting === true, message.helped, message.mine,
         message.outing)
         ?? upcomingLine(await save.upcoming(npcId), save.day);
+      // Asked out by the NPC the Mod chose today, unless something is already agreed or the day is full (docs/npc-invites.md).
+      const invitation = message.invite === true && !meeting && (await save.meetings()).length < MEETS_PER_DAY
+        ? invitationLine(message.world.date.time) : undefined;
+      if (invitation) this.log(`${this.options.roster.get(npcId).name}开口约农场主`);
       const talk: OpenTalk = { npcId, inPersonGifts: message.inPersonGifts !== false,
         standing: { hearts: message.hearts, relation: message.relation, seenEvents: new Set(message.seenEvents) },
         world: { ...worldState(message.world, save.player, this.cardName),
           ...(schedule ? { schedule, scheduleFacts: scheduleReplies(message.schedule!, message.world.date.time)! } : {}),
-          ...(meeting ? { meeting } : {}) } };
+          ...(meeting ? { meeting } : {}), ...(invitation ? { invitation } : {}) } };
       session.open.set(message.npc, talk);
       void this.turn(session, talk, message, OPENING_LINE, send);
       return;
@@ -395,7 +399,7 @@ export class BridgeServer {
         send({ type: 'talk.error', ...envelope(message), npc: message.npc, message: talk ? '上一句还没回完' : '对话还没有打开' }); return;
       }
       // Only for this turn: an invitation beyond the day after tomorrow is turned down (docs/npc-later-meetings.md).
-      const { farInvitation: _, ...world } = talk.world;
+      const { farInvitation: _, invitation: __, ...world } = talk.world;
       const far = farInvitation(message.text, save.day);
       talk.world = { ...world, ...message.date, time: clock(message.date.time), ...(far ? { farInvitation: farInvitationLine(far) } : {}) };
       void this.turn(session, talk, message, message.text, send);
@@ -471,7 +475,7 @@ export class BridgeServer {
     const active = () => !signal.aborted && session.open.get(message.npc) === talk;
     try {
       const lease = await session.save!.begin(message, message.type === 'talk.open' ? message.world.date : message.date, cancel.signal,
-        talk.inPersonGifts ? this.options.roster.get(talk.npcId).gifts : []);
+        talk.inPersonGifts ? this.options.roster.get(talk.npcId).gifts : [], talk.world.invitation !== undefined);
       if ('type' in lease) { if (active()) send(lease); return; }
       signal = lease.signal;
       const result = await runTurn({ roster: this.options.roster, model: this.options.model, memory: lease.memory },

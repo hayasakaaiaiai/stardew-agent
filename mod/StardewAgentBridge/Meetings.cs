@@ -81,7 +81,9 @@ internal sealed partial class ModEntry
         /// <summary>The agreed time; a spouse fetched for one agreed today may be given a later one.</summary>
         public int Time { get; set; }
         public string Place { get; }
-        public int Leave => MeetingLeave(this.SameDay && this.ArrivedAt is int arrived ? arrived : this.Time);
+        // A fixed-clock outing keeps the agreed end; a right-away outing still lasts from actual arrival.
+        public int Leave => MeetingLeave(this.SameDay && this.ArrivedAt is int arrived && !(this.Out.Started && this.Agreed > this.ReceivedAt)
+            ? arrived : this.Time);
         /// <summary>Agreed in a conversation today: "right away" comes as the time it was agreed.</summary>
         public bool SameDay { get; }
         public (string Map, int X, int Y, int Facing) Spot;
@@ -162,6 +164,7 @@ internal sealed partial class ModEntry
         this.ReleaseCompanions();
         this.ReleaseOutings();
         this.meetings.Clear();
+        this.ClearInvites();
     }
 
     /// <summary>HHMM ninety minutes after the agreed time, at 22:00 at the latest.</summary>
@@ -197,6 +200,8 @@ internal sealed partial class ModEntry
             return false;
         if (!this.IsCurrentMessage(message) || !message.TryGetProperty("meetings", out JsonElement list) || list.ValueKind != JsonValueKind.Array)
             return true;
+        // Who asks the player out today is chosen once the day's appointments are known (Invites.cs).
+        this.meetingsArrived = true;
         // One agreed today that could not go stays given up, so a resend does not tell the player twice.
         foreach (string pending in this.meetings.Where(pair => !pair.Value.Applied && !(pair.Value.Failed && pair.Value.SameDay)).Select(pair => pair.Key).ToList())
             this.meetings.Remove(pending);

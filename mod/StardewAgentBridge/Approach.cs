@@ -119,7 +119,7 @@ internal sealed partial class ModEntry
 
     private void TryStartApproach()
     {
-        if (!this.config.NpcApproach || this.approachHearts.Count == 0 || this.approached.Count >= ApproachesPerDay || !this.CanChat
+        if (!this.config.NpcApproach || this.approachHearts.Count == 0 && this.TodayInviter() is null || this.approached.Count >= ApproachesPerDay || !this.CanChat
             || !Context.IsPlayerFree || Game1.eventUp || Game1.isFestival() || this.talk is not null || Game1.timeOfDay >= ApproachLatestTime
             || Game1.currentLocation is not GameLocation location || !ApproachAllowedIn(location))
             return;
@@ -140,7 +140,9 @@ internal sealed partial class ModEntry
 
     private bool CanApproach(NPC npc)
     {
-        if (!this.approachHearts.TryGetValue(npc.Name, out int hearts) || this.approached.Contains(npc.Name) || !SocialNpcs.Contains(npc.Name)
+        // One asking the player out today comes over too, at the hearts it was chosen by (Invites.cs).
+        int hearts = this.approachHearts.TryGetValue(npc.Name, out int needed) ? needed : this.InvitesToday(npc) ? InviteHearts : -1;
+        if (hearts < 0 || this.approached.Contains(npc.Name) || !SocialNpcs.Contains(npc.Name)
             || npc.IsInvisible || npc.isSleeping.Value || npc.ignoreScheduleToday || ColdShoulder(npc.Name) || this.sceneParticipants.Contains(npc.Name))
             return false;
         string relation = GameState.Relation(npc);

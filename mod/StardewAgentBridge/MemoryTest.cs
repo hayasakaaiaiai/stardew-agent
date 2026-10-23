@@ -67,6 +67,7 @@ internal sealed partial class ModEntry
     {
         if (this.memoryTest is null)
             return;
+        this.AllowTestDisplaySleep();
         this.memoryTestStarted = DateTime.UtcNow;
         this.Helper.Events.GameLoop.Saving += (_, _) => this.RecordMemoryTestEvent("Saving");
         this.Helper.Events.GameLoop.Saved += (_, _) => this.RecordMemoryTestEvent("Saved");

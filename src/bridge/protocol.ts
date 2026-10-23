@@ -99,6 +99,8 @@ export type ModMessage =
     mine?: MineTrip;
     /** It has been with the player since they met somewhere ordinary (docs/npc-outing.md). */
     outing?: Outing;
+    /** The Mod chose this NPC to ask the player out on its first opening today (docs/npc-invites.md). */
+    invite?: boolean;
     world: WorldSnapshot;
   } & Envelope)
   | ({ type: 'talk.say'; npc: string; text: string; date: GameDate } & Envelope)
@@ -306,6 +308,7 @@ export function parseModMessage(raw: string): ModMessage {
       if (data.inPersonGifts !== undefined && typeof data.inPersonGifts !== 'boolean') fail('inPersonGifts must be a boolean');
       if (data.schedule !== undefined && !isSchedule(data.schedule)) fail('schedule must be a list of stops');
       if (data.atMeeting !== undefined && typeof data.atMeeting !== 'boolean') fail('atMeeting must be a boolean');
+      if (data.invite !== undefined && typeof data.invite !== 'boolean') fail('invite must be a boolean');
       helped(data.helped);
       mine(data.mine);
       outing(data.outing);

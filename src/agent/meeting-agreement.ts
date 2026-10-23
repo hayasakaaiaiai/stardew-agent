@@ -288,6 +288,76 @@ export function quotedLater(lines: readonly TimedQuote[], places: Readonly<Recor
     (quote, found) => times(quote.text, false).some(other => other !== found.time) || namedDays(quote.text, today).some(day => day !== found.day));
 }
 
+/** What an NPC asked the player out to, and the player said yes to: absolute `day`, HHMM `time` (docs/npc-invites.md). */
+export interface Invitation { day: number; time: number; place: string }
+
+// Only these name today outright; "待会儿" is as often "待一会儿", and saying no day means today anyway.
+const TODAY_WORDS = /今天|今早|晚点|晚些/;
+// A deadline or someone else's hour is not when they meet: "下午四点前我都有空", "十一点开始上课".
+const NOT_THE_TIME = /[零〇一二两三四五六七八九十\d]{1,3}(?:点|时)(?:半|一刻|三刻|[零〇一二两三四五六七八九十\d]{1,3}分)?(?=(?:以|之)?[前后]|开始|结束|上课|上班|下班|关门|开门)/g;
+// "人少一点", "早一点" is a little, not one o'clock.
+const A_BIT = /([少多早晚快慢近远好静热冷凉])一点/g;
+// Saying yes to being asked out takes a plain word for it: "嗯……我得看看农场的活儿" is a hedge (measured, docs/npc-invites.md §5).
+const PLAIN_YES = /好|行|可以|没问题|当然|一言为定|说定|乐意|愿意|奉陪|算我一个|一定(?:去|来|到)|走吧|去啊|去呀/;
+const HEDGE = /看看|看情况|不一定|说不准|尽量|争取|看能不能|有空(?:的话|就)|忙完/;
+// The sentences that ask: "今天农活忙完了吧？" is small talk, "明天你有空吗？" is not.
+const ASKING = /要不要|一起|陪|怎么样|有空吗|有空没|有没有空|来吗|来不来|去吗|去不去|好吗|行吗|可以吗/;
+
+/**
+ * The NPC opened the conversation by asking the player out (docs/npc-invites.md). Its opening is read by whole
+ * sentences, unlike an NPC's line elsewhere, since there the time is the invitation's own; only sentences naming a place
+ * or a time, or asking, count ("今天热死了" is small talk): one place, one day from today to the day after tomorrow
+ * (today unless another is named), one time. The NPC's reply may fill in what the opening left open, or pick one of two
+ * places it offered. The player's answer must plainly say yes and nothing later may take it back. Anything unsure means
+ * none.
+ */
+export function quotedInvite(lines: readonly TimedQuote[], places: Readonly<Record<string, RegExp>>, today: number): Invitation | null {
+  const [ask, answer, reply] = lines;
+  if (ask?.speaker !== 'NPC' || answer?.speaker !== '玩家' || !(agrees(answer) || YES.test(answer.text)) || !PLAIN_YES.test(answer.text)
+    || HEDGE.test(answer.text) || REFUSED.test(answer.text) || DECLINED.test(answer.text) || PUT_OFF.test(answer.text)
+    || CONDITIONAL.test(answer.text)) return null;
+  const npc = [ask, ...(reply?.speaker === 'NPC' ? [reply] : [])];
+  const named = (text: string) => Object.keys(places).filter(place => places[place]!.test(text));
+  if (reply?.speaker === 'NPC' && (REFUSED.test(reply.text) || DECLINED.test(reply.text))) return null;
+  // Later exchanges replace or withdraw the opening even when the first answer repeats its place.
+  const after = lines.slice(npc.length + 1);
+  if (quotedToday(after, places, today) || quotedLater(after, places, today)) return null;
+  if (after.some(quote => quote.speaker === '玩家' && (REFUSED.test(quote.text) || DECLINED.test(quote.text) || changesDay(quote.text)))) return null;
+  const changedTime = (time: number) => after.some(quote => /还是|改|换/.test(quote.text)
+    && times(quote.text.replace(NOT_THE_TIME, ''), false).some(other => other !== time));
+  // A concrete counterproposal accepted in the reply replaces the opening, using the existing agreement guards.
+  if (named(answer.text).length) {
+    const revised = quotedToday(lines.slice(1, 3), places, today);
+    if (revised && !revised.soon) return changedTime(revised.time) || quotedCallOff(lines, places[revised.place]!, places, today)
+      ? null : { day: today, time: revised.time, place: revised.place };
+  }
+  // A greeting names no time ("晚上好"), and "今晚的风" no day.
+  const sentences = npc.map(quote => (quote.text.replace(/(?:早上|上午|中午|下午|晚上)好|晚安/g, '').replace(NOT_THE_TIME, '').replace(A_BIT, '$1')
+    .match(/[^。！!？?；;…\n]+[。！!？?；;…\n]*/g) ?? []).filter(sentence => named(sentence).length || times(sentence).length
+      || ASKING.test(sentence)).join(''));
+  const [offered = [], settled = []] = sentences.map(named);
+  if (named(answer.text).some(place => !offered.includes(place))) return null;
+  if (offered.length === 1 && settled.some(place => !offered.includes(place))) return null;
+  const placesSaid = offered.length === 1 ? offered : !offered.length ? settled
+    : settled.length === 1 && offered.includes(settled[0]!) ? settled : [];
+  const days = new Set(sentences.flatMap(text => [...namedDays(text, today), ...(TODAY_WORDS.test(text) ? [today] : [])]));
+  if (placesSaid.length !== 1 || days.size > 1) return null;
+  const day = [...days][0] ?? today;
+  if (day < today || day > today + LATER_DAYS) return null;
+  const timed = [...sentences, answer.text.replace(NOT_THE_TIME, '').replace(A_BIT, '$1')].map(text => text.replace(/今晚/g, '今天晚上').replace(/今早/g, '今天早上'));
+  const agreed = answer.time;
+  const clocks = readClocks(timed, time => day === today && time <= later(agreed, 10) && time < 1200 ? time + 1200 : time);
+  const periods = timed.flatMap(text => PERIODS.filter(([period]) => period.test(text))).map(([, time]) => time);
+  const found = clocks.length ? clocks : periods;
+  if (!found.length || found.some(time => time !== found[0]) || found[0]! < EARLIEST || found[0]! > LATEST
+    || day === today && found[0]! <= later(agreed, 10)) return null;
+  if (changedTime(found[0]!)) return null;
+  // Taken back, or moved to another day, later in the conversation.
+  const words = places[placesSaid[0]!]!;
+  if (day === today ? quotedCallOff(lines, words, places, today) : quotedLaterCallOff(lines, words, places, day, today)) return null;
+  return { day, time: found[0]!, place: placesSaid[0]! };
+}
+
 /** Who took today's appointment back, or sent the other home: the player or the NPC (docs/npc-call-off.md). */
 export type CallOff = '玩家' | 'NPC';
 

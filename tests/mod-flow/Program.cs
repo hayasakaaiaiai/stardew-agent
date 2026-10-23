@@ -676,6 +676,41 @@ Test("an outing reports the places first visited, at most six, in the backend's 
     Check(Ordinary("海滩") && Ordinary("杂货店") && !Ordinary("农场") && !Ordinary("矿洞") && !Ordinary("火山"), "The farm or a dungeon door went on an outing.");
 });
 
+Test("about one day in three someone asks the player out, the same one for a save and day, and not again within a week", () =>
+{
+    MethodInfo inviteDay = modType.GetMethod("InviteDay", BindingFlags.Static | BindingFlags.NonPublic)!;
+    MethodInfo choose = modType.GetMethod("ChooseInviter", BindingFlags.Static | BindingFlags.NonPublic)!;
+    MethodInfo lately = modType.GetMethod("AskedLately", BindingFlags.Static | BindingFlags.NonPublic)!;
+    bool Day(ulong game, int day) => (bool)inviteDay.Invoke(null, new object[] { game, day })!;
+    string? Choose(ulong game, int day, string[] eligible) => (string?)choose.Invoke(null, new object[] { game, day, eligible });
+    int days = Enumerable.Range(1, 3000).Count(day => Day(436774213UL, day));
+    Check(days > 850 && days < 1150, $"Not about one day in three: {days} of 3000 (docs/npc-invites.md).");
+    Check(Enumerable.Range(1, 30).Select(day => Day(436774213UL, day)).SequenceEqual(Enumerable.Range(1, 30).Select(day => Day(436774213UL, day)))
+        && Enumerable.Range(1, 60).Any(day => Day(1UL, day) != Day(2UL, day)), "Not fixed for a save, or the same for every save.");
+    string[] close = { "Abigail", "Leah", "Sebastian", "Haley" };
+    Check(Choose(7UL, 12, close) == Choose(7UL, 12, close.Reverse().ToArray()) && close.Contains(Choose(7UL, 12, close)),
+        "The one who asks depends on the order, or is not among those who may.");
+    Check(Enumerable.Range(1, 40).Select(day => Choose(7UL, day, close)).Distinct().Count() > 1, "The same one asks every day.");
+    Check(Choose(7UL, 12, Array.Empty<string>()) is null, "Someone asked with nobody close enough.");
+    bool Lately(int? last, int today) => (bool)lately.Invoke(null, new object?[] { last, today })!;
+    Check(Lately(10, 16) && !Lately(10, 17) && !Lately(null, 3), "Not a week between two invitations from the same NPC.");
+});
+
+Test("a fixed-clock outing keeps its agreed end while a right-away outing keeps the observed arrival", () =>
+{
+    Type type = modType.GetNestedType("Meeting", BindingFlags.NonPublic)!;
+    object m = Activator.CreateInstance(type, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null,
+        new object[] { "Abigail", 1100, "海滩", true }, null)!;
+    Set(m, "ReceivedAt", 1000); Set(m, "ArrivedAt", 1030);
+    object outing = Get(m, "Out")!;
+    outing.GetType().GetMethod("Visit")!.Invoke(outing, new object[] { "海滩" });
+    Check((int)type.GetProperty("Leave")!.GetValue(m)! == 1230, "An early arrival shortened a fixed-clock outing.");
+    Set(m, "ArrivedAt", 1110);
+    Check((int)type.GetProperty("Leave")!.GetValue(m)! == 1230, "A late arrival extended a fixed-clock outing.");
+    Set(m, "ReceivedAt", 1100);
+    Check((int)type.GetProperty("Leave")!.GetValue(m)! == 1240, "A right-away outing lost its ninety minutes after arrival.");
+});
+
 Test("farm chores are worded like the backend, and the farm is a place an appointment can be at", () =>
 {
     Type doneType = modAssembly.GetType("StardewAgentBridge.FarmHelp+Done", throwOnError: true)!;

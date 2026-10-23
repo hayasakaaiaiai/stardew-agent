@@ -64,9 +64,11 @@ internal sealed partial class ModEntry
         Event? festival = ready ? Game1.CurrentEvent : null;
         return new
         {
-            ready, canChat = this.CanChat, time = ready ? Game1.timeOfDay : 0,
+            ready, canChat = this.CanChat, time = ready ? Game1.timeOfDay : 0, displaySleepAllowed = this.TestDisplaySleepAllowed(),
             farm = ready ? this.FarmTestSnapshot() : null,
             mine = ready ? this.MineTestSnapshot() : null,
+            outing = ready ? this.OutingTestSnapshot() : null,
+            invites = ready ? this.InvitesTestSnapshot() : null,
             date = ready ? GameState.Date() : null, weather = ready ? GameState.Weather() : null,
             location = ready ? Game1.currentLocation?.NameOrUniqueName : null,
             player = ready ? new { x = Game1.player.TilePoint.X, y = Game1.player.TilePoint.Y, facing = Game1.player.FacingDirection } : null,
@@ -360,7 +362,8 @@ internal sealed partial class ModEntry
                     this.WorldWait("capture"); break;
                 default:
                     if (!this.ActionCommand(this.worldTestOperation, args) && !this.FarmTestCommand(this.worldTestOperation, args)
-                        && !this.MineTestCommand(this.worldTestOperation, args) && !this.AnimalTestCommand(this.worldTestOperation, args))
+                        && !this.MineTestCommand(this.worldTestOperation, args) && !this.AnimalTestCommand(this.worldTestOperation, args)
+                        && !this.OutingTestCommand(this.worldTestOperation, args) && !this.InvitesTestCommand(this.worldTestOperation, args))
                         throw new InvalidOperationException("未知世界测试命令：" + this.worldTestOperation);
                     break;
             }

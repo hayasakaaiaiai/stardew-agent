@@ -73,13 +73,15 @@ export function grounded(text: string): boolean {
 export function withMorningPlan(memory: DialogueMemory, options: {
   now: () => number;
   read: () => Promise<Pick<NpcContext, 'state' | 'today'>>;
+  /** This opening asks the player out instead; the plan waits (docs/npc-invites.md). */
+  skip?: boolean;
 }): DialogueMemory {
   let prompted = false;
   return {
     async context(query, standing) {
       prompted = false;
       const context = await memory.context(query, standing);
-      if (query !== OPENING_LINE || context.today?.length
+      if (options.skip || query !== OPENING_LINE || context.today?.length
         || !context.memories.some(item => item.when === '昨天' && grounded(item.text))) return context;
       const { state, today } = await options.read();
       const day = Math.floor(options.now() / 1440);

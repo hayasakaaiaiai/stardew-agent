@@ -170,6 +170,7 @@ internal sealed partial class ModEntry
 
     private void TickActionTestPending()
     {
+        this.TickOutingTestPending();
         this.TickMineTestPending();
         this.TickFarmTestPending();
         if (this.worldTestPending == "action-meeting-arrival")

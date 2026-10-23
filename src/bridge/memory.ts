@@ -14,7 +14,7 @@ import { GIVEN_TOPIC, givenMemory, withInPersonGift } from '../agent/in-person-g
 import { type Gossip, gossipOf, heardMemory, heardToday, shareFor, spread, type Transfer } from '../agent/news.ts';
 import { type DeliveredLetter, type Letter, letterFor, letterKey } from '../agent/letters.ts';
 import { callOffIn, LATER_TOPIC, laterCallOffNote, laterIn, type LaterMeeting, laterMeetings, laterNote, type Meeting, meetingFor, meetingMemory, MEET_PLACES,
-  MEETS_PER_DAY, openedAtMeeting, todayAgreement, todayMeeting } from '../agent/meetings.ts';
+  MEETS_PER_DAY, invitedIn, openedAtMeeting, todayAgreement, todayMeeting } from '../agent/meetings.ts';
 import type { CallOff } from '../agent/meeting-agreement.ts';
 import { Nightly } from '../agent/nightly.ts';
 import { withMorningPlan } from '../agent/morning.ts';
@@ -322,6 +322,8 @@ export class GameSave {
     const log: Record<string, unknown> = {};
     const memories: MemoryDraft[] = [];
     let settled: Settled | undefined;
+    // Its own opening asked the player out: that exchange is read as an invitation (docs/npc-invites.md).
+    const { invitation, opening } = invitedIn(entries, npcId, today);
     const current = await this.meeting(npcId);
     if (current) {
       const by = current.ended || current.calledOff ? null : callOffIn(entries, npcId, current, today);
@@ -334,17 +336,18 @@ export class GameSave {
         settled = { npc: npcId, ...wire({ ...current, calledOff: by }), by, ...(met ? { sentHome: true as const } : {}), ...(note ? { note: note.text } : {}) };
       }
     } else {
-      const meeting = todayAgreement(entries, npcId, today);
+      const meeting = invitation?.day === today ? { time: invitation.time, place: invitation.place, sameDay: true as const }
+        : todayAgreement(entries, npcId, today, opening);
       if (meeting && (await this.meetings()).length < MEETS_PER_DAY) {
         log.meetToday = { time: meeting.time, place: meeting.place, soon: meeting.soon === true };
         settled = { npc: npcId, ...wire(meeting), ...(meeting.soon ? { soon: meeting.soon } : {}) };
       }
     }
     const upcoming = (await this.laterOf(npcId)).filter(meeting => meeting.day > today);
-    const later = laterIn(entries, npcId, upcoming, today);
+    const later = laterIn(entries, npcId, upcoming, today, opening);
     for (const { meeting, by } of later.calledOff) memories.push(laterCallOffNote(meeting, by));
     // One a day for each NPC, and no more than the Mod keeps on that day.
-    const agreed = later.agreed;
+    const agreed = invitation && invitation.day > today ? invitation : later.agreed;
     if (agreed && !upcoming.some(meeting => meeting.day === agreed.day) && await this.laterCount(agreed.day) < MEETS_PER_DAY) {
       memories.push(laterNote(agreed));
       (await this.withLater()).add(npcId);
@@ -401,8 +404,11 @@ export class GameSave {
     return (await this.laterOf(npcId)).filter(meeting => meeting.day > this.state.day);
   }
 
-  /** `gifts` are the NPC's card gifts, one of which a close NPC may hand over (docs/npc-in-person-gifts.md). */
-  begin(message: TalkRequest, date: GameDate, cancel: AbortSignal, gifts: readonly Gift[] = []): Promise<TalkReply | TurnLease> {
+  /**
+   * `gifts` are the NPC's card gifts, one of which a close NPC may hand over (docs/npc-in-person-gifts.md); an opening
+   * that asks the player out leaves yesterday's plan for later (docs/npc-invites.md).
+   */
+  begin(message: TalkRequest, date: GameDate, cancel: AbortSignal, gifts: readonly Gift[] = [], inviting = false): Promise<TalkReply | TurnLease> {
     return this.enqueue(async () => {
       const duplicate = this.check(message);
       if (duplicate?.reply) return duplicate.reply;
@@ -423,7 +429,7 @@ export class GameSave {
       const memory = withInPersonGift(withMorningPlan({
         context: async (query, current) => { signal.throwIfAborted(); standing = current; return reader.context(query, current); },
         record: async (exchange, remembered) => { signal.throwIfAborted(); staged = { exchange, remembered }; },
-      }, { now: () => gameMinutes(date), read }), { gifts, now: () => gameMinutes(date), read: async () => {
+      }, { now: () => gameMinutes(date), read, skip: inviting }), { gifts, now: () => gameMinutes(date), read: async () => {
         signal.throwIfAborted();
         const found = await agent.context({ topics: [GIVEN_TOPIC], nowGameTime: gameMinutes(date), limit: 5, maxChars: 1000 });
         signal.throwIfAborted();
@@ -446,6 +452,8 @@ export class GameSave {
           // Held at the appointment: sending the NPC home then is told apart from taking it back (docs/npc-call-off.md).
           log: { player: staged.exchange.player, npc: staged.exchange.npc, ...turnLog(standing, this.player),
             ...(message.type === 'talk.open' && message.atMeeting ? { atMeeting: true } : {}),
+            // Asked the player out: the answer is read as an invitation when the talk closes (docs/npc-invites.md).
+            ...(message.type === 'talk.open' && inviting ? { invited: true } : {}),
             ...(friendship ? { friendship } : {}), ...(gave ? { gave } : {}), bridgeReceipt: JSON.parse(canonical(receipt)) },
           memories: [...staged.remembered.map(item => ({ text: item.text, importance: item.importance,
             kind: 'conversation' as const, subjects: ['player'], visibility: 'private' as const })), ...(gave ? [givenMemory(gave)] : [])],

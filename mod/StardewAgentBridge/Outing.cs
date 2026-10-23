@@ -244,10 +244,9 @@ internal sealed partial class ModEntry
             OutingEmote(o, npc, Character.exclamationEmote);
         }
         o.ArtifactsSeen = artifacts;
-        if (o.GiftEmote is int gift && near && Context.IsPlayerFree && Game1.activeClickableMenu is null)
+        if (o.GiftEmote is int gift && near && Context.IsPlayerFree && Game1.activeClickableMenu is null && Game1.ticks >= o.EmoteAfter)
         {
             o.GiftEmote = null;
-            o.EmoteAfter = 0;
             OutingEmote(o, npc, gift);
         }
     }

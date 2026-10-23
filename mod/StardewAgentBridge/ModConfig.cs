@@ -64,4 +64,10 @@ internal sealed class ModConfig
     /// when they stop or fish, and shows an emote at what they do (docs/npc-outing.md). Off, it waits at the place.
     /// </summary>
     public bool MeetingsGoTogether { get; set; } = true;
+
+    /// <summary>
+    /// Whether, about one day in three, a close NPC walks over and asks the player out on its first opening of the day
+    /// (docs/npc-invites.md). Needs <see cref="NpcMeetings"/>.
+    /// </summary>
+    public bool NpcInvites { get; set; } = true;
 }

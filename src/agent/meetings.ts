@@ -4,7 +4,8 @@
  */
 import { clock } from './schedule.ts';
 import { OPENING_LINE, SEASONS } from './dialogue.ts';
-import { asksToMeet, type CallOff, type LaterAgreement, namedDays, quotedAgreement, quotedCallOff, quotedLater, quotedLaterCallOff, quotedPeriodTime, quotedToday,
+import { asksToMeet, type CallOff, type Invitation, type LaterAgreement, namedDays, quotedAgreement, quotedCallOff, quotedInvite, quotedLater, quotedLaterCallOff,
+  quotedPeriodTime, quotedToday,
   type TimedQuote } from './meeting-agreement.ts';
 import type { DayEntry, Memory, MemoryDraft, NpcState } from '../types.ts';
 
@@ -230,7 +231,7 @@ function hhmm(gameTime: number): number {
   return time < 600 ? time + 2400 : time;
 }
 
-type TurnLog = { player: string; npc: string; atMeeting?: true };
+type TurnLog = { player: string; npc: string; atMeeting?: true; invited?: true };
 const turnOf = (entry: DayEntry, npcId: string) => {
   const log = entry.changes.find(change => change.npcId === npcId)?.log as Partial<TurnLog> | undefined;
   return log && typeof log.player === 'string' && typeof log.npc === 'string' ? log as TurnLog : undefined;
@@ -249,9 +250,19 @@ export function lastConversation(entries: readonly DayEntry[], npcId: string): T
   ]);
 }
 
-/** What `talk.close` logs when the conversation settled an appointment for today. */
-export function todayAgreement(entries: readonly DayEntry[], npcId: string, today: number): Meeting | null {
-  const found = quotedToday(lastConversation(entries, npcId), MEET_PLACES, today);
+/**
+ * The conversation that just ended opened with the NPC asking the player out (docs/npc-invites.md): what the player
+ * said yes to, if anything, and how many lines that opening exchange takes, which the other checks leave to it.
+ */
+export function invitedIn(entries: readonly DayEntry[], npcId: string, today: number): { invitation: Invitation | null; opening: number } {
+  const opening = entries.findLast(entry => turnOf(entry, npcId)?.player === OPENING_LINE);
+  if (!opening || turnOf(opening, npcId)!.invited !== true) return { invitation: null, opening: 0 };
+  return { invitation: quotedInvite(lastConversation(entries, npcId), MEET_PLACES, today), opening: 2 };
+}
+
+/** What `talk.close` logs when the conversation settled an appointment for today; `skip` leaves an invitation's opening out. */
+export function todayAgreement(entries: readonly DayEntry[], npcId: string, today: number, skip = 0): Meeting | null {
+  const found = quotedToday(lastConversation(entries, npcId).slice(skip), MEET_PLACES, today);
   return found && { time: found.time, place: found.place, sameDay: true, ...(found.soon ? { soon: true as const } : {}) };
 }
 
@@ -352,6 +363,21 @@ export function farInvitation(text: string, today: number): string | undefined {
 }
 
 /** The line for that turn; measured to turn far invitations down 12/12 against 3/12 without (docs/npc-later-meetings.md §3). */
+/** Where an NPC may ask the player to meet, besides the farm and the mines it may also offer (docs/npc-invites.md). */
+const ORDINARY_PLACES = Object.keys(MEET_PLACES).filter(place => !['农场', '矿洞', '骷髅洞穴', '火山'].includes(place));
+/** From this time on there is too little of the day left to ask for later today. */
+const INVITE_TODAY_UNTIL = 1800;
+
+/**
+ * The opening line for the NPC the Mod chose to ask the player out today (docs/npc-invites.md); only on that opening
+ * turn. What the player answers is checked like any other appointment.
+ */
+export function invitationLine(now: number): string {
+  const when = now < INVITE_TODAY_UNTIL ? '今天晚些时候或明天' : '明天';
+  return `- 你今天想主动约农场主出去一次：${when}，从${ORDINARY_PLACES.join('、')}里挑一个合你心意的地方，也可以说去农场帮忙或陪农场主下矿，`
+    + '说清几点。自然地问农场主愿不愿意；不答应也没关系，别勉强。';
+}
+
 export const farInvitationLine = (label: string) => `- 农场主约的是${label}，太远了：你只答应三天内（今天、明天、后天）的约定，这次婉拒，说到时候再约。`;
 
 /** The nearest one ahead, for the NPC's own conversation: "后天（周六）14:00 在海滩见面". */
@@ -361,12 +387,12 @@ export function upcomingLine(upcoming: readonly LaterMeeting[], today: number): 
 }
 
 /** What the conversation that just ended agreed for a later day, or took back of those already made. */
-export function laterIn(entries: readonly DayEntry[], npcId: string, upcoming: readonly LaterMeeting[], today: number):
+export function laterIn(entries: readonly DayEntry[], npcId: string, upcoming: readonly LaterMeeting[], today: number, skip = 0):
   { agreed: LaterAgreement | null; calledOff: { meeting: LaterMeeting; by: CallOff }[] } {
   const lines = lastConversation(entries, npcId);
   const calledOff = upcoming.flatMap(meeting => {
     const by = quotedLaterCallOff(lines, MEET_PLACES[meeting.place]!, MEET_PLACES, meeting.day, today);
     return by ? [{ meeting, by }] : [];
   });
-  return { agreed: quotedLater(lines, MEET_PLACES, today), calledOff };
+  return { agreed: quotedLater(lines.slice(skip), MEET_PLACES, today), calledOff };
 }
