@@ -1,7 +1,10 @@
 /** Conservative checks for quoted appointments; uncertainty must not move an NPC. No extra model request. */
 type Quote = { id: string; speaker: '玩家' | 'NPC'; text: string };
 const TOMORROW = /明天|明早|明晚|明儿|明日/;
-const REFUSED = /不(?:去了?|来了?|想去|想来|想见|能去|能来|方便|同意|答应|确定|一定|知道|用来|和你|跟你|见面|约)|别(?:来|等)|没(?:空|时间|答应|同意)|不行|不了|算了|改天|再说|想想|考虑|还没(?:决定|想好|定)|不能确定|待定|暂定|也许|可能/;
+const REFUSED = /不(?:去了?|来了?|想去|想来|想见|能去|能来|方便|同意|答应|确定|一定|知道|用来|和你|跟你|见面|约)|别(?:来|等)|没(?:空|时间|答应|同意)|不行|不了|算了|改天|再说|想想|考虑|还没(?:决定|想好|定)|不能确定|待定|暂定/;
+// "可能" and "也许" put it off only about coming or going: "我可能去不了", not "我可能会有点不自在" (docs/real-model-meetings.md §10).
+const MAYBE = /(?:可能|也许)[^，,。！!？?；;…]{0,8}(?:去|来|到|空|赶|时间|见|走)/;
+const refused = (text: string) => REFUSED.test(text) || MAYBE.test(text);
 const CONDITIONAL = /如果|要是|除非|才会|看情况/;
 const YES = /(?:^|[，,。！!；;\s])(?:我)?(?:嗯(?:嗯)?|好(?:啊|呀|的|吧|嘞)?|行(?:啊|呀|的)?|可以(?:啊|呀|的)?|没问题|当然(?:可以)?|愿意|同意|说定了|一言为定|就这么定)(?:$|[，,。！!；;\s])/;
 const PERIODS: [RegExp, number, number, number][] = [
@@ -70,24 +73,35 @@ function asksAlong(quoted: readonly Quote[], placeWords: RegExp): boolean {
     && !/[我你]|自己|独自|单独|一个人/.test(quote.text));
 }
 
-/** A line asking to meet or to come along, today or any day. */
-export const asksToMeet = (text: string) => invited(text) || ASKED.test(text);
+// The player proposing with no "一起" or "见": "去山上看星星吧，九点怎么样？", "来海边拍照吧？", "我请客" (docs/real-model-meetings.md §10).
+// Not one going alone: "我现在自己去下矿吧？", "明天上午我自己去矿洞探险？".
+const PROPOSES = /(?<![我他她])(?:去|来)[^，,。！!？?；;…]{1,12}(?:吧|[？?])|请(?:你|客)/;
+const ALONE = /自己|独自|单独|一个人/;
+const proposal = (text: string) => PROPOSES.test(text) && !ALONE.test(text);
+/** The player's line proposes meeting at `placeWords`: in so many words, or a place and a clock time asked ("晚上八点星之果实？"). */
+const proposes = (quote: Quote, placeWords: RegExp) => quote.speaker === '玩家' && placeWords.test(quote.text) && !ALONE.test(quote.text)
+  && (PROPOSES.test(quote.text) || times(quote.text, false).length > 0 && /[？?]/.test(quote.text));
+
+/** A line asking to meet or to come along, today or any day; the player's own may also just propose. */
+export const asksToMeet = (text: string) => invited(text) || ASKED.test(text) || proposal(text);
 
 /** Both parties must show intent, and every quoted concrete time must agree with the proposed ten-minute slot. */
 export function quotedAgreement(quoted: readonly Quote[], all: readonly Quote[], placeWords: RegExp, time: number): boolean {
   const text = quoted.map(quote => quote.text).join('\n');
   const dungeonQuestion = /矿洞|矿井|矿坑|下矿|矿里|骷髅洞|火山/.test(text) && asksAlong(quoted, placeWords);
-  if (quoted.length < 2 || REFUSED.test(text) || CONDITIONAL.test(text) || /后天|下周|下个/.test(text) || !invited(text) && !dungeonQuestion) return false;
+  if (quoted.length < 2 || refused(text) || CONDITIONAL.test(text) || /后天|下周|下个/.test(text)
+    || !invited(text) && !dungeonQuestion && !quoted.some(quote => proposes(quote, placeWords))) return false;
   const concreteTimes = quoted.flatMap(quote => times(quote.text, false));
   const evidenceTimes = concreteTimes.length ? concreteTimes : quoted.flatMap(quote => times(quote.text));
   if (!evidenceTimes.length || evidenceTimes.some(value => value !== time)) return false;
   if (quoted.some(quote => !times(quote.text, false).length && PERIODS.some(([words, , start, end]) => words.test(quote.text) && (time < start || time >= end)))) return false;
-  const intent = (quote: Quote) => YES.test(quote.text)
+  // The same yes as today's check: "……好呀" and "*唉*行吧" agree (docs/real-model-meetings.md §10).
+  const intent = (quote: Quote) => YES.test(quote.text) || agrees(quote) || proposes(quote, placeWords)
     || /(?:那就|到时|我们).{0,10}(?:见|碰面)|我(?:确定|一定|准时|会).{0,8}(?:到|去|来|参加)/.test(quote.text)
     || TOMORROW.test(quote.text) && placeWords.test(quote.text) && times(quote.text).length > 0 && /一起|见|去|来|等|陪|带|跟|下矿|探险/.test(quote.text);
   if (!quoted.some(quote => quote.speaker === '玩家' && intent(quote)) || !quoted.some(quote => quote.speaker === 'NPC' && intent(quote))) return false;
   const end = Math.max(...quoted.map(quote => all.findIndex(source => source.id === quote.id)));
-  return !all.slice(end + 1).some(quote => REFUSED.test(quote.text)
+  return !all.slice(end + 1).some(quote => refused(quote.text)
     && (TOMORROW.test(quote.text) || placeWords.test(quote.text) || /不去(?:了)?[。！!]?\s*$/.test(quote.text)));
 }
 
@@ -189,11 +203,16 @@ const NOW_WORDS = /今天|待会|等会|一会|现在|马上/;
 // and a question after it is not agreeing ("嗯？").
 const STOP = '[，,。！!；;？?…～~*\\s]';
 const AFTER = '[，,。！!；;…～~*\\s]';
-const ACCEPT = new RegExp(`(?:^|${STOP})我?(?:(?:好|行)(?:啊|呀|的|吧|嘞)|可以(?:啊|呀|的)|没问题|一言为定|说定了|就这么定|算我一个)`
-  + `|(?:^|${STOP})我?(?:嗯(?:嗯)?|好|行|可以|当然(?:可以|好)?|愿意|同意)(?:$|${AFTER})|(?<!不)乐意|奉陪`);
-const GOING = /(?:那就|到时|我们|咱们).{0,10}(?:见|碰面)|我(?:确定|一定|肯定|准时|会|这就|马上).{0,8}(?:到|去|来|参加|过去)|走吧|走啦|走啊|走呀|出发吧|这就(?:去|走|来|过去)/;
-// "三点沙滩见", "下午见", "门口见"; not "再见", "看见" or "见过".
-const SEE_YOU = /(?:点半?|边|口|滩|场|地|馆|吧|店|里|洞|山|那儿|那里|午|上|后|头|会儿?)见(?!过|到|识)/;
+const ACCEPT = new RegExp(`(?:^|${STOP})我?(?:(?:好|行)(?:啊|呀|的|吧|嘞)|可以(?:啊|呀|的)|没问题|算我一个)|一言为定|(?<![没不])说定(?:了|啦)|就这么定`
+  + `|(?:^|${STOP})我?(?:嗯(?:嗯)?|好|行|可以|当然(?:可以|好|行)?|愿意|同意)(?:$|${AFTER})|(?<!不)乐意|奉陪`
+  // Said yes to with the real model (docs/real-model-meetings.md §10): "那更好", "这提议不错", "这我可记住了", "我勉强答应你吧",
+  // "我当然愿意", "当然要去啊", "哦、那说定了啊".
+  // Not "这可不是什么好主意", "我不能答应你", "当然去不了".
+  + `|(?:^|${STOP})那(?:就|可)?更好|(?<!不是(?:什么|个)?)好主意|(?:这|那)个?(?:提议|主意)(?:不错|挺好|很好)|我(?:可|就)?记(?:住|下)了|(?<![不没能会想法])答应你`
+  + `|(?:^|${STOP})我?(?:当然|很|也)(?:愿意|乐意)|(?:^|${STOP})(?:我)?当然(?:要|会)?(?:去|来)(?![不吗？?])`);
+const GOING = /(?:那就|到时|我们|咱们).{0,10}(?:见|碰面)|那就(?:这么(?:定|说)|改到|换到|定在|约在)|我(?:确定|一定|肯定|准时|会|这就|马上).{0,8}(?:到|去|来|参加|过去)|走吧|走啦|走啊|走呀|出发吧|这就(?:去|走|来|过去)/;
+// "三点沙滩见", "下午见", "门口见", "老地方见"; not "再见", "看见" or "见过".
+const SEE_YOU = /(?:点半?|边|口|滩|场|地|方|馆|吧|店|里|洞|山|那儿|那里|午|上|后|头|会儿?)见(?!过|到|识)/;
 // A time in the NPC's line counts only in a clause about meeting: "十一点开始上课" is its own day.
 const MEETING_CLAUSE = /见|碰面|等你|到|过去|过来|吧|怎么样|行吗|好吗|可以吗/;
 const EARLIEST = 800;
@@ -203,7 +222,7 @@ const LATEST = 2100;
 const changesDay = (text: string) => ANOTHER_DAY.test(text) && !CONDITIONAL.test(text)
   && /(?:改|换|推迟|挪|留)(?:到|成|在)?\s*(?:明天|明早|明晚|明儿|明日|后天|下周|下次|周末)|(?:明天|明早|明晚|明儿|明日|后天|下周|下次|周末)再(?:去|来|见|下矿)/.test(text);
 
-const agrees = (quote: TimedQuote) => ACCEPT.test(quote.text) || GOING.test(quote.text) || SEE_YOU.test(quote.text);
+const agrees = (quote: { text: string }) => ACCEPT.test(quote.text) || GOING.test(quote.text) || SEE_YOU.test(quote.text);
 
 function later(time: number, minutes: number): number {
   const total = Math.floor(time / 100) * 60 + time % 100 + minutes;
@@ -218,16 +237,18 @@ function agreedPlace(window: readonly TimedQuote[], after: readonly TimedQuote[]
   otherDay: (text: string) => boolean, movedTo: (text: string) => boolean = changesDay): { place: string; words: RegExp } | null {
   const text = window.map(quote => quote.text).join('\n');
   const named = withVenue(Object.keys(places).filter(place => places[place]!.test(text)));
-  if (named.length !== 1 || REFUSED.test(text) || DECLINED.test(text) || PUT_OFF.test(text) || CONDITIONAL.test(text) || otherDay(text)
-    || !invited(text) && !ASKED.test(text) && !(/矿洞|矿井|矿坑|下矿|矿里|骷髅洞|火山/.test(text) && asksAlong(window, places[named[0]!]!))) return null;
+  if (named.length !== 1 || refused(text) || DECLINED.test(text) || PUT_OFF.test(text) || CONDITIONAL.test(text) || otherDay(text)
+    || !invited(text) && !ASKED.test(text) && !(/矿洞|矿井|矿坑|下矿|矿里|骷髅洞|火山/.test(text) && asksAlong(window, places[named[0]!]!))
+      && !window.some(quote => proposes(quote, places[named[0]!]!))) return null;
   const place = named[0]!, words = places[place]!;
   // The player's own invitation counts; an NPC naming the place and "去" may be sending the player alone.
   const player = window.filter(quote => quote.speaker === '玩家');
-  if (player.some(quote => PAST.test(quote.text.replace(FESTIVAL_THAT_DAY, '节日'))) || !player.some(quote => agrees(quote) || words.test(quote.text) && /一起|见|去|来|等|陪|带|跟|走|下矿|探险/.test(quote.text))
+  if (player.some(quote => PAST.test(quote.text.replace(FESTIVAL_THAT_DAY, '节日'))) || !player.some(quote => agrees(quote) || words.test(quote.text) && /一起|见|去|来|等|陪|带|跟|走|下矿|探险/.test(quote.text)
+    || proposes(quote, words))
     || !window.some(quote => quote.speaker === 'NPC' && (agrees(quote)
       || words.test(quote.text) && /(?:一起|要不要|陪你|带你|我们|咱们).{0,10}(?:去|来|走)/.test(quote.text)))) return null;
   // The player taking it back needs no place: "还是算了，你忙吧".
-  if (after.some(quote => movedTo(quote.text) || (REFUSED.test(quote.text) || DECLINED.test(quote.text)) && (quote.speaker === '玩家'
+  if (after.some(quote => movedTo(quote.text) || (refused(quote.text) || DECLINED.test(quote.text)) && (quote.speaker === '玩家'
     || words.test(quote.text) || NOW_WORDS.test(quote.text) || /不去(?:了)?[。！!]?\s*$/.test(quote.text)))) return null;
   return { place, words };
 }
@@ -363,6 +384,8 @@ const NOT_THE_TIME = /[零〇一二两三四五六七八九十\d]{1,3}(?:点|时
 // Saying yes to being asked out takes a plain word for it: "嗯……我得看看农场的活儿" is a hedge (measured, docs/npc-invites.md §5).
 const PLAIN_YES = /好|行|可以|没问题|当然|一言为定|说定|乐意|愿意|奉陪|算我一个|一定(?:去|来|到)|走吧|去啊|去呀/;
 const HEDGE = /看看|看情况|不一定|说不准|尽量|争取|看能不能|有空(?:的话|就)|忙完/;
+// The player asking the NPC's own invitation for another time; "晚点见" is not one.
+const RETIME = /(?:晚|早|推迟|提前|延后|推后)(?:一|半|两)个?(?:小时|点|会儿)|换个(?:时间|钟点)|改(?:到|成|在)/;
 // The sentences that ask: "今天农活忙完了吧？" is small talk, "明天你有空吗？" is not.
 const ASKING = /要不要|一起|陪|怎么样|有空吗|有空没|有没有空|来吗|来不来|去吗|去不去|好吗|行吗|可以吗/;
 
@@ -377,15 +400,15 @@ const ASKING = /要不要|一起|陪|怎么样|有空吗|有空没|有没有空|
 export function quotedInvite(lines: readonly TimedQuote[], places: Readonly<Record<string, RegExp>>, today: number): Invitation | null {
   const [ask, answer, reply] = lines;
   if (ask?.speaker !== 'NPC' || answer?.speaker !== '玩家' || !(agrees(answer) || YES.test(answer.text)) || !PLAIN_YES.test(answer.text)
-    || HEDGE.test(answer.text) || REFUSED.test(answer.text) || DECLINED.test(answer.text) || PUT_OFF.test(answer.text)
+    || HEDGE.test(answer.text) || refused(answer.text) || DECLINED.test(answer.text) || PUT_OFF.test(answer.text)
     || CONDITIONAL.test(answer.text)) return null;
   const npc = [ask, ...(reply?.speaker === 'NPC' ? [reply] : [])];
   const named = (text: string) => withVenue(Object.keys(places).filter(place => places[place]!.test(text)));
-  if (reply?.speaker === 'NPC' && (REFUSED.test(reply.text) || DECLINED.test(reply.text))) return null;
+  if (reply?.speaker === 'NPC' && (refused(reply.text) || DECLINED.test(reply.text))) return null;
   // Later exchanges replace or withdraw the opening even when the first answer repeats its place.
   const after = lines.slice(npc.length + 1);
   if (quotedToday(after, places, today) || quotedLater(after, places, today)) return null;
-  if (after.some(quote => quote.speaker === '玩家' && (REFUSED.test(quote.text) || DECLINED.test(quote.text) || changesDay(quote.text)))) return null;
+  if (after.some(quote => quote.speaker === '玩家' && (refused(quote.text) || DECLINED.test(quote.text) || changesDay(quote.text)))) return null;
   const changedTime = (time: number) => after.some(quote => /还是|改|换/.test(quote.text)
     && times(quote.text.replace(NOT_THE_TIME, ''), false).some(other => other !== time));
   // A concrete counterproposal accepted in the reply replaces the opening, using the existing agreement guards.
@@ -399,9 +422,13 @@ export function quotedInvite(lines: readonly TimedQuote[], places: Readonly<Reco
     .match(/[^。！!？?；;…\n]+[。！!？?；;…\n]*/g) ?? []).filter(sentence => named(sentence).length || times(sentence).length
       || ASKING.test(sentence)).join(''));
   const [offered = [], settled = []] = sentences.map(named);
-  if (named(answer.text).some(place => !offered.includes(place))) return null;
-  if (offered.length === 1 && settled.some(place => !offered.includes(place))) return null;
-  const placesSaid = offered.length === 1 ? offered : !offered.length ? settled
+  // The player's own change, said yes to in so many words in the reply ("海边？行吧", "七点就七点"), is the one kept; one
+  // the reply does not repeat, or the NPC's own, is unsure (docs/real-model-meetings.md §10).
+  const answered = reply?.speaker === 'NPC' && agrees(reply) ? reply : undefined;
+  const moved = named(answer.text).filter(place => !offered.includes(place));
+  if (moved.length && (moved.length > 1 || !answered || !named(answered.text).length || named(answered.text).some(place => place !== moved[0]))) return null;
+  if (!moved.length && offered.length === 1 && settled.some(place => !offered.includes(place))) return null;
+  const placesSaid = moved.length ? moved : offered.length === 1 ? offered : !offered.length ? settled
     : settled.length === 1 && offered.includes(settled[0]!) ? settled : [];
   const days = new Set(sentences.flatMap(text => [...namedDays(text, today), ...(TODAY_WORDS.test(text) ? [today] : [])]));
   if (placesSaid.length !== 1 || days.size > 1) return null;
@@ -415,9 +442,21 @@ export function quotedInvite(lines: readonly TimedQuote[], places: Readonly<Reco
   }
   const timed = [...sentences, answer.text.replace(NOT_THE_TIME, '')].map(text => text.replace(/今晚/g, '今天晚上').replace(/今早/g, '今天早上'));
   const agreed = answer.time;
-  const clocks = readClocks(timed, time => day === today && time <= later(agreed, 10) && time < 1200 ? time + 1200 : time);
+  const bare = (time: number) => day === today && time <= later(agreed, 10) && time < 1200 ? time + 1200 : time;
+  const clocks = readClocks(timed, bare);
   const periods = timed.flatMap(text => PERIODS.filter(([period]) => period.test(text))).map(([, time]) => time);
-  const found = clocks.length ? clocks : periods;
+  let found = clocks.length ? clocks : periods;
+  // Asked for another time ("能晚一个小时吗？", "五点行吗？"), not the same one again: the reply must say yes to one, read
+  // with the opening's periods.
+  const hour = (time: number) => time % 1200;
+  const asked = times(answer.text.replace(NOT_THE_TIME, ''), false);
+  const offeredHours = clockTimes(timed[0]!).map(clock => hour(clock.time));
+  if (RETIME.test(answer.text) || asked.some(time => !offeredHours.includes(hour(time)))) {
+    const said = answered && timed[1] !== undefined ? readClocks([timed[1], ...timed.filter((_, index) => index !== 1)], bare)
+      .slice(0, clockTimes(timed[1]).length) : [];
+    if (!said.length || said.some(time => time !== said[0]) || asked.length && !asked.some(time => hour(time) === hour(said[0]!))) return null;
+    found = said;
+  }
   if (!found.length || found.some(time => time !== found[0]) || found[0]! < EARLIEST || found[0]! > LATEST
     || day === today && found[0]! <= later(agreed, 10)) return null;
   if (changedTime(found[0]!)) return null;
@@ -436,7 +475,7 @@ const PLAIN_NO = /不行|不了|不去|不要|不方便|没空|没时间|下次�
 /** The player turned the NPC's invitation down outright on its opening (docs/npc-meetings-more.md §2). */
 export function quotedDecline(lines: readonly TimedQuote[]): boolean {
   const [ask, answer] = lines;
-  return ask?.speaker === 'NPC' && asksToMeet(ask.text) && answer?.speaker === '玩家' && PLAIN_NO.test(answer.text)
+  return ask?.speaker === 'NPC' && (invited(ask.text) || ASKED.test(ask.text)) && answer?.speaker === '玩家' && PLAIN_NO.test(answer.text)
     && !HEDGE.test(answer.text) && !/考虑|想想/.test(answer.text);
 }
 
@@ -463,7 +502,7 @@ export function quotedChange(lines: readonly TimedQuote[], current: Kept, places
     const yes = answer.speaker === '玩家'
       ? (agrees(answer) || YES.test(answer.text)) && PLAIN_YES.test(answer.text) && !HEDGE.test(answer.text)
       : agrees(answer) || YES.test(answer.text);
-    if (!yes || REFUSED.test(answer.text) || DECLINED.test(answer.text) || CONDITIONAL.test(answer.text)) continue;
+    if (!yes || refused(answer.text) || DECLINED.test(answer.text) || CONDITIONAL.test(answer.text)) continue;
     const moved = ask.text.slice(at).replace(NOT_THE_TIME, '');
     const placesSaid = withVenue(Object.keys(places).filter(place => places[place]!.test(moved)));
     const days = new Set([...namedDays(moved, today), ...(TODAY_WORDS.test(moved) ? [today] : [])]);

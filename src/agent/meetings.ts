@@ -5,7 +5,7 @@
 import { clock } from './schedule.ts';
 import { OPENING_LINE, SEASONS } from './dialogue.ts';
 import { asksToMeet, type CallOff, type Change, type Invitation, type Kept, type LaterAgreement, namedDays, quotedAgreement, quotedCallOff, quotedChange, quotedDecline,
-  quotedInvite, FESTIVAL_DAYS, festivalOn, withVenue,
+  quotedInvite, FESTIVAL_DAYS, festivalDay, festivalOn, withVenue,
   quotedLater, quotedLaterCallOff,
   quotedPeriodTime, quotedToday,
   type TimedQuote } from './meeting-agreement.ts';
@@ -499,7 +499,20 @@ export function festivalClash(text: string, today: number): string | undefined {
   // Going together, even by where it is held ("看月光水母，海边见"), is fine.
   const places = withVenue(Object.keys(MEET_PLACES).filter(place => MEET_PLACES[place]!.test(text)));
   if (places.every(place => festive(place)) || !places.some(place => ORDINARY_PLACES.includes(place))) return undefined;
-  return `- 农场主说的${dayLabel(day)}是${festival}，大家都要去节日，普通地方约不了；要约就约一起去${festival}。`;
+  return `- 农场主说的${dayLabel(day)}是${festival}，在${FESTIVAL_DAYS[festival]!.venue}办，大家都要去节日，普通地方约不了；要约就约一起去${festival}。`;
+}
+
+/**
+ * This turn's line when the player names a festival: where it is held and when it starts, so the NPC does not put it
+ * somewhere else ("花舞节……整个镇子都去广场了"; docs/real-model-meetings.md §10). The clash line above names the place itself.
+ */
+export function festivalVenue(text: string, today: number): string | undefined {
+  const name = Object.keys(FESTIVAL_DAYS).find(festival => FESTIVAL_DAYS[festival]!.words.test(text));
+  if (!name) return undefined;
+  const { venue, time } = FESTIVAL_DAYS[name]!;
+  // The day too: without it the NPC took one two days off for today ("今天就是冬日星呀").
+  const day = festivalDay(name, today);
+  return `- ${name}是${day === today ? '今天' : dayLabel(day, today)}，在${venue}办，${time < 1200 ? '早上' : '晚上'} ${time % 1200 / 100} 点开始。`;
 }
 
 /** The line for that turn; measured to turn far invitations down 12/12 against 3/12 without (docs/npc-later-meetings.md §3). */

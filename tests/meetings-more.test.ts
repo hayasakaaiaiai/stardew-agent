@@ -173,7 +173,7 @@ test('a festival names its day and is the place that day; nowhere else is agreed
   assert.deepEqual(quotedToday(said('今晚一起去看月光水母吧？', '好啊，一起去。', 1500), MEET_PLACES, 56), { time: 2200, place: '月光水母起舞', soon: false });
   assert.equal(quotedLater(said('花舞节那天在海边见？', '好啊。'), MEET_PLACES, 22), null, 'an ordinary place on a festival day');
   assert.equal(quotedToday(said('下午两点海边见？', '好啊，两点见。'), MEET_PLACES, 24), null, 'nor today, on the festival');
-  assert.equal(festivalClash('花舞节那天下午一起去海边吧？', 22), '- 农场主说的春季 24 日（周三）是花舞节，大家都要去节日，普通地方约不了；要约就约一起去花舞节。');
+  assert.equal(festivalClash('花舞节那天下午一起去海边吧？', 22), '- 农场主说的春季 24 日（周三）是花舞节，在森林河边办，大家都要去节日，普通地方约不了；要约就约一起去花舞节。');
   assert.equal(festivalClash('后天下午一起去海边吧？', 22), festivalClash('花舞节那天下午一起去海边吧？', 22));
   assert.equal(festivalClash('花舞节那天一起去吧？', 22), undefined, 'going together is fine');
   assert.equal(festivalClash('明天下午一起去海边吧？', 22), undefined, 'not a festival day');

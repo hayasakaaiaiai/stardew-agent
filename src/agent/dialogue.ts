@@ -32,6 +32,8 @@ export interface WorldState {
   mood?: string;
   /** This turn's line, when the player asks to meet somewhere ordinary on a festival day (docs/npc-meetings-more.md §3). */
   festival?: string;
+  /** This turn's line, when the player names a festival: where and when it is held (docs/real-model-meetings.md §10). */
+  festivalVenue?: string;
   /** Come to help on the farm unasked, and what it did there (docs/npc-meetings-more.md §5). */
   visit?: string;
   player: { name: string; gender: 'male' | 'female'; farm: string };
@@ -182,6 +184,7 @@ function situation({ npcName, world, standing, memory }: PromptInput): string {
     ...(world.invitation ? [world.invitation] : []),
     ...(world.mood ? [world.mood] : []),
     ...(world.festival ? [world.festival] : []),
+    ...(world.festivalVenue ? [world.festivalVenue] : []),
     `- 玩家：${player.name}（${player.gender === 'female' ? '女' : '男'}），经营${player.farm}农场`,
     `- 你对玩家的好感：${standing.hearts} 心；关系：${RELATIONS[standing.relation]}`,
     ...(facts.length ? ['- 世界事实：', ...facts] : []),

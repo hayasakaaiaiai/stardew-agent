@@ -3,7 +3,7 @@
  * simulated Mod and real dialogue and nightly calls. The lines and what the backend sent the Mod are written apart, so
  * the conversations can be read and labelled before the results are looked at.
  *
- *   node --env-file=<.env> tools/test-meetings-real.ts [--batch A|B] [--only id,id] [--jobs 4]
+ *   node --env-file=<.env> tools/test-meetings-real.ts [--batch A|B] [--only id,id] [--repeat 4] [--jobs 4]
  *   node tools/test-meetings-real.ts --replay <dir> [--only id,id]   # the recorded calls again, free
  *   node tools/test-meetings-real.ts --dry [--only id,id]            # a fixed reply for every call, free
  *   node tools/test-meetings-real.ts --compare <dir>                 # results against the labels (tools/meetings-real/labels.json)
@@ -202,7 +202,7 @@ async function run(scenario: Scenario, roster: Roster, calls: string, paid: { di
       await wire.send({ type: 'save.saved', commitId: 'c1', date: dateOf(today + 1, 600) }, ['ack']);
       await wire.send({ type: 'day.started', date: dateOf(today + 1, 600), weather: 'sunny' }, ['ack']);
       const started = Date.now();
-      while (!logs.slice(from).some(line => /夜间整合完成|额度已用尽/.test(line))) {
+      while (!logs.slice(from).some(line => /夜间整合完成|夜间整合失败|额度已用尽/.test(line))) {
         if (Date.now() - started > 4 * WAIT_MS) throw new Error('等夜间整合超时');
         await new Promise(done => setTimeout(done, 200));
       }
@@ -262,7 +262,7 @@ async function compare(directory: string) {
     Record<string, { appointments: Appointment[]; npcWrong?: string; note?: string }>;
   const rows: { id: string; kind: string; verdict: string; label: string; code: string; note: string }[] = [];
   for (const result of results) {
-    const label = labels[result.id];
+    const label = labels[result.id] ?? labels[result.id.replace(/#\d+$/, '')];
     if (!label) { rows.push({ id: result.id, kind: result.kind, verdict: '未标', label: '', code: '', note: '' }); continue; }
     const want = new Set(label.appointments.map(key)), got = new Set(result.appointments.map(key));
     const same = want.size === got.size && [...want].every(item => got.has(item));
@@ -285,7 +285,10 @@ if (compareDir) { await compare(resolve(compareDir)); process.exit(0); }
 const replayDir = arg('--replay');
 const only = arg('--only')?.split(',');
 const batch = arg('--batch') ?? 'A';
-const scenarios = SCENARIOS.filter(scenario => only ? only.includes(scenario.id) : scenario.batch === batch);
+// --repeat runs each scene several times as "id#1", "id#2"…, labelled like the scene itself.
+const repeat = Number(arg('--repeat') ?? 1);
+const scenarios = SCENARIOS.filter(scenario => only ? only.includes(scenario.id) : scenario.batch === batch)
+  .flatMap(scenario => repeat > 1 ? Array.from({ length: repeat }, (_, index) => ({ ...scenario, id: `${scenario.id}#${index + 1}` })) : [scenario]);
 if (!scenarios.length) throw new Error('没有要跑的场景');
 let replay: Map<string, Call[]> | undefined;
 if (replayDir) {
