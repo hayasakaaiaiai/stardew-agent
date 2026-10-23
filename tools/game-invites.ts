@@ -3,7 +3,7 @@ import type { FriendshipHost } from './game-meeting-friendship.ts';
 import type { State } from './test-game-world.ts';
 
 export interface InvitesState { today: number; inviter: string | null; inviterDay: number; meetingsArrived: boolean;
-  days: number[]; eligible: string[]; history: Record<string, number> }
+  days: number[]; visitDays: number[]; eligible: string[]; history: Record<string, number>; stoodUp: Record<string, number> }
 
 export async function runInvites(h: FriendshipHost, section: string) {
   const { rpc, check, chapter } = h;

@@ -69,6 +69,7 @@ internal sealed partial class ModEntry
             mine = ready ? this.MineTestSnapshot() : null,
             outing = ready ? this.OutingTestSnapshot() : null,
             invites = ready ? this.InvitesTestSnapshot() : null,
+            more = ready ? this.MoreTestSnapshot() : null,
             date = ready ? GameState.Date() : null, weather = ready ? GameState.Weather() : null,
             location = ready ? Game1.currentLocation?.NameOrUniqueName : null,
             player = ready ? new { x = Game1.player.TilePoint.X, y = Game1.player.TilePoint.Y, facing = Game1.player.FacingDirection } : null,
@@ -166,7 +167,10 @@ internal sealed partial class ModEntry
                         if (Context.IsWorldReady && !Game1.isWarping && Game1.currentLocation?.NameOrUniqueName == this.worldTestTarget && this.CanChat) this.WorldComplete();
                         break;
                     case "festival":
-                        if (Game1.CurrentEvent is { isFestival: true, playerControlSequence: true } && (this.festivalWatch is not null || !this.config.FestivalMemories)) this.WorldComplete();
+                        if (Game1.CurrentEvent is { isFestival: true, playerControlSequence: true } opened
+                            && (this.festivalWatch is not null || !this.config.FestivalMemories
+                                || opened.id.StartsWith("festival_") && !RememberedFestivals.Contains(opened.id["festival_".Length..])))
+                            this.WorldComplete();
                         break;
                     case "festival-exit":
                     case "festival-main":
@@ -363,7 +367,8 @@ internal sealed partial class ModEntry
                 default:
                     if (!this.ActionCommand(this.worldTestOperation, args) && !this.FarmTestCommand(this.worldTestOperation, args)
                         && !this.MineTestCommand(this.worldTestOperation, args) && !this.AnimalTestCommand(this.worldTestOperation, args)
-                        && !this.OutingTestCommand(this.worldTestOperation, args) && !this.InvitesTestCommand(this.worldTestOperation, args))
+                        && !this.OutingTestCommand(this.worldTestOperation, args) && !this.InvitesTestCommand(this.worldTestOperation, args)
+                        && !this.MoreTestCommand(this.worldTestOperation, args))
                         throw new InvalidOperationException("未知世界测试命令：" + this.worldTestOperation);
                     break;
             }

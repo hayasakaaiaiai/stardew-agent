@@ -33,7 +33,7 @@ internal sealed partial class ModEntry
         meetings = this.meetings.Values.Select(m => new
         {
             m.Npc, m.Time, m.Place, m.Leave, m.Depart, m.Applied, m.Failed, m.Arrived, m.ArrivedAt, m.ReturnAt, m.Met, m.Reported,
-            m.Stage, m.Helps, m.Spouse, m.Helped, m.Destroys, m.Warp, m.Warped,
+            m.Stage, m.Helps, m.Spouse, m.Helped, m.Destroys, m.Warp, m.Warped, m.Surprise, m.Festival, m.AtFestival, m.Agreed,
             spot = new { map = m.Spot.Map, x = m.Spot.X, y = m.Spot.Y },
         }).ToArray(),
         routes = this.actionTestNpc.Length == 0 || Game1.getCharacterFromName(this.actionTestNpc) is not NPC npc ? null
@@ -57,6 +57,9 @@ internal sealed partial class ModEntry
                 this.CloseSocialMenu();
                 if (this.approach is { } active) this.ReleaseApproach(active, restore: true);
                 this.ClearApproach(); this.ClearMeetings(); this.ClearAmbient(); this.ClearScenes();
+                // Legacy fixtures control the actors; invitation/visit fixtures explicitly reset this daily draw.
+                this.inviterDay = (int)Game1.Date.TotalDays; this.meetingsArrived = true;
+                this.config.NpcInvites = false;
                 this.config.NpcApproach = true; this.config.NpcMeetings = false; this.config.BackstageScenes = false;
                 this.actionTestNpc = ""; this.actionTestClockRunning = false; this.WorldComplete(); break;
             case "action-place":
@@ -81,7 +84,7 @@ internal sealed partial class ModEntry
                 {
                     string map = Text("map", "Town");
                     var route = npc.pathfindToNextScheduleLocation("action-test", map,
-                        npc.TilePoint.X, npc.TilePoint.Y, map, Number("targetX", 47), Number("targetY", 87), 0, null, null);
+                        npc.TilePoint.X, npc.TilePoint.Y, Text("targetMap", map), Number("targetX", 47), Number("targetY", 87), 0, null, null);
                     route.time = Number("next", 2000); npc.Schedule[route.time] = route;
                 }
                 else this.Helper.Reflection.GetProperty<Dictionary<int, SchedulePathDescription>>(npc, "Schedule").SetValue(null!);
@@ -171,6 +174,7 @@ internal sealed partial class ModEntry
     private void TickActionTestPending()
     {
         this.TickOutingTestPending();
+        this.TickMoreTestPending();
         this.TickMineTestPending();
         this.TickFarmTestPending();
         if (this.worldTestPending == "action-meeting-arrival")

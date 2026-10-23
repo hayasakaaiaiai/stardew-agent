@@ -5,7 +5,7 @@ import { invitationLine, MEET_PLACES } from '../src/agent/meetings.ts';
 import { parseModMessage } from '../src/bridge/protocol.ts';
 import { connect, harness, meetingsSent, openTalk, WORLD } from './helpers/bridge.ts';
 
-const DAY = 39; // summer 11, a Thursday
+const DAY = 40; // summer 12, a Friday (the 11th is the Luau)
 const said = (ask: string, answer: string, reply = '', time = 1000): TimedQuote[] => [
   { id: 'n0', speaker: 'NPC', text: ask, time }, { id: 'p1', speaker: '玩家', text: answer, time: time + 10 },
   ...(reply ? [{ id: 'n1', speaker: 'NPC' as const, text: reply, time: time + 10 }] : []),
@@ -74,6 +74,9 @@ test('an invitation is withdrawn by the NPC, or replaced by a later agreement in
   assert.deepEqual(read(said(ask, '好啊，不过改到博物馆吧。', '好啊，三点博物馆见。')),
     { day: DAY, time: 1500, place: '博物馆' });
   assert.equal(read(said(ask, '好啊，不过改到博物馆吧。', '今天下午三点海滩见。')), null, 'Unsettled places cannot retain the old invitation.');
+  assert.equal(quotedInvite([...said('花舞节那天一起去吧？', '好啊！', '好，到时见。'),
+    { id: 'p2', speaker: '玩家', text: '到时候穿什么呢？', time: 1020 },
+    { id: 'n2', speaker: 'NPC', text: '抱歉，花舞节我去不了了。', time: 1020 }], MEET_PLACES, 22), null);
 });
 
 test('asked out on the opening, the player says yes and the appointment reaches the Mod; the line is on that turn only', { timeout: 15000 }, async t => {

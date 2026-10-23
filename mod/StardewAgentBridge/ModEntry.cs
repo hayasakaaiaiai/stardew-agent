@@ -158,6 +158,7 @@ internal sealed partial class ModEntry : Mod
             this.TickMeetings();
         this.TickCompanions(e);
         this.TickOutings(e);
+        this.TickFestivalMeetings();
         this.TickGifts();
         this.TickTown();
         this.TickFestival();
@@ -251,9 +252,14 @@ internal sealed partial class ModEntry : Mod
                 fields["mine"] = trip;
             if (this.MeetingOuting(npc) is { } outing)
                 fields["outing"] = outing;
+            if (this.meetings.TryGetValue(npc.Name, out Meeting? visiting) && visiting.Surprise)
+                fields["visit"] = true;
         }
         if (this.InvitesToday(npc))
             fields["invite"] = this.talk.Inviting = true;
+        // So "你生日那天" names a day (docs/npc-meetings-more.md §3).
+        if (npc.Birthday_Season is { Length: > 0 } season && npc.Birthday_Day is >= 1 and <= 28)
+            fields["birthday"] = new Dictionary<string, object?> { ["season"] = season.ToLowerInvariant(), ["day"] = npc.Birthday_Day };
         this.talk.RequestSeq = this.Send("talk.open", fields);
         this.BeginWaiting(this.talk);
     }

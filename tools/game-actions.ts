@@ -3,6 +3,7 @@ import type { State } from './test-game-world.ts';
 
 interface Meeting { Npc: string; Time: number; Place: string; Leave: number; Depart: number; Applied: boolean; Failed: boolean;
   Arrived: boolean; ArrivedAt: number | null; ReturnAt: number; Met: boolean; Reported: boolean; Stage: number; Helps: boolean; Spouse: boolean; Destroys: boolean | null; Warp: boolean; Warped: boolean;
+  Surprise: boolean; Festival: string | null; AtFestival: boolean; Agreed: number;
   Helped: { Watered: number; Harvested: number; Fed: number; Ponds: number } | null; spot: { map: string; x: number; y: number } }
 export interface ActionState { eligible: Record<string, number>; approached: string[]; lastApproachAt: number;
   approach: { npc: string; phase: string; Talked: boolean; origin: { x: number; y: number; facing: number }; path: number; hold: boolean } | null;

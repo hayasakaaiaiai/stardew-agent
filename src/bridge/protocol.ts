@@ -101,6 +101,10 @@ export type ModMessage =
     outing?: Outing;
     /** The Mod chose this NPC to ask the player out on its first opening today (docs/npc-invites.md). */
     invite?: boolean;
+    /** Its birthday, so "你生日那天" names a day (docs/npc-meetings-more.md §3). */
+    birthday?: { season: Season; day: number };
+    /** It came to help on the farm unasked; `helped` says what it did (docs/npc-meetings-more.md §5). */
+    visit?: boolean;
     world: WorldSnapshot;
   } & Envelope)
   | ({ type: 'talk.say'; npc: string; text: string; date: GameDate } & Envelope)
@@ -123,7 +127,7 @@ export type ModMessage =
    * (docs/npc-meeting-friendship.md). Reliable, acknowledged.
    */
   | ({ type: 'meet.ended'; npc: string; place: string; time: number; arrived?: number; left: number; met: boolean; helped?: Helped; mine?: MineTrip;
-    outing?: Outing; friendship?: number; date: GameDate } & Envelope);
+    outing?: Outing; friendship?: number; stoodUp?: boolean; surprise?: boolean; date: GameDate } & Envelope);
 
 export interface FestivalEnded {
   festival: Festival;
@@ -163,7 +167,7 @@ export type BackendMessage =
    * (docs/npc-same-day-meetings.md). `calledOff` ones were taken back, or the NPC sent home, in a later conversation
    * (docs/npc-call-off.md).
    */
-  | ({ type: 'day.meetings'; meetings: { npc: string; time: number; place: string; sameDay?: true; calledOff?: true }[] } & Envelope)
+  | ({ type: 'day.meetings'; meetings: { npc: string; time: number; place: string; sameDay?: true; calledOff?: true; movedTo?: string }[] } & Envelope)
   /** At most one letter for the mailbox this morning (docs/npc-mail.md); seq is 0. */
   | ({ type: 'day.letters'; letters: DeliveredLetter[] } & Envelope)
   | ({ type: 'talk.delta'; npc: string; text: string } & Envelope)
@@ -241,7 +245,9 @@ export function parseModMessage(raw: string): ModMessage {
     const m = value as Record<string, unknown> | null | undefined;
     if (m !== undefined && (!m || typeof m !== 'object' || Array.isArray(m)
       || ['floor', 'deepest', 'kills'].some(key => !Number.isSafeInteger(m[key]) || (m[key] as number) < 0 || (m[key] as number) > 100000)
-      || (m.floor as number) > (m.deepest as number) || typeof m.fights !== 'boolean' || typeof m.rescued !== 'boolean')) fail('mine is invalid');
+      || (m.floor as number) > (m.deepest as number) || typeof m.fights !== 'boolean' || typeof m.rescued !== 'boolean'
+      // Stones it broke, from a Mod that mines (docs/npc-meetings-more.md §6).
+      || m.mined !== undefined && (!Number.isSafeInteger(m.mined) || (m.mined as number) < 0 || (m.mined as number) > 100000))) fail('mine is invalid');
   };
   const isName = (value: unknown) => typeof value === 'string' && value.length > 0 && value.length <= 50 && !/[\u0000-\u001f]/u.test(value);
   const outing = (value: unknown) => {
@@ -309,6 +315,12 @@ export function parseModMessage(raw: string): ModMessage {
       if (data.schedule !== undefined && !isSchedule(data.schedule)) fail('schedule must be a list of stops');
       if (data.atMeeting !== undefined && typeof data.atMeeting !== 'boolean') fail('atMeeting must be a boolean');
       if (data.invite !== undefined && typeof data.invite !== 'boolean') fail('invite must be a boolean');
+      if (data.visit !== undefined && typeof data.visit !== 'boolean') fail('visit must be a boolean');
+      if (data.birthday !== undefined) {
+        const birthday = data.birthday as Record<string, unknown> | null;
+        if (!birthday || typeof birthday !== 'object' || !SEASONS.has(birthday.season as Season) || !Number.isSafeInteger(birthday.day)
+          || (birthday.day as number) < 1 || (birthday.day as number) > 28) fail('birthday is invalid');
+      }
       helped(data.helped);
       mine(data.mine);
       outing(data.outing);
@@ -332,6 +344,8 @@ export function parseModMessage(raw: string): ModMessage {
       helped(data.helped);
       mine(data.mine);
       outing(data.outing);
+      if (data.stoodUp !== undefined && typeof data.stoodUp !== 'boolean') fail('stoodUp must be a boolean');
+      if (data.surprise !== undefined && typeof data.surprise !== 'boolean') fail('surprise must be a boolean');
       date(data.date);
       break;
     }

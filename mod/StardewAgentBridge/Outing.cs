@@ -24,6 +24,12 @@ internal sealed partial class ModEntry
     private const int OutingEmoteGapTicks = 180;
     private const int OutingPlaces = 6;
     private const int OutingFishNames = 3;
+    /// <summary>Together this long, with this long still to go, it may suggest somewhere (docs/npc-meetings-more.md §4).</summary>
+    private const int OutingSuggestAfterMinutes = 30;
+    private const int OutingSuggestBeforeLeaveMinutes = 40;
+    /// <summary>The player out of sight or far behind this long while it leads: it gives up and comes back.</summary>
+    private const int OutingLeadWaitTicks = 600;
+    private const float OutingLeadFarTiles = 15;
 
     /// <summary>What the NPC saw, and what it is watching for.</summary>
     private sealed class Outing
@@ -52,6 +58,14 @@ internal sealed partial class ModEntry
         public int Bye;
         /// <summary>No way back by vanilla's pathing: it goes there directly once the player cannot see it go.</summary>
         public ScheduleStop? GoBack;
+        /// <summary>When they met, for when to suggest somewhere; once suggested, never again this outing.</summary>
+        public int Since;
+        public bool Suggested;
+        /// <summary>Where it is leading the player, by the maps on the way, and how long the player has not followed.</summary>
+        public string? Leading;
+        public (string Map, int X, int Y, int Facing) LeadSpot;
+        public string[] LeadMaps = Array.Empty<string>();
+        public int LeadAway;
 
         public bool Started => this.Places.Count > 0;
 
@@ -103,6 +117,7 @@ internal sealed partial class ModEntry
         o.ArtifactsSeen = ArtifactsFound();
         o.PlayerTile = Game1.player.TilePoint;
         o.Visit(GameState.PlaceName(npc.currentLocation.NameOrUniqueName));
+        o.Since = Game1.timeOfDay;
         m.Destroys ??= npc.willDestroyObjectsUnderfoot;
         npc.willDestroyObjectsUnderfoot = false;
         this.HoldCompanion(m, npc, npc.currentLocation);
@@ -121,6 +136,7 @@ internal sealed partial class ModEntry
         m.Trip.Stuck = 0;
         m.Out.Still = 0;
         m.Out.Visit(GameState.PlaceName(location.NameOrUniqueName));
+        m.Out.Leading = null;
     }
 
     /// <summary>Through a door together; where it does not go, it stays and waits where it was.</summary>
@@ -128,9 +144,18 @@ internal sealed partial class ModEntry
     {
         foreach (Meeting m in this.meetings.Values.Where(m => m.Out.Together && !m.Reported && m.Out.Bye == 0))
         {
-            if ((m.Trip.Actor ?? Game1.getCharacterFromName(m.Npc)) is NPC npc && npc.currentLocation != e.NewLocation
-                && OutingGoes(e.NewLocation.NameOrUniqueName))
-                this.JoinOuting(m, npc, e.NewLocation);
+            if ((m.Trip.Actor ?? Game1.getCharacterFromName(m.Npc)) is not NPC npc || npc.currentLocation == e.NewLocation
+                || !OutingGoes(e.NewLocation.NameOrUniqueName))
+                continue;
+            string? leading = m.Out.Leading;
+            bool onTheWay = leading is not null && m.Out.LeadMaps.Contains(e.NewLocation.Name);
+            this.JoinOuting(m, npc, e.NewLocation);
+            // Ahead of it on the way: it comes along and leads on from there.
+            if (onTheWay)
+            {
+                m.Out.Leading = leading;
+                this.LeadOn(m, npc);
+            }
         }
     }
 
@@ -170,6 +195,11 @@ internal sealed partial class ModEntry
                 this.OutingBye(m, npc, "我该回去了。");
                 continue;
             }
+            if (o.Leading is not null)
+            {
+                this.TickLead(m, npc, near);
+                continue;
+            }
             if (!near)
             {
                 // Back from somewhere it does not go, and come out somewhere else.
@@ -180,6 +210,14 @@ internal sealed partial class ModEntry
             npc.farmerPassesThrough = true;
             if (m.Trip.Hold is null || npc.temporaryController != m.Trip.Hold)
                 this.HoldCompanion(m, npc, npc.currentLocation);
+            if (!o.Suggested && e.IsMultipleOf(60) && Context.IsPlayerFree && !Fishing()
+                && Utility.CalculateMinutesBetweenTimes(o.Since, Game1.timeOfDay) >= OutingSuggestAfterMinutes
+                && Utility.CalculateMinutesBetweenTimes(Game1.timeOfDay, m.Leave) >= OutingSuggestBeforeLeaveMinutes)
+            {
+                o.Suggested = true;
+                if (this.SuggestPlace(m, npc))
+                    continue;
+            }
             if (e.IsMultipleOf(15))
             {
                 if (o.Still >= OutingStopTicks || Fishing())
@@ -191,6 +229,101 @@ internal sealed partial class ModEntry
     }
 
     private static bool Fishing() => Game1.player.CurrentTool is FishingRod rod && rod.inUse();
+
+    /// <summary>Somewhere it would go: not the farm, a dungeon door or a festival, and a shop only while open.</summary>
+    internal static bool OpenNow(string place, int time, int dayOfMonth) => place switch
+    {
+        FarmPlace => false,
+        "杂货店" => time >= 900 && time < 1700 && dayOfMonth % 7 != 3,
+        "博物馆" => time >= 800 && time < 1800,
+        "星之果实餐吧" => time >= 1200,
+        _ => !DungeonExits.ContainsKey(place) && !FestivalPlaces.ContainsKey(place),
+    };
+
+    /// <summary>
+    /// "要不要去山上湖边看看？", and off it goes (docs/npc-meetings-more.md §4): one of the ordinary places on another map,
+    /// preferring where its own day would have taken it, chosen the same way for the same save, day and NPC.
+    /// </summary>
+    private bool SuggestPlace(Meeting m, NPC npc)
+    {
+        string here = npc.currentLocation.Name;
+        string[] places = MeetPlaces.Keys.Where(place => MeetPlaces[place].Length > 0 && MeetPlaces[place][0].Map != here
+            && OpenNow(place, Game1.timeOfDay, Game1.dayOfMonth)).ToArray();
+        HashSet<string> hers = m.Original.Values.Select(stop => stop.targetLocationName).ToHashSet();
+        string[] liked = places.Where(place => hers.Contains(MeetPlaces[place][0].Map)).ToArray();
+        string? place = (liked.Length > 0 ? liked : places)
+            .OrderBy(place => InviteMix(Game1.uniqueIDForThisGame ^ InviteMix((ulong)Game1.Date.TotalDays) ^ InviteName(m.Npc + place))).FirstOrDefault();
+        if (place is null)
+            return false;
+        var spot = MeetPlaces[place][0];
+        Outing o = m.Out;
+        o.Leading = place;
+        o.LeadSpot = spot;
+        o.LeadMaps = WarpPathfindingCache.GetLocationRoute(here, spot.Map, npc.Gender) ?? new[] { here, spot.Map };
+        o.LeadAway = 0;
+        if (!this.LeadOn(m, npc))
+            return false;
+        npc.showTextAboveHead($"要不要去{place}看看？");
+        this.Monitor.Log($"{m.Npc} 提议去{place}，带玩家过去。", LogLevel.Info);
+        return true;
+    }
+
+    /// <summary>Off along vanilla's schedule pathing from where it stands; without a way there, it does not lead.</summary>
+    private bool LeadOn(Meeting m, NPC npc)
+    {
+        Outing o = m.Out;
+        var spot = o.LeadSpot;
+        SchedulePathDescription? route = null;
+        try
+        {
+            route = npc.pathfindToNextScheduleLocation(npc.dayScheduleName.Value ?? "meeting", npc.currentLocation.NameOrUniqueName, npc.TilePoint.X,
+                npc.TilePoint.Y, spot.Map, spot.X, spot.Y, spot.Facing, null, null);
+        }
+        catch (Exception ex) { this.Monitor.Log($"{m.Npc} 找不到去{o.Leading}的路：{ex.Message}", LogLevel.Trace); }
+        if (route?.route is not { Count: > 0 })
+        {
+            o.Leading = null;
+            return false;
+        }
+        route.time = Game1.timeOfDay;
+        if (npc.temporaryController == m.Trip.Hold)
+            npc.temporaryController = null;
+        m.Trip.Hold = null;
+        npc.controller = null;
+        npc.queuedSchedulePaths.Clear();
+        npc.lastAttemptedSchedule = Game1.timeOfDay;
+        npc.queuedSchedulePaths.Add(route);
+        ResumeSchedule(npc);
+        return true;
+    }
+
+    /// <summary>
+    /// While it leads: there, it stops and goes on following; the player out of sight (and not on the way) or far
+    /// behind for ten seconds, it gives up and comes back to them as when following.
+    /// </summary>
+    private void TickLead(Meeting m, NPC npc, bool near)
+    {
+        Outing o = m.Out;
+        var spot = o.LeadSpot;
+        bool walking = npc.controller is not null || npc.queuedSchedulePaths.Count > 0 || npc.isMoving();
+        if (npc.currentLocation.Name == spot.Map && Math.Abs(npc.TilePoint.X - spot.X) + Math.Abs(npc.TilePoint.Y - spot.Y) <= 1 && !walking)
+        {
+            o.Leading = null;
+            o.Visit(GameState.PlaceName(spot.Map));
+            this.HoldCompanion(m, npc, npc.currentLocation);
+            this.Monitor.Log($"{m.Npc} 带玩家到了{GameState.PlaceName(spot.Map)}。", LogLevel.Info);
+            return;
+        }
+        bool following = near && Vector2.Distance(npc.Tile, Game1.player.Tile) <= OutingLeadFarTiles
+            || !near && o.LeadMaps.Contains(Game1.currentLocation?.Name) && o.LeadAway < OutingLeadWaitTicks;
+        o.LeadAway = near && following ? 0 : o.LeadAway + 1;
+        if (o.LeadAway < OutingLeadWaitTicks && walking)
+            return;
+        o.Leading = null;
+        npc.controller = null;
+        npc.queuedSchedulePaths.Clear();
+        this.Monitor.Log($"{m.Npc} 没等到玩家跟上，不去{o.LeadSpot.Map}了。", LogLevel.Info);
+    }
 
     /// <summary>
     /// Counts what the player does while the NPC is there to see it, with an emote: a fish caught (an exclamation for a
@@ -308,6 +441,13 @@ internal sealed partial class ModEntry
     /// <summary>A word where the player can see it, then off; out of sight it simply goes.</summary>
     private void OutingBye(Meeting m, NPC npc, string word)
     {
+        // Wherever it was leading, it stops for the goodbye.
+        if (m.Out.Leading is not null)
+        {
+            m.Out.Leading = null;
+            npc.controller = null;
+            npc.queuedSchedulePaths.Clear();
+        }
         if (npc.currentLocation != Game1.currentLocation)
         {
             this.EndOuting(m, npc);

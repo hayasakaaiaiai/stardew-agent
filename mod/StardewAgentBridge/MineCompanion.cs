@@ -33,6 +33,10 @@ internal sealed partial class ModEntry
     /// <summary>What vanilla leaves the player with after passing out.</summary>
     private const int RescueHealth = 10;
     private const int ByeTicks = 90;
+    /// <summary>A hit on a stone this often, within this reach, as hard as the starting pickaxe (docs/npc-meetings-more.md §6).</summary>
+    private const int MineEveryTicks = 90;
+    private const float MineReachTiles = 2;
+    private const int MineDamage = 1;
     /// <summary>How long before the agreed time a spouse sets off from home.</summary>
     private const int SpouseHeadStartMinutes = 30;
 
@@ -62,6 +66,8 @@ internal sealed partial class ModEntry
         public int Floor;
         public int Deepest;
         public int Kills;
+        /// <summary>Stones it broke for the player (docs/npc-meetings-more.md §6).</summary>
+        public int Mined;
         public bool Rescued;
         /// <summary>The player passed out; the warp out is under way.</summary>
         public bool Rescuing;
@@ -74,7 +80,7 @@ internal sealed partial class ModEntry
 
         public Dictionary<string, object?> Fields(bool fights) => new()
         {
-            ["floor"] = this.Floor, ["deepest"] = this.Deepest, ["kills"] = this.Kills, ["fights"] = fights, ["rescued"] = this.Rescued,
+            ["floor"] = this.Floor, ["deepest"] = this.Deepest, ["kills"] = this.Kills, ["fights"] = fights, ["rescued"] = this.Rescued, ["mined"] = this.Mined,
         };
     }
 
@@ -291,6 +297,8 @@ internal sealed partial class ModEntry
                 this.FollowStep(m, npc);
             if (e.IsMultipleOf(FightEveryTicks) && Fighters.Contains(m.Npc))
                 this.FightStep(m, npc);
+            if (e.IsMultipleOf(MineEveryTicks))
+                this.MineStep(m, npc);
         }
     }
 
@@ -339,6 +347,46 @@ internal sealed partial class ModEntry
         trip.Hold = new ApproachController(path, location, npc, -1) { Hold = true };
         npc.temporaryController = trip.Hold;
         npc.speed = CompanionSpeed;
+    }
+
+    /// <summary>
+    /// Hits a stone next to it, as the player's starting pickaxe would (docs/npc-meetings-more.md §6): broken, it drops
+    /// what vanilla drops for the player, may open a ladder and counts as a rock the player crushed, but the mining
+    /// experience vanilla gives for it is taken back. One who fights hits monsters first.
+    /// </summary>
+    private void MineStep(Meeting m, NPC npc)
+    {
+        GameLocation location = npc.currentLocation;
+        if (Fighters.Contains(m.Npc) && location.characters.OfType<Monster>().Any(monster => monster.Health > 0
+            && Vector2.Distance(monster.Tile, npc.Tile) <= FightReachTiles + 1))
+            return;
+        Vector2 player = Game1.player.Tile;
+        Vector2? found = location.objects.Pairs.Where(pair => pair.Value.IsBreakableStone() && pair.Key != player
+                && Vector2.Distance(pair.Key, npc.Tile) <= MineReachTiles)
+            .OrderBy(pair => Vector2.Distance(pair.Key, npc.Tile)).Select(pair => (Vector2?)pair.Key).FirstOrDefault();
+        if (found is not Vector2 tile || !location.objects.TryGetValue(tile, out StardewValley.Object stone))
+            return;
+        npc.faceGeneralDirection(tile * 64f + new Vector2(32f, 32f));
+        location.playSound("hammer");
+        stone.shakeTimer = 200;
+        stone.MinutesUntilReady -= MineDamage;
+        if (stone.MinutesUntilReady > 0)
+        {
+            Game1.createRadialDebris(location, 14, (int)tile.X, (int)tile.Y, Game1.random.Next(2, 5), false);
+            return;
+        }
+        // Vanilla's own drops and ladders, given as the player's; the experience it hands out is put back.
+        int experience = Game1.player.experiencePoints[Farmer.miningSkill], level = Game1.player.miningLevel.Value, levels = Game1.player.newLevels.Count;
+        location.OnStoneDestroyed(stone.ItemId, (int)tile.X, (int)tile.Y, Game1.player);
+        Game1.player.experiencePoints[Farmer.miningSkill] = experience;
+        Game1.player.miningLevel.Value = level;
+        while (Game1.player.newLevels.Count > levels)
+            Game1.player.newLevels.RemoveAt(Game1.player.newLevels.Count - 1);
+        location.objects.Remove(tile);
+        location.playSound("stoneCrack");
+        Game1.createRadialDebris(location, 14, (int)tile.X, (int)tile.Y, Game1.random.Next(2, 5), false);
+        Game1.stats.RocksCrushed++;
+        m.Trip.Mined++;
     }
 
     /// <summary>

@@ -48,6 +48,22 @@ internal sealed partial class ModEntry
         ["矿洞"] = new[] { ("Mountain", 56, 6, 3), ("Mountain", 52, 7, 1) },
         ["骷髅洞穴"] = new[] { ("Desert", 8, 10, 0), ("Desert", 9, 10, 0) },
         ["火山"] = new[] { ("IslandNorth", 38, 26, 1), ("IslandNorth", 43, 26, 3) },
+        // Going to a festival together: vanilla takes everyone there (docs/npc-meetings-more.md §3).
+        ["复活节"] = Array.Empty<(string, int, int, int)>(),
+        ["花舞节"] = Array.Empty<(string, int, int, int)>(),
+        ["夏威夷宴会"] = Array.Empty<(string, int, int, int)>(),
+        ["月光水母起舞"] = Array.Empty<(string, int, int, int)>(),
+        ["星露谷展览会"] = Array.Empty<(string, int, int, int)>(),
+        ["万灵节"] = Array.Empty<(string, int, int, int)>(),
+        ["冰雪节"] = Array.Empty<(string, int, int, int)>(),
+        ["冬日星盛宴"] = Array.Empty<(string, int, int, int)>(),
+    };
+
+    /// <summary>The festivals an appointment can be to, by the backend's name: vanilla's festival id (src/agent/meeting-agreement.ts).</summary>
+    private static readonly Dictionary<string, string> FestivalPlaces = new()
+    {
+        ["复活节"] = "spring13", ["花舞节"] = "spring24", ["夏威夷宴会"] = "summer11", ["月光水母起舞"] = "summer28",
+        ["星露谷展览会"] = "fall16", ["万灵节"] = "fall27", ["冰雪节"] = "winter8", ["冬日星盛宴"] = "winter25",
     };
 
     private sealed class Meeting
@@ -98,6 +114,10 @@ internal sealed partial class ModEntry
         public bool Reported;
         public bool Farm => this.Place == FarmPlace;
         public bool Dungeon => DungeonExits.ContainsKey(this.Place);
+        /// <summary>Going to this festival together: vanilla's festival id.</summary>
+        public string? Festival => FestivalPlaces.TryGetValue(this.Place, out string? key) ? key : null;
+        /// <summary>Met at the festival, so its end is the appointment's end.</summary>
+        public bool AtFestival;
         /// <summary>Lives on the farm already, so its schedule is left alone (FarmVisits.cs), or it is fetched (MineCompanion.cs).</summary>
         public bool Spouse;
         /// <summary>Close enough to do the farm chores.</summary>
@@ -117,7 +137,7 @@ internal sealed partial class ModEntry
         /// <summary>Together after meeting somewhere ordinary (Outing.cs).</summary>
         public readonly Outing Out = new();
         /// <summary>Neither the farm nor a dungeon door: once met, the NPC goes about with the player (docs/npc-outing.md).</summary>
-        public bool Ordinary => !this.Farm && !this.Dungeon;
+        public bool Ordinary => !this.Farm && !this.Dungeon && this.Festival is null;
         /// <summary>A farm visit: 0 on the way, 1 on the farm, 2 walking out, 3 gone.</summary>
         public int Stage;
         /// <summary>Which of the place's spots, counting others meeting there today.</summary>
@@ -130,6 +150,17 @@ internal sealed partial class ModEntry
         /// <summary>A conversation took it back or sent the NPC home; undone on the next tick, once.</summary>
         public bool CallOff;
         public bool CalledOff;
+        /// <summary>A conversation moved it within today: undone, then put in afresh (docs/npc-meetings-more.md §1).</summary>
+        public (int Time, string Place)? MoveTo;
+        /// <summary>Where it moved, for the notice instead of "取消了".</summary>
+        public string? MovedTo;
+        /// <summary>The one it moved to: its notice was already shown.</summary>
+        public bool Moved;
+        /// <summary>
+        /// Not agreed: a close NPC came to help on the farm on its own (docs/npc-meetings-more.md §5). Not the backend's,
+        /// so its lists leave it alone; no friendship either way.
+        /// </summary>
+        public bool Surprise;
     }
 
     /// <summary>Where a schedule has an NPC at some time: the end of a route, with how it stands there.</summary>
@@ -203,7 +234,8 @@ internal sealed partial class ModEntry
         // Who asks the player out today is chosen once the day's appointments are known (Invites.cs).
         this.meetingsArrived = true;
         // One agreed today that could not go stays given up, so a resend does not tell the player twice.
-        foreach (string pending in this.meetings.Where(pair => !pair.Value.Applied && !(pair.Value.Failed && pair.Value.SameDay)).Select(pair => pair.Key).ToList())
+        foreach (string pending in this.meetings.Where(pair => !pair.Value.Applied && !(pair.Value.Failed && pair.Value.SameDay) && !pair.Value.Surprise)
+            .Select(pair => pair.Key).ToList())
             this.meetings.Remove(pending);
         foreach (JsonElement item in list.EnumerateArray())
         {
@@ -213,7 +245,10 @@ internal sealed partial class ModEntry
             bool sameDay = item.TryGetProperty("sameDay", out JsonElement today) && today.ValueKind == JsonValueKind.True;
             if (!item.TryGetProperty("npc", out JsonElement id) || id.ValueKind != JsonValueKind.String
                 || !item.TryGetProperty("time", out JsonElement time) || time.ValueKind != JsonValueKind.Number || !time.TryGetInt32(out int hhmm)
-                || hhmm < (sameDay ? 600 : 800) || hhmm > 2100 || hhmm % 100 > 59 || hhmm % 10 != 0
+                // The evening festivals begin at 22:00.
+                || hhmm < (sameDay ? 600 : 800) || hhmm > (item.TryGetProperty("place", out JsonElement said) && said.ValueKind == JsonValueKind.String
+                    && FestivalPlaces.ContainsKey(said.GetString()!) ? 2200 : 2100)
+                || hhmm % 100 > 59 || hhmm % 10 != 0
                 || !item.TryGetProperty("place", out JsonElement place) || place.ValueKind != JsonValueKind.String || !MeetPlaces.ContainsKey(place.GetString()!))
                 continue;
             string? name = SocialNpcs.FirstOrDefault(npc => npc.Equals(id.GetString(), StringComparison.OrdinalIgnoreCase));
@@ -221,7 +256,26 @@ internal sealed partial class ModEntry
             if (item.TryGetProperty("calledOff", out JsonElement off) && off.ValueKind == JsonValueKind.True)
             {
                 if (name is not null && this.meetings.TryGetValue(name, out Meeting? known))
+                {
                     known.CallOff = true;
+                    // Moved to another day: said so instead of "取消了" (docs/npc-meetings-more.md §1).
+                    if (item.TryGetProperty("movedTo", out JsonElement to) && to.ValueKind == JsonValueKind.String && to.GetString() is { Length: > 0 and <= 40 } where)
+                        known.MovedTo = where;
+                }
+                continue;
+            }
+            // Already coming to help on its own: that is today's (docs/npc-meetings-more.md §5).
+            if (name is not null && this.meetings.TryGetValue(name, out Meeting? coming) && coming.Surprise)
+                continue;
+            // The same NPC at another time or place today: moved (docs/npc-meetings-more.md §1).
+            if (name is not null && this.meetings.TryGetValue(name, out Meeting? same) && !same.Reported
+                && (same.Agreed != hhmm || same.Place != place.GetString()))
+            {
+                if (same.Applied)
+                    same.MoveTo = (hhmm, place.GetString()!);
+                else
+                    // One that could not go: tried afresh, with the usual notice.
+                    this.meetings[name] = new Meeting(name, hhmm, place.GetString()!, sameDay: true);
                 continue;
             }
             if (name is not null && !this.meetings.ContainsKey(name) && this.meetings.Count < MeetsPerDay)
@@ -233,15 +287,19 @@ internal sealed partial class ModEntry
     /// <summary>Puts appointments into today's schedules, then watches them: arrival, the player coming, the end.</summary>
     private void TickMeetings()
     {
+        // Who asks the player out today, and who comes to help unasked, once the day's appointments are known (Invites.cs).
+        this.TodayInviter();
         if (!this.config.NpcMeetings || this.meetings.Count == 0 || !Context.IsWorldReady || !this.activeLoad || Game1.eventUp)
             return;
-        foreach (Meeting m in this.meetings.Values)
+        foreach (Meeting m in this.meetings.Values.ToList())
         {
-            if (m.CallOff && !m.CalledOff)
+            if (m.MoveTo is not null && !m.CallOff)
+                this.MoveMeeting(m);
+            else if (m.CallOff && !m.CalledOff)
                 this.CallOffMeeting(m);
             else if (!m.Applied && !m.Failed)
                 this.ApplyMeeting(m);
-            else if (m.Applied && !m.Reported)
+            else if (m.Applied && !m.Reported && m.Festival is null)
                 this.WatchMeeting(m);
         }
     }
@@ -249,6 +307,11 @@ internal sealed partial class ModEntry
     private void ApplyMeeting(Meeting m)
     {
         m.ReceivedAt = Game1.timeOfDay;
+        if (m.Festival is string festival)
+        {
+            this.ApplyFestivalMeeting(m, festival);
+            return;
+        }
         NPC? npc = Game1.getCharacterFromName(m.Npc);
         string relation = npc is null ? "stranger" : GameState.Relation(npc);
         bool spouse = relation is "married" or "roommate";
@@ -302,7 +365,7 @@ internal sealed partial class ModEntry
             return;
         }
         m.Applied = true;
-        if (m.SameDay && npc is not null)
+        if (m.SameDay && !m.Moved && npc is not null)
             Game1.addHUDMessage(new HUDMessage(m.Agreed <= m.ReceivedAt ? $"和{npc.displayName}约好马上在{m.Place}见"
                 : $"和{npc.displayName}约好 {m.Time / 100}:{m.Time % 100:00} 在{m.Place}见", HUDMessage.newQuest_type));
     }
@@ -521,8 +584,29 @@ internal sealed partial class ModEntry
         else
         {
             m.Reported = true;
-            Game1.addHUDMessage(new HUDMessage($"和{npc.displayName}的约定取消了", HUDMessage.error_type));
+            Game1.addHUDMessage(m.MovedTo is string to ? new HUDMessage($"和{npc.displayName}的约定改到{to}", HUDMessage.newQuest_type)
+                : new HUDMessage($"和{npc.displayName}的约定取消了", HUDMessage.error_type));
         }
+    }
+
+    /// <summary>
+    /// Moved within today (docs/npc-meetings-more.md §1): before they met, undone as a call-off is, then put into the
+    /// schedule afresh at the new time and place; once together (met, on the farm, underground), it stays as it is.
+    /// </summary>
+    private void MoveMeeting(Meeting m)
+    {
+        (int time, string place) = m.MoveTo!.Value;
+        m.MoveTo = null;
+        if (m.Met || m.Reported || m.Trip.Joined || m.Out.Started || m.Farm && m.Stage >= 1)
+        {
+            this.Monitor.Log($"{m.Npc} 已经和玩家在一起，约定不改。", LogLevel.Info);
+            return;
+        }
+        m.CallOff = true;
+        m.MovedTo = $" {time / 100}:{time % 100:00} 在{place}";
+        this.CallOffMeeting(m);
+        this.meetings[m.Npc] = new Meeting(m.Npc, time, place, sameDay: true) { Moved = true };
+        this.Monitor.Log($"{m.Npc} 今天的约定改到 {time} 在{place}。", LogLevel.Info);
     }
 
     /// <summary>The original stops back in place; from where it stands to where they have it now, if it has set off.</summary>
@@ -682,11 +766,67 @@ internal sealed partial class ModEntry
         return true;
     }
 
-    /// <summary>When the day ends before the NPC leaves: report what happened so far, if the agreed time has come.</summary>
+    /// <summary>
+    /// When the day ends before the NPC leaves: report what happened so far, if the agreed time has come. One to a
+    /// festival the player never went to was stood up there: vanilla had her at the festival all the same.
+    /// </summary>
     private void EndMeetings()
     {
-        foreach (Meeting m in this.meetings.Values.Where(m => m.Applied && !m.Reported && (m.SameDay && m.Arrived || Game1.timeOfDay >= m.Time)))
-            this.ReportMeeting(m, m.Trip.Joined ? Game1.timeOfDay : Math.Min(Game1.timeOfDay, m.Leave));
+        foreach (Meeting m in this.meetings.Values.Where(m => m.Applied && !m.Reported && (m.Festival is not null || m.SameDay && m.Arrived
+            || Game1.timeOfDay >= m.Time)))
+        {
+            // When the player attended, only the observed cast can establish the NPC's arrival.
+            m.Arrived |= m.Festival is not null && !m.AtFestival;
+            this.ReportMeeting(m, m.Trip.Joined || m.Festival is not null ? Game1.timeOfDay : Math.Min(Game1.timeOfDay, m.Leave));
+        }
+    }
+
+    /// <summary>
+    /// To a festival together (docs/npc-meetings-more.md §3): only on its day, and nothing moves her; vanilla takes
+    /// everyone there. It counts as met once the player is at that festival with her there (TickFestivalMeetings).
+    /// </summary>
+    private void ApplyFestivalMeeting(Meeting m, string festival)
+    {
+        NPC? npc = Game1.getCharacterFromName(m.Npc);
+        if (npc is null || $"{Game1.currentSeason}{Game1.dayOfMonth}" != festival)
+        {
+            m.Failed = true;
+            this.Monitor.Log($"{m.Npc} 今天不是{m.Place}，约定不去了。", LogLevel.Info);
+            return;
+        }
+        m.Applied = true;
+        m.Spouse = GameState.Relation(npc) is "married" or "roommate";
+        if (m.SameDay && !m.Moved)
+            Game1.addHUDMessage(new HUDMessage($"和{npc.displayName}约好一起去{m.Place}", HUDMessage.newQuest_type));
+        this.Monitor.Log($"{m.Npc} 和玩家约好一起去{m.Place}。", LogLevel.Info);
+    }
+
+    /// <summary>
+    /// Every tick, events or not: at the festival with her there, they met; once the player has left it, the appointment
+    /// is over and reported. Its arrival time is left out: everyone is there when the festival begins.
+    /// </summary>
+    private void TickFestivalMeetings()
+    {
+        if (this.meetings.Count == 0 || !Context.IsWorldReady)
+            return;
+        Event? festival = Game1.CurrentEvent is { isFestival: true } current && current.id.StartsWith("festival_") ? current : null;
+        string? key = festival?.id["festival_".Length..];
+        foreach (Meeting m in this.meetings.Values.Where(m => m.Festival is not null && m.Applied && !m.Reported).ToList())
+        {
+            if (festival is not null && m.Festival == key)
+            {
+                m.AtFestival = true;
+                bool present = festival.actors.Any(actor => actor?.Name.Equals(m.Npc, StringComparison.OrdinalIgnoreCase) == true);
+                m.Arrived |= present;
+                if (!m.Met && present)
+                {
+                    m.Met = true;
+                    this.Monitor.Log($"{m.Npc} 和玩家在{m.Place}碰上面了。", LogLevel.Info);
+                }
+            }
+            else if (m.AtFestival)
+                this.ReportMeeting(m, Game1.timeOfDay);
+        }
     }
 
     /// <summary>Only an NPC that got there remembers waiting; one held up on the way says nothing.</summary>
@@ -712,10 +852,19 @@ internal sealed partial class ModEntry
             fields["mine"] = m.Trip.Fields(Fighters.Contains(m.Npc));
         if (m.Out.Started)
             fields["outing"] = m.Out.Fields();
+        // Stood up, as the friendship below judges it but whatever the setting: the NPC minds for a few days
+        // (docs/npc-meetings-more.md §2), and does not ask the player out meanwhile.
+        if (m.Surprise)
+            fields["surprise"] = true;
+        if (!m.Met && !m.CalledOff && !m.ComesLate && !m.Spouse && m.Helped is null && !m.Surprise)
+        {
+            fields["stoodUp"] = true;
+            Game1.player.modData[StoodUpKey + m.Npc] = ((int)Game1.Date.TotalDays).ToString();
+        }
         // Kept, it warms the NPC like a kind word; stood up, it stings like a slight (docs/npc-meeting-friendship.md).
         // Spouses and roommates never gain or lose appointment friendship, even when the player comes.
         // Called off beforehand, the NPC itself late or chores done on the farm: nobody was stood up.
-        if (this.config.MeetingsChangeFriendship && !m.Spouse && (m.Trip.Actor ?? Game1.getCharacterFromName(m.Npc)) is NPC npc
+        if (this.config.MeetingsChangeFriendship && !m.Spouse && !m.Surprise && (m.Trip.Actor ?? Game1.getCharacterFromName(m.Npc)) is NPC npc
             && (m.Met || !m.CalledOff && !m.ComesLate && m.Helped is null))
         {
             (int gain, int loss) = FriendshipStep(GameState.Hearts(npc), GameState.Relation(npc));

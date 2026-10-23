@@ -16,6 +16,7 @@ const doors: Record<string, { map: string; x: number; y: number; startX: number;
   骷髅洞穴: { map: 'Desert', x: 8, y: 6, startX: 10, startY: 10 },
   火山: { map: 'IslandNorth', x: 40, y: 24, startX: 40, startY: 30 },
 };
+export { prepare as prepareMine };
 async function prepare(h: Host, npc = 'Abigail', hearts = 8, enabled = true, fromNight = false,
   place = '矿洞', fresh = true) {
   const { rpc, chapter, check } = h;
@@ -53,9 +54,14 @@ export async function runMineCore(h: Host) {
   check('mine-native-floor-generation-and-companion-warp', trip(state).Floor === 1 && trip(state).actor.map === state.location && trip(state).Following, mine(state));
   await rpc('mine-room'); const collision = await rpc('mine-collision');
   check('mine-vanilla-collision-allows-player-through-companion', collision.native?.blocked === true && collision.native?.allowed === false, collision.native);
+  const beforeObstacle = collision.more!;
   state = await rpc('mine-follow', { blocked: true });
   check('mine-follows-by-native-path-through-multiple-tiles', mine(state).travel.length > 2 && trip(state).actor.temporary, mine(state));
-  check('mine-native-follow-keeps-real-stone-intact', mine(state).obstacle?.exists && mine(state).obstacle?.id === '(O)343', mine(state));
+  const broken = mine(state).obstacle?.exists === false ? 1 : 0;
+  check('mine-native-follow-accounts-for-the-real-stone', (broken === 1 || mine(state).obstacle?.id === '(O)343')
+    && state.more!.rocks === beforeObstacle.rocks + broken
+    && state.more!.mined.Abigail === beforeObstacle.mined.Abigail! + broken
+    && state.more!.mining === beforeObstacle.mining, { obstacle: mine(state).obstacle, before: beforeObstacle, after: state.more });
   state = await rpc('mine-far');
   check('mine-far-catchup-is-near-and-keeps-protection', trip(state).actor.pass && !trip(state).actor.destroys
     && Math.abs(trip(state).actor.x - state.player!.x) + Math.abs(trip(state).actor.y - state.player!.y) <= 2, mine(state));

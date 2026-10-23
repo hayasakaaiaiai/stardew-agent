@@ -6,6 +6,7 @@ interface OutingFields { places: string[]; here: string; fish: number; fishNames
 export interface OutingState { tick: number; forage: number; artifacts: number; icons: { happy: number; sad: number; heart: number; surprise: number };
   meetings: { Npc: string; Met: boolean; Arrived: boolean; Reported: boolean; CalledOff: boolean; Leave: number;
     Together: boolean; Started: boolean; Still: number; Bye: number; EmoteAfter: number; GiftEmote: number | null; waitingForReturn: boolean; fields: OutingFields;
+    Since: number; Suggested: boolean; Leading: string | null; LeadMaps: string[]; LeadAway: number; leadSpot: { map: string; x: number; y: number };
     actor: { map: string; x: number; y: number; facing: number; speed: number; CurrentEmote: number; CurrentEmoteIndex: number;
       temporary: boolean; controller: boolean; pass: boolean; destroys: boolean; text: string | null } }[] }
 const outing = (s: State) => s.outing!.meetings[0]!;
@@ -68,19 +69,20 @@ export async function runOuting(h: FriendshipHost, section: string) {
     check('outing-rejoins-on-a-different-safe-exit', outing(state).actor.map === 'Mountain' && distance(state) <= 2, state.outing);
     await rpc('warp', { map: 'BathHouse_Pool', x: 10, y: 15 }); state = await observe(30);
     check('outing-waits-outside-bathhouse-pool', outing(state).actor.map === 'Mountain', state.outing);
-    await rpc('warp', { map: 'Town', x: 50, y: 68 }); await observe(180);
+    await rpc('warp', { map: 'Beach', x: 33, y: 34 }); await observe(180);
     state = await rpc('outing-menu'); const paused = outing(state).actor;
-    await rpc('outing-player', { x: 62, y: 68 }); state = await observe(180);
+    await rpc('outing-player', { x: 42, y: 34 }); state = await observe(180);
     check('outing-native-menu-pauses-following', outing(state).actor.x === paused.x && outing(state).actor.y === paused.y, state.outing);
     await rpc('outing-menu', { open: false }); state = await observe(240);
     check('outing-follows-again-after-menu-closes', distance(state) <= 3, state.outing);
     h.setReply('我们一起走了走。'); await h.say('Abigail', '我们刚才去了哪些地方？', 'outing-live-recall');
     check('outing-current-prompt-has-native-route', h.latestSystem().includes('你一直陪着农场主') && h.latestSystem().includes('鹈鹕镇'), h.latestSystem()); await h.close();
-    await rpc('warp', { map: 'Desert', x: 10, y: 10 }); state = await observe(150);
+    // Vanilla excludes Farm from NPC schedule pathfinding, so this is a real unreachable return route.
+    await rpc('warp', { map: 'Farm', x: 50, y: 25 }); state = await observe(150);
     const wire = h.wireCount(); await rpc('clock', { time: outing(state).Leave }); state = await observe(30);
     check('outing-leave-says-goodbye-before-releasing', outing(state).Bye > 0 && outing(state).actor.text === '我该回去了。', state.outing);
     const result = await ended('outing-expiry-reports-route-and-kept-meeting', wire); state = result.state;
-    check('outing-no-native-return-path-waits-out-of-sight', outing(state).waitingForReturn && outing(state).actor.map === 'Desert', state.outing);
+    check('outing-no-native-return-path-waits-out-of-sight', outing(state).waitingForReturn && outing(state).actor.map === 'Farm', state.outing);
     await rpc('warp', { map: 'FarmHouse', x: 3, y: 4 }); state = await observe(30);
     check('outing-return-fallback-waits-until-player-leaves', !outing(state).waitingForReturn && outing(state).actor.map === 'Town', state.outing);
     check('outing-expiry-restores-speed-and-collision', outing(state).actor.speed === 2 && !outing(state).actor.temporary && !outing(state).actor.pass, state.outing);
@@ -118,10 +120,10 @@ export async function runOuting(h: FriendshipHost, section: string) {
     const beforeClose = outing(state).EmoteAfter;
     state = await observe(10);
     check('outing-gift-reaction-waits-for-vanilla-dialogue', outing(state).EmoteAfter === beforeClose, state.outing);
-    state = await rpc('outing-menu', { open: false });
+    state = await rpc('action-close-menu');
     check('outing-gift-reaction-obeys-the-three-second-gap', state.outing!.tick < recentEmote
       && outing(state).EmoteAfter === recentEmote && outing(state).GiftEmote === state.outing!.icons.heart, state.outing);
-    state = await observe(190);
+    state = await observe(Math.max(10, recentEmote - state.outing!.tick + 10));
     check('outing-loved-gift-shows-native-heart-after-dialogue', outing(state).actor.CurrentEmote === state.outing!.icons.heart, state.outing);
     const last = outing(state).EmoteAfter;
     state = await rpc('outing-forage');
@@ -163,10 +165,20 @@ export async function runOuting(h: FriendshipHost, section: string) {
     await rpc('clock', { time: 1000 }); await rpc('action-reset');
     await rpc('action-place', { map: 'Desert', x: 10, y: 10, targetX: 11, targetY: 10, next: 2200 });
     await rpc('config', { NpcMeetings: true, NpcApproach: false, MeetingsGoTogether: true });
-    await rpc('action-meetings', { meetings: [{ npc: 'abigail', place: '海滩', time: 1100 }] });
+    h.setReply('你好。'); await rpc('talk-open', { npc: 'Abigail', keepFriendship: true });
+    h.setReply('好啊，今天上午十一点海边见。');
+    await rpc('talk-say', { text: '今天上午十一点海边见？', label: 'outing-unsaved-agreement' }); await h.close();
+    let state = await observe(90);
+    check('outing-unsaved-dialogue-creates-a-real-contract', state.actions!.meetings.some(m => m.Npc === 'Abigail'
+      && m.Applied && !m.Failed && m.Place === '海滩'), state.actions);
     await rpc('clock', { time: 1100 }); await rpc('warp', { map: 'Beach', x: 33, y: 34 });
     await rpc('action-meeting-wait', { natural: true }); await observe(120); await rpc('outing-artifact'); await dismiss();
-    await rpc('title'); let state = await rpc('load');
+    await rpc('action-close-menu'); state = await observe(150);
+    check('outing-unsaved-dismissal-really-reports-the-artifact', outing(state).Reported && outing(state).CalledOff
+      && outing(state).fields.artifacts === 1, state.outing);
+    h.setReply('刚才你挖到了古物。'); await h.say('Abigail', '刚才我挖到了什么？', 'outing-before-rollback');
+    check('outing-unsaved-activity-is-readable-before-rollback', /挖到 1 件古物/.test(h.latestSystem()), h.latestSystem()); await h.close();
+    await rpc('title'); state = await rpc('load');
     check('outing-unsaved-controller-is-not-persisted', !state.outing!.meetings.some(m => m.Together), state.outing);
     h.setReply('只记得保存过的那次。'); await h.say('Abigail', '刚才我挖到了什么古物？', 'outing-rolled-back-recall');
     check('outing-unsaved-activity-memory-rolls-back', !/挖到 1 件古物/.test(h.latestSystem()), h.latestSystem()); await h.close();

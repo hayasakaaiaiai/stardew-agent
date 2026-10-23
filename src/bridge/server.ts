@@ -5,7 +5,8 @@ import { BACKSTAGE_PER_DAY, BACKSTAGE_TOPIC, type BackstagePerson, backstageHour
 import { AMBIENT_CALLS_PER_DAY, type AmbientLine, type AmbientPerson, ambientPrompt, parseAmbient } from '../agent/ambient.ts';
 import type { Consolidator } from '../agent/consolidation.ts';
 import { OPENING_LINE, runTurn, type Standing, type WorldState } from '../agent/dialogue.ts';
-import { farInvitation, farInvitationLine, invitationLine, meetingLine, MEETS_PER_DAY, upcomingLine } from '../agent/meetings.ts';
+import { farInvitation, farInvitationLine, festivalClash, invitationLine, meetingLine, MEETS_PER_DAY, upcomingLine, visitLine, withBirthday,
+  yearDay } from '../agent/meetings.ts';
 import { newsFor } from '../agent/news.ts';
 import { parseScene, type SceneLine, type SceneNews, SCENES_PER_DAY, SCENE_GAP_MINUTES, scenePrompt } from '../agent/scene.ts';
 import { nextStop, restOfDay, scheduleReplies, type ScheduleStop } from '../agent/schedule.ts';
@@ -41,7 +42,7 @@ export interface BridgeOptions {
   log?: (line: string) => void;
 }
 
-interface OpenTalk { npcId: string; standing: Standing; world: WorldState; inPersonGifts: boolean }
+interface OpenTalk { npcId: string; standing: Standing; world: WorldState; inPersonGifts: boolean; birthday?: number }
 interface BackstageBudget { day: number; calls: number; joined: Set<string>; lastMinute: number }
 
 /** An NPC's schedule from the Mod's map of game names (docs/npc-schedules.md); none when the Mod sent none. */
@@ -384,11 +385,13 @@ export class BridgeServer {
       const invitation = message.invite === true && !meeting && (await save.meetings()).length < MEETS_PER_DAY
         ? invitationLine(message.world.date.time) : undefined;
       if (invitation) this.log(`${this.options.roster.get(npcId).name}开口约农场主`);
-      const talk: OpenTalk = { npcId, inPersonGifts: message.inPersonGifts !== false,
+      const mood = await save.mood(npcId);
+      const visit = message.visit === true && message.helped ? visitLine(message.helped) : undefined;
+      const talk: OpenTalk = { npcId, inPersonGifts: message.inPersonGifts !== false, ...(message.birthday ? { birthday: yearDay(message.birthday) } : {}),
         standing: { hearts: message.hearts, relation: message.relation, seenEvents: new Set(message.seenEvents) },
         world: { ...worldState(message.world, save.player, this.cardName),
           ...(schedule ? { schedule, scheduleFacts: scheduleReplies(message.schedule!, message.world.date.time)! } : {}),
-          ...(meeting ? { meeting } : {}), ...(invitation ? { invitation } : {}) } };
+          ...(meeting && !visit ? { meeting } : {}), ...(visit ? { visit } : {}), ...(invitation ? { invitation } : {}), ...(mood ? { mood } : {}) } };
       session.open.set(message.npc, talk);
       void this.turn(session, talk, message, OPENING_LINE, send);
       return;
@@ -399,9 +402,13 @@ export class BridgeServer {
         send({ type: 'talk.error', ...envelope(message), npc: message.npc, message: talk ? '上一句还没回完' : '对话还没有打开' }); return;
       }
       // Only for this turn: an invitation beyond the day after tomorrow is turned down (docs/npc-later-meetings.md).
-      const { farInvitation: _, invitation: __, ...world } = talk.world;
-      const far = farInvitation(message.text, save.day);
-      talk.world = { ...world, ...message.date, time: clock(message.date.time), ...(far ? { farInvitation: farInvitationLine(far) } : {}) };
+      const { farInvitation: _, invitation: __, festival: ___, ...world } = talk.world;
+      // A festival day asked for somewhere ordinary: that turn only, like a day too far (docs/npc-meetings-more.md §3).
+      const said = withBirthday(message.text, '玩家', talk.birthday, save.day);
+      const far = farInvitation(said, save.day);
+      const festival = far ? undefined : festivalClash(said, save.day);
+      talk.world = { ...world, ...message.date, time: clock(message.date.time), ...(far ? { farInvitation: farInvitationLine(far) } : {}),
+        ...(festival ? { festival } : {}) };
       void this.turn(session, talk, message, message.text, send);
       return;
     }
@@ -457,7 +464,9 @@ export class BridgeServer {
     const agreed = settled?.today;
     if (agreed) {
       const name = this.cardName(agreed.npc);
-      this.log(!agreed.by ? `${name}答应了今天的约定：${agreed.soon ? `${clock(agreed.time)} 说好马上去` : clock(agreed.time)} ${agreed.place}`
+      this.log(agreed.moved ? `${name}今天的约定改到 ${clock(agreed.time)} ${agreed.place}`
+        : agreed.movedTo ? `${name}今天在${agreed.place}的约定改到${agreed.movedTo}`
+        : !agreed.by ? `${name}答应了今天的约定：${agreed.soon ? `${clock(agreed.time)} 说好马上去` : clock(agreed.time)} ${agreed.place}`
         : agreed.sentHome ? `${name}${agreed.by === '玩家' ? '被农场主送回去了' : '说要先回去了'}（${agreed.place}）`
         : `${name}今天在${agreed.place}的约定取消了：${agreed.by === '玩家' ? '农场主说不去了' : `${name}说去不了了`}`);
       if (agreed.note) this.log(`${name}记下了：${agreed.note}`);

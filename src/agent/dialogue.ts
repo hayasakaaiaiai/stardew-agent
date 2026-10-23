@@ -28,6 +28,12 @@ export interface WorldState {
   farInvitation?: string;
   /** The opening turn's line when the NPC asks the player out (docs/npc-invites.md). */
   invitation?: string;
+  /** Lately stood up or turned down by the player (docs/npc-meetings-more.md §2). */
+  mood?: string;
+  /** This turn's line, when the player asks to meet somewhere ordinary on a festival day (docs/npc-meetings-more.md §3). */
+  festival?: string;
+  /** Come to help on the farm unasked, and what it did there (docs/npc-meetings-more.md §5). */
+  visit?: string;
   player: { name: string; gender: 'male' | 'female'; farm: string };
   /** Facts the cards' natural-language conditions depend on, e.g. 肯特 → 还在前线. */
   facts: Record<string, string>;
@@ -171,8 +177,11 @@ function situation({ npcName, world, standing, memory }: PromptInput): string {
     `- 地点：${world.location}`,
     ...(world.schedule ? [`- 今日行程（覆盖平日习惯和先前台词，不另加去处）：${world.schedule}`] : []),
     ...(world.meeting ? [`- 和农场主的约定：${world.meeting}`] : []),
+    ...(world.visit ? [`- ${world.visit}`] : []),
     ...(world.farInvitation ? [world.farInvitation] : []),
     ...(world.invitation ? [world.invitation] : []),
+    ...(world.mood ? [world.mood] : []),
+    ...(world.festival ? [world.festival] : []),
     `- 玩家：${player.name}（${player.gender === 'female' ? '女' : '男'}），经营${player.farm}农场`,
     `- 你对玩家的好感：${standing.hearts} 心；关系：${RELATIONS[standing.relation]}`,
     ...(facts.length ? ['- 世界事实：', ...facts] : []),

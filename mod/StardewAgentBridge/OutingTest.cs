@@ -20,6 +20,8 @@ internal sealed partial class ModEntry
         {
             m.Npc, m.Met, m.Arrived, m.Reported, m.CalledOff, m.Leave,
             m.Out.Together, m.Out.Started, m.Out.Still, m.Out.Bye, m.Out.EmoteAfter, m.Out.GiftEmote,
+            m.Out.Since, m.Out.Suggested, m.Out.Leading, m.Out.LeadMaps, m.Out.LeadAway,
+            leadSpot = new { map = m.Out.LeadSpot.Map, x = m.Out.LeadSpot.X, y = m.Out.LeadSpot.Y },
             waitingForReturn = m.Out.GoBack is not null, fields = m.Out.Fields(),
             actor = (m.Trip.Actor ?? Game1.getCharacterFromName(m.Npc)) is not NPC npc ? null : new
             {

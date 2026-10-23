@@ -594,6 +594,29 @@ Test("a called-off appointment is marked for undoing, never added, and one not y
     Check((bool)Get(leah, "Failed")! && (bool)Get(leah, "Reported")! && (bool)Get(leah, "CalledOff")!, "One never applied could still be applied or reported.");
 });
 
+Test("an appointment moved within today is marked to be moved, one moved to another day says where, and one that could not go is tried afresh", () =>
+{
+    object mod = BubbleMod();
+    Set(mod, "meetings", Activator.CreateInstance(modType.GetField("meetings", Fields)!.FieldType, StringComparer.OrdinalIgnoreCase)!);
+    var meetings = (System.Collections.IDictionary)Get(mod, "meetings")!;
+    JsonDocument Packet(params object[] rows) => JsonDocument.Parse(JsonSerializer.Serialize(new { type = "day.meetings", lineageId = "farm",
+        loadNonce = "current", seq = 0, meetings = rows }));
+    using (JsonDocument packet = Packet(new { npc = "abigail", time = 1400, place = "海滩" }, new { npc = "leah", time = 1400, place = "海滩" },
+        new { npc = "sam", time = 1500, place = "墓地", sameDay = true }))
+        Invoke(mod, "HandleMeetings", "day.meetings", packet.RootElement);
+    object abigail = meetings["Abigail"]!, leah = meetings["Leah"]!, sam = meetings["Sam"]!;
+    Set(abigail, "Applied", true); Set(leah, "Applied", true); Set(sam, "Failed", true);
+    using (JsonDocument later = Packet(new { npc = "abigail", time = 1500, place = "镇广场", sameDay = true },
+        new { npc = "leah", time = 1400, place = "海滩", calledOff = true, movedTo = "明天（周五）15:00 在镇广场" },
+        new { npc = "sam", time = 1700, place = "墓地", sameDay = true }))
+        Invoke(mod, "HandleMeetings", "day.meetings", later.RootElement);
+    var move = Get(abigail, "MoveTo");
+    Check(meetings["Abigail"] == abigail && move is not null && move.ToString() == "(1500, 镇广场)", "A move within today was not marked (docs/npc-meetings-more.md §1).");
+    Check((bool)Get(leah, "CallOff")! && (string?)Get(leah, "MovedTo") == "明天（周五）15:00 在镇广场", "A move to another day did not say where.");
+    Check(meetings["Sam"] != sam && (int)modType.GetNestedType("Meeting", BindingFlags.NonPublic)!.GetProperty("Agreed")!.GetValue(meetings["Sam"])! == 1700,
+        "One that could not go was not tried again at the new time.");
+});
+
 Test("one that walking cannot get there in time may appear there half an hour early, never in the past", () =>
 {
     int Warp(int time, int now) => (int)modType.GetMethod("WarpDeparture", BindingFlags.Static | BindingFlags.NonPublic)!.Invoke(null, new object[] { time, now })!;
@@ -659,6 +682,15 @@ Test("an outing follows the player except where monsters are, into the bathhouse
         "Not at the player's sides, looking the way they look.");
 });
 
+Test("on an outing it suggests only ordinary places, and a shop only while it is open", () =>
+{
+    bool Open(string place, int time, int day) => (bool)modType.GetMethod("OpenNow", BindingFlags.Static | BindingFlags.NonPublic)!.Invoke(null, new object[] { place, time, day })!;
+    Check(Open("海滩", 700, 3) && Open("山上湖边", 2000, 10) && !Open("农场", 1200, 1) && !Open("矿洞", 1200, 1) && !Open("花舞节", 1200, 24),
+        "The farm, a dungeon door or a festival was suggested (docs/npc-meetings-more.md §4).");
+    Check(Open("杂货店", 1000, 1) && !Open("杂货店", 1000, 3) && !Open("杂货店", 1800, 1) && Open("博物馆", 1500, 3) && !Open("博物馆", 1900, 3)
+        && !Open("星之果实餐吧", 1100, 1) && Open("星之果实餐吧", 2000, 1), "A shop was suggested while closed.");
+});
+
 Test("an outing reports the places first visited, at most six, in the backend's fields; only ordinary places have one", () =>
 {
     Type outingType = modType.GetNestedType("Outing", BindingFlags.NonPublic)!;
@@ -709,6 +741,40 @@ Test("a fixed-clock outing keeps its agreed end while a right-away outing keeps 
     Check((int)type.GetProperty("Leave")!.GetValue(m)! == 1230, "A late arrival extended a fixed-clock outing.");
     Set(m, "ReceivedAt", 1100);
     Check((int)type.GetProperty("Leave")!.GetValue(m)! == 1240, "A right-away outing lost its ninety minutes after arrival.");
+});
+
+Test("a festival is a place an appointment can be at, the evening ones at 22:00, by vanilla's festival id, and is no outing", () =>
+{
+    object mod = BubbleMod();
+    Set(mod, "meetings", Activator.CreateInstance(modType.GetField("meetings", Fields)!.FieldType, StringComparer.OrdinalIgnoreCase)!);
+    var meetings = (System.Collections.IDictionary)Get(mod, "meetings")!;
+    using JsonDocument packet = JsonDocument.Parse(JsonSerializer.Serialize(new { type = "day.meetings", lineageId = "farm", loadNonce = "current", seq = 0,
+        meetings = new object[] { new { npc = "abigail", time = 2200, place = "月光水母起舞" }, new { npc = "leah", time = 2200, place = "海滩" },
+            new { npc = "sam", time = 900, place = "花舞节" } } }));
+    Invoke(mod, "HandleMeetings", "day.meetings", packet.RootElement);
+    Check(meetings.Contains("Abigail") && meetings.Contains("Sam") && !meetings.Contains("Leah"), "22:00 is for the evening festivals only (docs/npc-meetings-more.md §3).");
+    Type meetingType = modType.GetNestedType("Meeting", BindingFlags.NonPublic)!;
+    Check((string?)meetingType.GetProperty("Festival")!.GetValue(meetings["Abigail"]) == "summer28"
+        && (string?)meetingType.GetProperty("Festival")!.GetValue(meetings["Sam"]) == "spring24", "Not vanilla's festival id.");
+    Check(!(bool)meetingType.GetProperty("Ordinary")!.GetValue(meetings["Sam"])!, "Going to a festival together became an outing.");
+});
+
+Test("about one day in seven someone comes to help unasked, and the backend's lists neither drop nor move that visit", () =>
+{
+    bool Day(ulong game, int day) => (bool)modType.GetMethod("VisitDay", BindingFlags.Static | BindingFlags.NonPublic)!.Invoke(null, new object[] { game, day })!;
+    int days = Enumerable.Range(1, 3000).Count(day => Day(436774213UL, day));
+    Check(days > 330 && days < 530, $"Not about one day in seven: {days} of 3000 (docs/npc-meetings-more.md §5).");
+    object mod = BubbleMod();
+    Set(mod, "meetings", Activator.CreateInstance(modType.GetField("meetings", Fields)!.FieldType, StringComparer.OrdinalIgnoreCase)!);
+    var meetings = (System.Collections.IDictionary)Get(mod, "meetings")!;
+    Type meetingType = modType.GetNestedType("Meeting", BindingFlags.NonPublic)!;
+    object visit = Activator.CreateInstance(meetingType, "Abigail", 900, "农场", false)!;
+    Set(visit, "Surprise", true);
+    meetings["Abigail"] = visit;
+    using JsonDocument packet = JsonDocument.Parse(JsonSerializer.Serialize(new { type = "day.meetings", lineageId = "farm", loadNonce = "current", seq = 0,
+        meetings = new[] { new { npc = "abigail", time = 1500, place = "海滩", sameDay = true } } }));
+    Invoke(mod, "HandleMeetings", "day.meetings", packet.RootElement);
+    Check(meetings["Abigail"] == visit && Get(visit, "MoveTo") is null, "The visit was dropped or taken for a move.");
 });
 
 Test("farm chores are worded like the backend, and the farm is a place an appointment can be at", () =>
@@ -764,9 +830,10 @@ Test("a trip is reported in the shape the backend accepts", () =>
 {
     Type tripType = modType.GetNestedType("Trip", BindingFlags.NonPublic)!;
     object trip = Activator.CreateInstance(tripType, nonPublic: true)!;
-    Set(trip, "Floor", 35); Set(trip, "Deepest", 40); Set(trip, "Kills", 12); Set(trip, "Rescued", true);
+    Set(trip, "Floor", 35); Set(trip, "Deepest", 40); Set(trip, "Kills", 12); Set(trip, "Rescued", true); Set(trip, "Mined", 23);
     var fields = (Dictionary<string, object?>)tripType.GetMethod("Fields")!.Invoke(trip, new object[] { true })!;
-    Check(JsonSerializer.Serialize(fields) == """{"floor":35,"deepest":40,"kills":12,"fights":true,"rescued":true}""",
+    // "mined" since the stones it breaks are counted (docs/npc-meetings-more.md §6).
+    Check(JsonSerializer.Serialize(fields) == """{"floor":35,"deepest":40,"kills":12,"fights":true,"rescued":true,"mined":23}""",
         "The trip fields differ from src/bridge/protocol.ts (mine).");
 });
 

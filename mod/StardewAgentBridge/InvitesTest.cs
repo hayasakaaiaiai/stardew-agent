@@ -17,8 +17,11 @@ internal sealed partial class ModEntry
             today, this.inviter, this.inviterDay, this.meetingsArrived,
             days = Enumerable.Range(1, 28).Where(day => !Utility.isFestivalDay(day, Game1.season)
                 && InviteDay(Game1.uniqueIDForThisGame, month + day)).ToArray(),
+            visitDays = Enumerable.Range(1, 28).Where(day => !Utility.isFestivalDay(day, Game1.season)
+                && VisitDay(Game1.uniqueIDForThisGame, month + day)).ToArray(),
             eligible = SocialNpcs.Where(name => this.MayInvite(name, today)).ToArray(),
             history = SocialNpcs.Where(name => LastAsked(name) is not null).ToDictionary(name => name, name => LastAsked(name)),
+            stoodUp = SocialNpcs.Where(name => DayKept(StoodUpKey + name) is not null).ToDictionary(name => name, name => DayKept(StoodUpKey + name)),
         };
     }
 
@@ -33,10 +36,15 @@ internal sealed partial class ModEntry
                 {
                     Game1.player.friendshipData[name] = new Friendship(0);
                     if (!args.TryGetProperty("preserveHistory", out JsonElement keep) || !keep.GetBoolean())
+                    {
                         Game1.player.modData.Remove(InvitedKey + name);
+                        Game1.player.modData.Remove(StoodUpKey + name);
+                    }
                 }
                 if (args.TryGetProperty("lastAsked", out JsonElement last))
                     Game1.player.modData[InvitedKey + "Abigail"] = last.GetInt32().ToString();
+                if (args.TryGetProperty("stoodUp", out JsonElement stood))
+                    Game1.player.modData[StoodUpKey + "Abigail"] = stood.GetInt32().ToString();
                 break;
             case "invite-choose":
                 this.worldTestNative = new { selected = this.TodayInviter() };

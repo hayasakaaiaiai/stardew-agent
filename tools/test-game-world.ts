@@ -26,13 +26,14 @@ import { runMeetingFriendship, runFriendshipBoundaries, runSpouseFriendship } fr
 import { runMeetingWarp, runMeetingWarpPlaces } from './game-meeting-warp.ts';
 import { runOuting, type OutingState } from './game-outing.ts';
 import { runInvites, type InvitesState } from './game-invites.ts';
+import { runMeetingsMore, type MoreState } from './game-meetings-more.ts';
 import { runLaterMeetings } from './game-later-meetings.ts';
 
 interface Config { RequestId: string; UniqueId: string; SaveFolder: string; SaveDirectory: string; RunDirectory: string; GamePath: string; BackendUrl: string; World: boolean; Offline: boolean; Section: string }
 interface Npc { id: string; name: string; location: string; x: number; y: number; speed: number; ignoreScheduleToday: boolean; controller: boolean; temporary: boolean; queued: number; destroys: boolean; schedule: ScheduleStop[] | null }
-export interface State { ready: boolean; canChat: boolean; time: number; nonce: string; generation: number; location: string; weather: string; npcs: Npc[] | null; actions?: ActionState; farm?: FarmState; mine?: MineState; player?: { x: number; y: number; facing: number } | null;
+export interface State { ready: boolean; canChat: boolean; displaySleepAllowed?: boolean | null; time: number; nonce: string; generation: number; location: string; weather: string; npcs: Npc[] | null; actions?: ActionState; farm?: FarmState; mine?: MineState; player?: { x: number; y: number; facing: number } | null;
   festival: { id: string; isFestival: boolean; actors: string[]; schedules: Record<string, unknown>; dance: string | null; soup: number | null; grangeScore: number; giver: string | null } | null;
-  native: Record<string, unknown> | null; outing?: OutingState; invites?: InvitesState; reply: { npc: string; text: string } | null; minigame: string | null }
+  native: Record<string, unknown> | null; outing?: OutingState; invites?: InvitesState; more?: MoreState; reply: { npc: string; text: string } | null; minigame: string | null }
 interface Command { id: number; operation: string; completed: boolean; success: boolean; error?: string; state: State }
 interface Report { requestId: string; completed: boolean; success: boolean; message: string; elapsedSeconds: number; saveProcessing: boolean; newDay: boolean;
   worldCommand: Command | null; events: { name: string }[]; nonce: string; generation: number; day: number }
@@ -41,12 +42,12 @@ const ROOT = resolve(import.meta.dirname, '..');
 const configPath = resolve(process.argv[2]!);
 const config = JSON.parse((await readFile(configPath, 'utf8')).replace(/^\uFEFF/, '')) as Config;
 assert.equal(config.World, true); assert.equal(config.SaveFolder, `MemoryTest_${config.UniqueId}`); assert.notEqual(config.UniqueId, '436774213');
-assert.ok(['all', 'schedules', 'backstage', 'festivals', 'content', 'fair-return', 'actions', 'actions-edge', 'actions-timing', 'actions-checks', 'actions-places', 'actions-incoming', 'farm-help', 'farm-chores', 'farm-visits', 'farm-save', 'mine', 'mine-core', 'mine-rescue', 'mine-edges', 'mine-worlds', 'mine-dungeons', 'mine-save', 'same-day', 'same-day-core', 'same-day-edges', 'call-off', 'call-off-arrival', 'call-off-arrival-save', 'farm-animals', 'meeting-warp-places', 'meeting-warp', 'meeting-warp-edges', 'meeting-spouses', 'meeting-friendship', 'later-meetings', 'friendship-boundaries', 'outing', 'outing-core', 'outing-activities', 'outing-edges', 'outing-save', 'invites', 'invites-core', 'invites-edges', 'invites-changes'].includes(config.Section), 'Unknown native world test section.');
+assert.ok(['all', 'schedules', 'backstage', 'festivals', 'content', 'fair-return', 'actions', 'actions-edge', 'actions-timing', 'actions-checks', 'actions-places', 'actions-incoming', 'farm-help', 'farm-chores', 'farm-visits', 'farm-save', 'mine', 'mine-core', 'mine-rescue', 'mine-edges', 'mine-worlds', 'mine-dungeons', 'mine-save', 'same-day', 'same-day-core', 'same-day-edges', 'call-off', 'call-off-arrival', 'call-off-arrival-save', 'farm-animals', 'meeting-warp-places', 'meeting-warp', 'meeting-warp-edges', 'meeting-spouses', 'meeting-friendship', 'later-meetings', 'friendship-boundaries', 'outing', 'outing-core', 'outing-activities', 'outing-edges', 'outing-save', 'invites', 'invites-core', 'invites-edges', 'invites-changes', 'meetings-more', 'more-dialogue', 'more-festivals', 'more-leading', 'more-visits', 'more-mining', 'more-moods'].includes(config.Section), 'Unknown native world test section.');
 assert.equal(resolve(config.SaveDirectory), resolve(process.env.APPDATA!, 'StardewValley/Saves', config.SaveFolder));
 assert.ok(resolve(config.RunDirectory).startsWith(resolve(ROOT, '.runtime') + '\\'));
 const directory = config.RunDirectory;
 await mkdir(join(directory, 'sources'));
-for (const file of ['tools/test-game-world.ts', 'tools/game-actions.ts', 'tools/game-farm-help.ts', 'tools/game-mine-companion.ts', 'tools/game-same-day-meetings.ts', 'tools/game-call-off.ts', 'tools/game-farm-animals.ts', 'tools/game-meeting-friendship.ts', 'tools/game-meeting-warp.ts', 'tools/game-later-meetings.ts', 'tools/game-outing.ts', 'tools/game-invites.ts', 'mod/StardewAgentBridge/Invites.cs', 'mod/StardewAgentBridge/InvitesTest.cs', 'mod/StardewAgentBridge/TestDisplay.cs', 'mod/StardewAgentBridge/Outing.cs', 'mod/StardewAgentBridge/OutingTest.cs', 'mod/StardewAgentBridge/AnimalTest.cs', 'mod/StardewAgentBridge/MineCompanion.cs', 'mod/StardewAgentBridge/MineTest.cs', 'mod/StardewAgentBridge/FarmHelp.cs', 'mod/StardewAgentBridge/FarmVisits.cs', 'mod/StardewAgentBridge/FarmTest.cs', 'tools/prepare-world-fixture.ps1', 'src/agent/schedule.ts', 'src/agent/dialogue.ts', 'src/agent/dialogue-facts.ts',
+for (const file of ['tools/test-game-world.ts', 'tools/game-actions.ts', 'tools/game-farm-help.ts', 'tools/game-mine-companion.ts', 'tools/game-same-day-meetings.ts', 'tools/game-call-off.ts', 'tools/game-farm-animals.ts', 'tools/game-meeting-friendship.ts', 'tools/game-meeting-warp.ts', 'tools/game-later-meetings.ts', 'tools/game-outing.ts', 'tools/game-invites.ts', 'tools/game-meetings-more.ts', 'mod/StardewAgentBridge/MoreTest.cs', 'src/agent/morning.ts', 'mod/StardewAgentBridge/Invites.cs', 'mod/StardewAgentBridge/InvitesTest.cs', 'mod/StardewAgentBridge/TestDisplay.cs', 'mod/StardewAgentBridge/Outing.cs', 'mod/StardewAgentBridge/OutingTest.cs', 'mod/StardewAgentBridge/AnimalTest.cs', 'mod/StardewAgentBridge/MineCompanion.cs', 'mod/StardewAgentBridge/MineTest.cs', 'mod/StardewAgentBridge/FarmHelp.cs', 'mod/StardewAgentBridge/FarmVisits.cs', 'mod/StardewAgentBridge/FarmTest.cs', 'tools/prepare-world-fixture.ps1', 'src/agent/schedule.ts', 'src/agent/dialogue.ts', 'src/agent/dialogue-facts.ts',
   'src/agent/approach.ts', 'src/agent/meetings.ts', 'src/agent/meeting-agreement.ts', 'src/agent/nightly.ts', 'mod/StardewAgentBridge/ActionTest.cs', 'mod/StardewAgentBridge/Approach.cs', 'mod/StardewAgentBridge/Meetings.cs',
   'mod/StardewAgentBridge/SaveSync.cs', 'mod/StardewAgentBridge/ModEntry.cs', 'mod/StardewAgentBridge/Friendship.cs',
   'src/bridge/server.ts', 'src/bridge/protocol.ts', 'src/bridge/memory.ts', 'mod/StardewAgentBridge/ModConfig.cs', 'mod/StardewAgentBridge/GameState.cs',
@@ -436,6 +437,7 @@ async function fairReturn() {
 
 try {
   await wait(() => last?.worldCommand?.completed === true && last.worldCommand.state.ready, 'initial native load');
+  check('native-test-allows-display-sleep', last?.worldCommand?.state.displaySleepAllowed === true);
   if (['all', 'schedules', 'content'].includes(config.Section)) await schedules();
   if (['all', 'backstage', 'content'].includes(config.Section)) await backstage();
   if (config.Section === 'all' || config.Section === 'festivals') await festivals();
@@ -472,14 +474,15 @@ try {
     if (['all', 'mine', 'mine-worlds', 'mine-dungeons'].includes(config.Section)) await runMineWorlds(host, config.Section !== 'mine-dungeons');
     if (['all', 'mine', 'mine-save'].includes(config.Section)) await runMineSave(host);
   }
-  if (['same-day', 'same-day-core', 'same-day-edges', 'call-off', 'call-off-arrival', 'call-off-arrival-save', 'farm-animals', 'meeting-warp-places', 'meeting-warp', 'meeting-warp-edges', 'meeting-spouses', 'meeting-friendship', 'later-meetings', 'friendship-boundaries', 'outing', 'outing-core', 'outing-activities', 'outing-edges', 'outing-save', 'invites', 'invites-core', 'invites-edges', 'invites-changes'].includes(config.Section)) {
+  if (['same-day', 'same-day-core', 'same-day-edges', 'call-off', 'call-off-arrival', 'call-off-arrival-save', 'farm-animals', 'meeting-warp-places', 'meeting-warp', 'meeting-warp-edges', 'meeting-spouses', 'meeting-friendship', 'later-meetings', 'friendship-boundaries', 'outing', 'outing-core', 'outing-activities', 'outing-edges', 'outing-save', 'invites', 'invites-core', 'invites-edges', 'invites-changes', 'meetings-more', 'more-dialogue', 'more-festivals', 'more-leading', 'more-visits', 'more-mining', 'more-moods'].includes(config.Section)) {
     const host = { rpc, chapter, check, say, close, packets: modPackets, wireCount: () => packets.length,
     latestSystem: () => latestDialogue().messages[0]!.content, seedNight, meetingEntries,
     setReply: (text: string) => { actionTodayReply = text; },
     setMood: (mood: number) => { actionTodayMood = mood; },
     dayMeetings: (from = 0) => packets.slice(from).filter(row => row.direction === 'backend' && row.packet.type === 'day.meetings').map(row => row.packet),
     restart: async () => { await server.close(); server = await BridgeServer.start(options); await rpc('wait', { ticks: 120 }); } };
-    if (config.Section.startsWith('invites')) await runInvites(host, config.Section);
+    if (config.Section === 'meetings-more' || config.Section.startsWith('more-')) await runMeetingsMore(host, config.Section);
+    else if (config.Section.startsWith('invites')) await runInvites(host, config.Section);
     else if (config.Section.startsWith('outing')) await runOuting(host, config.Section);
     else if (config.Section === 'meeting-warp-places') await runMeetingWarpPlaces(host);
     else if (config.Section.startsWith('meeting-warp')) await runMeetingWarp(host, config.Section === 'meeting-warp-edges');

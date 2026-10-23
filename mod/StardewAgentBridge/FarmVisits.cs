@@ -181,7 +181,7 @@ internal sealed partial class ModEntry
         m.Helped = done;
         string summary = FarmHelpText(done);
         this.Monitor.Log($"{m.Npc} 帮忙干了农活：{summary}", LogLevel.Info);
-        Game1.addHUDMessage(new HUDMessage($"{npc.displayName}来帮忙：{summary}", HUDMessage.newQuest_type));
+        Game1.addHUDMessage(new HUDMessage($"{npc.displayName}{(m.Surprise ? "自己来农场帮忙" : "来帮忙")}：{summary}", HUDMessage.newQuest_type));
     }
 
     /// <summary>The same wording as the backend's helpedText (src/agent/meetings.ts), for the game's own message.</summary>

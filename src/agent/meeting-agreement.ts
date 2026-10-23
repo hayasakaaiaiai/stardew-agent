@@ -19,10 +19,18 @@ function number(word: string): number {
   return digits[word] ?? NaN;
 }
 
+/**
+ * "一点" is one o'clock only after a period or a day ("下午一点", "明天一点"), as "一点钟/一点整/一点左右", or opening a
+ * clause ("一点海边见"); otherwise it is a little: "早一点", "人少一点", "一点都不", "一点印象都没有" (docs/npc-meetings-more.md §0).
+ */
+const oneOClock = (before: string, after: string) => /[午晨上天]$/.test(before) || /^(?:钟|整|左右)/.test(after)
+  || /(?:^|[，,。！!？?；;…\s])$/.test(before) && !/^[都也儿点些的小]/.test(after);
+
 function clockTimes(text: string): { time: number; ambiguous: boolean }[] {
   const matches = [...text.matchAll(/(\d{1,2})[:：](\d{2})/g)].map(match => ({ hour: Number(match[1]), minute: Number(match[2]), clock: true }));
   for (const match of text.matchAll(/([零〇一二两三四五六七八九十\d]{1,3})(?:点|时)(半|一刻|三刻|[零〇一二两三四五六七八九十\d]{1,3}分)?/g)) {
     const suffix = match[2];
+    if (match[1] === '一' && match[0] === '一点' && !oneOClock(text.slice(0, match.index), text.slice(match.index! + match[0].length))) continue;
     matches.push({ hour: number(match[1]!), minute: suffix === '半' ? 30 : suffix === '一刻' ? 15 : suffix === '三刻' ? 45 : suffix ? number(suffix.slice(0, -1)) : 0, clock: false });
   }
   return matches.map(({ hour, minute, clock }) => {
@@ -91,8 +99,51 @@ export interface TodayAgreement { time: number; place: string; soon: boolean }
 
 // Another day, or none in particular, belongs to the nightly `meet` or to nobody; the NPC may mention its own past.
 const ANOTHER_DAY = /明天|明早|明晚|明儿|明日|后天|下周|下个|下次|以后|改天|哪天|(?:等.{0,3}|以后)有空|有空的时候|有空再|有机会|什么时候|周末|过几天|找(?:个)?时间|这周|这个月|将来/;
-// A day named outright: "后天", "周六", "下周一", "15号" (docs/npc-later-meetings.md).
-const DATE_WORDS = /后天|(?:周|星期|礼拜)[一二三四五六日天](?!起)|[\d一二三四五六七八九十]{1,3}号/;
+/**
+ * The festivals that take the whole town, with their day and when they begin (reference/wiki/zh/Festivals.md). On
+ * that day an appointment is to go to the festival together; nowhere else (docs/npc-meetings-more.md §3).
+ */
+export const FESTIVAL_DAYS: Readonly<Record<string, { season: number; day: number; time: number; words: RegExp; venue: string }>> = {
+  复活节: { season: 0, day: 13, time: 900, words: /复活节/, venue: '镇广场' },
+  花舞节: { season: 0, day: 24, time: 900, words: /花舞节/, venue: '森林河边' },
+  夏威夷宴会: { season: 1, day: 11, time: 900, words: /夏威夷宴会/, venue: '海滩' },
+  月光水母起舞: { season: 1, day: 28, time: 2200, words: /月光水母/, venue: '海滩' },
+  星露谷展览会: { season: 2, day: 16, time: 900, words: /展览会/, venue: '镇广场' },
+  万灵节: { season: 2, day: 27, time: 2200, words: /万灵节/, venue: '镇广场' },
+  冰雪节: { season: 3, day: 8, time: 900, words: /冰雪节/, venue: '森林河边' },
+  冬日星盛宴: { season: 3, day: 25, time: 900, words: /冬日星/, venue: '镇广场' },
+};
+
+/** "看月光水母，海边见": a festival named with where it is held is the festival (reference/wiki/zh/Festivals.md). */
+export function withVenue(named: readonly string[]): string[] {
+  const festivals = named.filter(place => FESTIVAL_DAYS[place]);
+  return festivals.length === 1 && named.every(place => place === festivals[0] || place === FESTIVAL_DAYS[festivals[0]!]!.venue) ? festivals : [...named];
+}
+const FESTIVAL_WORDS = new RegExp(Object.values(FESTIVAL_DAYS).map(festival => festival.words.source).join('|'));
+
+/** The next day, from `today` on, the festival falls on. */
+export function festivalDay(name: string, today: number): number {
+  const festival = FESTIVAL_DAYS[name]!;
+  const day = today - (today - 1) % 112 + festival.season * 28 + festival.day - 1;
+  return day < today ? day + 112 : day;
+}
+
+/** The festival held on an absolute day, if any. */
+export function festivalOn(day: number): string | undefined {
+  const inYear = (day - 1) % 112;
+  return Object.keys(FESTIVAL_DAYS).find(name => FESTIVAL_DAYS[name]!.season === Math.floor(inYear / 28) && FESTIVAL_DAYS[name]!.day === inYear % 28 + 1);
+}
+
+/** Its day, when, if anywhere, it may be; a festival's own place takes its start, and another place nothing that day. */
+function onItsDay(place: string, day: number, time: number): { day: number; time: number } | null {
+  const festival = FESTIVAL_DAYS[place];
+  if (festival) return festivalDay(place, day) === day ? { day, time: festival.time } : null;
+  return festivalOn(day) ? null : { day, time };
+}
+
+// A day named outright: "后天", "周六", "下周一", "15号", a festival, or a birthday made "第41天" (docs/npc-later-meetings.md,
+// docs/npc-meetings-more.md §3).
+const DATE_WORDS = new RegExp(`后天|(?:周|星期|礼拜)[一二三四五六日天](?!起)|[\\d一二三四五六七八九十]{1,3}号|第\\d+天|${FESTIVAL_WORDS.source}`);
 // No day in particular.
 const VAGUE = /下次|以后|改天|哪天|(?:等.{0,3}|以后)有空|有空的时候|有空再|有机会|什么时候|周末|过几天|找(?:个)?时间|这个月|将来/;
 /** How far ahead an appointment may be: today, tomorrow and the day after, as the user set (docs/npc-later-meetings.md). */
@@ -119,9 +170,15 @@ export function namedDays(text: string, today: number): number[] {
     const date = number(match[2]!);
     days.push(date >= 1 && date <= 28 && (match[1] || date >= seasonDay) ? today - seasonDay + date + (match[1] ? 28 : 0) : 0);
   }
+  // A festival by name, and a birthday the conversation made a day (meetings.ts lastConversation).
+  for (const name of Object.keys(FESTIVAL_DAYS)) if (FESTIVAL_DAYS[name]!.words.test(text)) days.push(festivalDay(name, today));
+  for (const match of text.matchAll(/第(\d+)天/g)) days.push(Number(match[1]));
   return days;
 }
-const PAST = /昨天|前天|上次|那天/;
+// "花舞节那天", "生日那天" are ahead, not past.
+const PAST = /昨天|前天|上次|去年|前年|(?<![节会宴舞日])那天/;
+// Festival aliases such as "月光水母那天" and "冬日星那天" name their calendar date too.
+const FESTIVAL_THAT_DAY = new RegExp(`(?:${FESTIVAL_WORDS.source})(?:起舞|盛宴)?那天`, 'g');
 // Measured declines the nightly words miss, and "after class" with no time to go by (docs/npc-same-day-meetings.md §3).
 const DECLINED = /你(?:自己|一个人)去|等你回来|找.{1,6}陪你|不陪|才不(?:要|去)|宁愿|我就不/;
 const PUT_OFF = /等.{1,8}(?:完|结束)|下课|忙完|做完|收工|关门|打烊|之后/;
@@ -160,13 +217,13 @@ function later(time: number, minutes: number): number {
 function agreedPlace(window: readonly TimedQuote[], after: readonly TimedQuote[], places: Readonly<Record<string, RegExp>>,
   otherDay: (text: string) => boolean, movedTo: (text: string) => boolean = changesDay): { place: string; words: RegExp } | null {
   const text = window.map(quote => quote.text).join('\n');
-  const named = Object.keys(places).filter(place => places[place]!.test(text));
+  const named = withVenue(Object.keys(places).filter(place => places[place]!.test(text)));
   if (named.length !== 1 || REFUSED.test(text) || DECLINED.test(text) || PUT_OFF.test(text) || CONDITIONAL.test(text) || otherDay(text)
     || !invited(text) && !ASKED.test(text) && !(/矿洞|矿井|矿坑|下矿|矿里|骷髅洞|火山/.test(text) && asksAlong(window, places[named[0]!]!))) return null;
   const place = named[0]!, words = places[place]!;
   // The player's own invitation counts; an NPC naming the place and "去" may be sending the player alone.
   const player = window.filter(quote => quote.speaker === '玩家');
-  if (player.some(quote => PAST.test(quote.text)) || !player.some(quote => agrees(quote) || words.test(quote.text) && /一起|见|去|来|等|陪|带|跟|走|下矿|探险/.test(quote.text))
+  if (player.some(quote => PAST.test(quote.text.replace(FESTIVAL_THAT_DAY, '节日'))) || !player.some(quote => agrees(quote) || words.test(quote.text) && /一起|见|去|来|等|陪|带|跟|走|下矿|探险/.test(quote.text))
     || !window.some(quote => quote.speaker === 'NPC' && (agrees(quote)
       || words.test(quote.text) && /(?:一起|要不要|陪你|带你|我们|咱们).{0,10}(?:去|来|走)/.test(quote.text)))) return null;
   // The player taking it back needs no place: "还是算了，你忙吧".
@@ -210,6 +267,10 @@ function agreedIn(window: readonly TimedQuote[], after: readonly TimedQuote[], p
   if (!agreement) return null;
   const { place } = agreement;
   const agreed = window.at(-1)!.time;
+  if (today !== undefined && (FESTIVAL_DAYS[place] || festivalOn(today))) {
+    const festival = onItsDay(place, today, 0);
+    return festival ? { time: festival.time, place, soon: false } : null;
+  }
   const timed = timedText(window, places);
   // A bare morning hour already gone means the same hour tonight.
   const clocks = readClocks(timed, time => time <= later(agreed, 10) && time < 1200 ? time + 1200 : time);
@@ -270,6 +331,10 @@ function agreedLater(window: readonly TimedQuote[], after: readonly TimedQuote[]
   const movedTo = (text: string) => changesDay(text) && (namedDays(text, today).length === 0 || namedDays(text, today).some(day => day !== days[0]));
   const agreement = agreedPlace(window, after, places, text => VAGUE.test(text), movedTo);
   if (!agreement) return null;
+  if (FESTIVAL_DAYS[agreement.place] || festivalOn(days[0]!)) {
+    const festival = onItsDay(agreement.place, days[0]!, 0);
+    return festival && { day: festival.day, time: festival.time, place: agreement.place };
+  }
   const timed = timedText(window, places);
   // A bare hour on a later day keeps the hour said when nothing tells morning from evening.
   const clocks = readClocks(timed, time => time);
@@ -295,8 +360,6 @@ export interface Invitation { day: number; time: number; place: string }
 const TODAY_WORDS = /今天|今早|晚点|晚些/;
 // A deadline or someone else's hour is not when they meet: "下午四点前我都有空", "十一点开始上课".
 const NOT_THE_TIME = /[零〇一二两三四五六七八九十\d]{1,3}(?:点|时)(?:半|一刻|三刻|[零〇一二两三四五六七八九十\d]{1,3}分)?(?=(?:以|之)?[前后]|开始|结束|上课|上班|下班|关门|开门)/g;
-// "人少一点", "早一点" is a little, not one o'clock.
-const A_BIT = /([少多早晚快慢近远好静热冷凉])一点/g;
 // Saying yes to being asked out takes a plain word for it: "嗯……我得看看农场的活儿" is a hedge (measured, docs/npc-invites.md §5).
 const PLAIN_YES = /好|行|可以|没问题|当然|一言为定|说定|乐意|愿意|奉陪|算我一个|一定(?:去|来|到)|走吧|去啊|去呀/;
 const HEDGE = /看看|看情况|不一定|说不准|尽量|争取|看能不能|有空(?:的话|就)|忙完/;
@@ -317,7 +380,7 @@ export function quotedInvite(lines: readonly TimedQuote[], places: Readonly<Reco
     || HEDGE.test(answer.text) || REFUSED.test(answer.text) || DECLINED.test(answer.text) || PUT_OFF.test(answer.text)
     || CONDITIONAL.test(answer.text)) return null;
   const npc = [ask, ...(reply?.speaker === 'NPC' ? [reply] : [])];
-  const named = (text: string) => Object.keys(places).filter(place => places[place]!.test(text));
+  const named = (text: string) => withVenue(Object.keys(places).filter(place => places[place]!.test(text)));
   if (reply?.speaker === 'NPC' && (REFUSED.test(reply.text) || DECLINED.test(reply.text))) return null;
   // Later exchanges replace or withdraw the opening even when the first answer repeats its place.
   const after = lines.slice(npc.length + 1);
@@ -332,7 +395,7 @@ export function quotedInvite(lines: readonly TimedQuote[], places: Readonly<Reco
       ? null : { day: today, time: revised.time, place: revised.place };
   }
   // A greeting names no time ("晚上好"), and "今晚的风" no day.
-  const sentences = npc.map(quote => (quote.text.replace(/(?:早上|上午|中午|下午|晚上)好|晚安/g, '').replace(NOT_THE_TIME, '').replace(A_BIT, '$1')
+  const sentences = npc.map(quote => (quote.text.replace(/(?:早上|上午|中午|下午|晚上)好|晚安/g, '').replace(NOT_THE_TIME, '')
     .match(/[^。！!？?；;…\n]+[。！!？?；;…\n]*/g) ?? []).filter(sentence => named(sentence).length || times(sentence).length
       || ASKING.test(sentence)).join(''));
   const [offered = [], settled = []] = sentences.map(named);
@@ -344,7 +407,13 @@ export function quotedInvite(lines: readonly TimedQuote[], places: Readonly<Reco
   if (placesSaid.length !== 1 || days.size > 1) return null;
   const day = [...days][0] ?? today;
   if (day < today || day > today + LATER_DAYS) return null;
-  const timed = [...sentences, answer.text.replace(NOT_THE_TIME, '').replace(A_BIT, '$1')].map(text => text.replace(/今晚/g, '今天晚上').replace(/今早/g, '今天早上'));
+  if (FESTIVAL_DAYS[placesSaid[0]!] || festivalOn(day)) {
+    const festival = onItsDay(placesSaid[0]!, day, 0);
+    const words = places[placesSaid[0]!]!;
+    if (day === today ? quotedCallOff(lines, words, places, today) : quotedLaterCallOff(lines, words, places, day, today)) return null;
+    return festival && { day, time: festival.time, place: placesSaid[0]! };
+  }
+  const timed = [...sentences, answer.text.replace(NOT_THE_TIME, '')].map(text => text.replace(/今晚/g, '今天晚上').replace(/今早/g, '今天早上'));
   const agreed = answer.time;
   const clocks = readClocks(timed, time => day === today && time <= later(agreed, 10) && time < 1200 ? time + 1200 : time);
   const periods = timed.flatMap(text => PERIODS.filter(([period]) => period.test(text))).map(([, time]) => time);
@@ -360,6 +429,64 @@ export function quotedInvite(lines: readonly TimedQuote[], places: Readonly<Reco
 
 /** Who took today's appointment back, or sent the other home: the player or the NPC (docs/npc-call-off.md). */
 export type CallOff = '玩家' | 'NPC';
+
+// A plain no to being asked out; "我考虑一下", "我得看看" are no answer yet.
+const PLAIN_NO = /不行|不了|不去|不要|不方便|没空|没时间|下次吧|改天吧|算了|不太行|去不了|来不了/;
+
+/** The player turned the NPC's invitation down outright on its opening (docs/npc-meetings-more.md §2). */
+export function quotedDecline(lines: readonly TimedQuote[]): boolean {
+  const [ask, answer] = lines;
+  return ask?.speaker === 'NPC' && asksToMeet(ask.text) && answer?.speaker === '玩家' && PLAIN_NO.test(answer.text)
+    && !HEDGE.test(answer.text) && !/考虑|想想/.test(answer.text);
+}
+
+/** An appointment kept as it is now: absolute `day`, HHMM `time`, the place. */
+export interface Kept { day: number; time: number; place: string }
+/** It moved to another day, time or place, at whose asking (docs/npc-meetings-more.md §1). */
+export type Change = Kept & { by: CallOff };
+
+// What follows is the new day, time or place: "三点改成五点" is five, "周六改到周日" Sunday.
+const CHANGE = /改(?:成|到|在|去|为)|换(?:成|到|去)|挪到|推(?:到|迟到?)|提前到?|延(?:后到?|到|迟到?)|还是/;
+
+/**
+ * One side moves an appointment made before this conversation, the other plainly says yes (docs/npc-meetings-more.md
+ * §1): what follows "改成/换到/还是…" names the new day, time or place, and what it leaves out stays as it was. Only
+ * from today to the day after tomorrow; today's must still be ahead. Taken back afterwards means none; the last such
+ * move in the conversation wins.
+ */
+export function quotedChange(lines: readonly TimedQuote[], current: Kept, places: Readonly<Record<string, RegExp>>, today: number): Change | null {
+  let found: Change | null = null;
+  for (let i = 0; i + 1 < lines.length; i++) {
+    const ask = lines[i]!, answer = lines[i + 1]!;
+    const at = CHANGE.exec(ask.text)?.index;
+    if (at === undefined || answer.speaker === ask.speaker) continue;
+    const yes = answer.speaker === '玩家'
+      ? (agrees(answer) || YES.test(answer.text)) && PLAIN_YES.test(answer.text) && !HEDGE.test(answer.text)
+      : agrees(answer) || YES.test(answer.text);
+    if (!yes || REFUSED.test(answer.text) || DECLINED.test(answer.text) || CONDITIONAL.test(answer.text)) continue;
+    const moved = ask.text.slice(at).replace(NOT_THE_TIME, '');
+    const placesSaid = withVenue(Object.keys(places).filter(place => places[place]!.test(moved)));
+    const days = new Set([...namedDays(moved, today), ...(TODAY_WORDS.test(moved) ? [today] : [])]);
+    if (placesSaid.length > 1 || days.size > 1) continue;
+    const day = [...days][0] ?? current.day;
+    const timed = [moved, answer.text].map(text => text.replace(/今晚/g, '今天晚上').replace(/今早/g, '今天早上'));
+    const clocks = readClocks(timed, time => day === today && time <= later(answer.time, 10) && time < 1200 ? time + 1200 : time);
+    const periods = timed.flatMap(text => PERIODS.filter(([period]) => period.test(text))).map(([, time]) => time);
+    const times = clocks.length ? clocks : periods;
+    if (times.some(time => time !== times[0])) continue;
+    const place = placesSaid[0] ?? current.place;
+    const fits = onItsDay(place, FESTIVAL_DAYS[place] && !days.size ? festivalDay(place, today) : day, times[0] ?? current.time);
+    if (!fits) continue;
+    const time = fits.time;
+    if (fits.day === current.day && time === current.time && place === current.place) continue;
+    if (fits.day < today || fits.day > today + LATER_DAYS || !FESTIVAL_DAYS[place] && (time < EARLIEST || time > LATEST || fits.day === today
+      && time <= later(answer.time, 10))) continue;
+    // Taken back afterwards: then it is a call-off, not a move.
+    if (lines.slice(i + 2).some(quote => quote.speaker === '玩家' && (PLAYER_OFF.test(quote.text) || /算了/.test(quote.text)))) return null;
+    found = { day: fits.day, time, place, by: ask.speaker };
+  }
+  return found;
+}
 
 // Plain words only, unlike REFUSED above: a wrong call-off walks the NPC away. Questions and conditions never count.
 const PLAYER_OFF = /不(?:去|来)了|别(?:去|来|等(?:我)?)了|不用(?:去|来)了|改天(?:再)?去|下次(?:再)?去/;
