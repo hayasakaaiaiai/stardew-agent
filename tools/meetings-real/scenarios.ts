@@ -1,6 +1,6 @@
 /**
  * The scenes for tools/test-meetings-real.ts (docs/real-model-meetings.md §3). The player's lines are new, not the unit
- * tests' own. Batch A is for finding problems; batch B is written only after any rule changes and is never tuned on.
+ * tests' own. Batch A is for finding problems; batches B and C are each written only after rule changes and never tuned on.
  * Year 1; no scene falls on a festival day unless it is about one. Summer 15 is a Monday.
  */
 import type { Season } from '../../src/agent/dialogue.ts';
@@ -10,7 +10,7 @@ export type Kind = '主动邀约' | '改约' | '当天约' | '明天后天更远
 
 export interface Scenario {
   id: string;
-  batch: 'A' | 'B';
+  batch: 'A' | 'B' | 'C';
   kind: Kind;
   /** The game's name, e.g. "Abigail". */
   npc: string;
@@ -173,4 +173,51 @@ export const SCENARIOS: Scenario[] = [
     say: ['后天晚上一起去酒吧喝一杯？'] },
   { id: 'B-fest-penny-birthday', batch: 'B', kind: '节日生日', npc: 'Penny', date: ['fall', 1], time: 1000, location: '鹈鹕镇', birthday: ['fall', 2],
     say: ['你生日那天下午一起去博物馆吧？'], sleep: true },
+
+  // Batch C, written after the three batch B fixes (docs/test-results/2026-10-23-real-meetings-C.md) and never tuned on.
+  { id: 'C-invite-maru-free', batch: 'C', kind: '主动邀约', npc: 'Maru', date: ['summer', 21], time: 1100, location: '诊所', invite: true,
+    say: ['好啊，不过我四点以后才有空。'], sleep: true },
+  { id: 'C-invite-sebastian-no', batch: 'C', kind: '主动邀约', npc: 'Sebastian', date: ['summer', 22], time: 1600, location: '山上', invite: true,
+    say: ['今天不行，改天再约吧。'] },
+  { id: 'C-invite-haley-yes', batch: 'C', kind: '主动邀约', npc: 'Haley', hearts: 9, relation: 'dating', date: ['summer', 23], time: 1000,
+    location: '海滩', invite: true, say: ['好呀，到时候见！'], sleep: true },
+  { id: 'C-invite-shane-place', batch: 'C', kind: '主动邀约', npc: 'Shane', date: ['summer', 24], time: 1700, location: '鹈鹕镇', invite: true,
+    say: ['行，不过换去墓地吧，那儿清静。'], sleep: true },
+
+  { id: 'C-change-abigail-later', batch: 'C', kind: '改约', npc: 'Abigail', date: ['summer', 25], time: 1100, location: '鹈鹕镇',
+    setup: later(900, '后天晚上七点墓地见？', '嗯，后天晚上七点墓地见。', 1900, '墓地'), say: ['后天的约往后推一个小时，八点行吗？'] },
+  { id: 'C-change-penny-both', batch: 'C', kind: '改约', npc: 'Penny', date: ['summer', 26], time: 1000, location: '博物馆',
+    setup: today(900, '今天下午两点在博物馆见？', '好的，下午两点博物馆见。', 1400, '博物馆'), say: ['下午改成四点在杂货店门口见，可以吗？'] },
+  { id: 'C-change-leah-maybe', batch: 'C', kind: '改约', npc: 'Leah', date: ['summer', 12], time: 1100, location: '森林',
+    setup: today(900, '今天下午三点森林河边见？', '好，下午三点河边见。', 1500, '森林河边'), say: ['下午你要是不方便，我们改天？'] },
+  { id: 'C-change-sam-tonight', batch: 'C', kind: '改约', npc: 'Sam', date: ['summer', 13], time: 1000, location: '鹈鹕镇',
+    setup: later(900, '后天下午三点海边见？', '行啊，后天下午三点海边见！', 1500, '海滩'), say: ['后天那个约干脆改到今天晚上吧，还是海边。'] },
+
+  { id: 'C-today-haley-pier', batch: 'C', kind: '当天约', npc: 'Haley', date: ['summer', 14], time: 1000, location: '海滩',
+    say: ['下午三点码头见，带上相机？'] },
+  { id: 'C-today-maru-now', batch: 'C', kind: '当天约', npc: 'Maru', date: ['summer', 15], time: 1300, location: '诊所',
+    say: ['现在要不要一起去博物馆看看新到的矿石？'] },
+  { id: 'C-today-shane-drink', batch: 'C', kind: '当天约', npc: 'Shane', date: ['summer', 16], time: 1700, location: '鹈鹕镇',
+    say: ['今晚请你喝一杯，怎么样？'] },
+
+  { id: 'C-day-sebastian-tomorrow', batch: 'C', kind: '明天后天更远', npc: 'Sebastian', date: ['summer', 17], time: 1500, location: '山上',
+    say: ['明晚八点墓地见？'], sleep: true },
+  { id: 'C-day-penny-after', batch: 'C', kind: '明天后天更远', npc: 'Penny', date: ['summer', 18], time: 1000, location: '博物馆',
+    say: ['后天中午一起在镇广场吃午饭吧？'] },
+  { id: 'C-day-sam-next', batch: 'C', kind: '明天后天更远', npc: 'Sam', date: ['summer', 19], time: 1300, location: '鹈鹕镇',
+    say: ['下周三晚上一起去餐吧？'] },
+
+  { id: 'C-off-maru-cant', batch: 'C', kind: '改口取消', npc: 'Maru', date: ['summer', 20], time: 1200, location: '诊所',
+    setup: today(900, '今天下午三点山上湖边见？', '好啊，下午三点湖边见。', 1500, '山上湖边'), say: ['抱歉，下午临时有事，湖边去不了了。'] },
+  { id: 'C-off-haley-still', batch: 'C', kind: '改口取消', npc: 'Haley', date: ['summer', 21], time: 1300, location: '海滩',
+    setup: today(900, '今天下午四点海边见？', '好呀，下午四点海边见。', 1600, '海滩'), say: ['下午四点还是海边对吧？'] },
+  { id: 'C-off-shane-later', batch: 'C', kind: '改口取消', npc: 'Shane', date: ['summer', 22], time: 1200, location: '鹈鹕镇',
+    setup: later(900, '后天晚上七点星之果实见？', '行，后天晚上七点餐吧见。', 1900, '星之果实餐吧'), say: ['后天的酒我就不去喝了，你别等我。'] },
+
+  { id: 'C-fest-leah-fair', batch: 'C', kind: '节日生日', npc: 'Leah', date: ['fall', 14], time: 1100, location: '森林',
+    say: ['后天的展览会一起去逛逛？'] },
+  { id: 'C-fest-abigail-spirits', batch: 'C', kind: '节日生日', npc: 'Abigail', date: ['fall', 26], time: 1500, location: '鹈鹕镇',
+    say: ['明晚一起去万灵节吧？'], sleep: true },
+  { id: 'C-fest-haley-birthday', batch: 'C', kind: '节日生日', npc: 'Haley', date: ['spring', 12], time: 1000, location: '海滩', birthday: ['spring', 14],
+    say: ['你生日那天下午我们去海边拍照好不好？'] },
 ];

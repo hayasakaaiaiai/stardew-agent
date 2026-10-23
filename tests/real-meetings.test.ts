@@ -94,3 +94,25 @@ test('a festival the player names gets its day, where it is held and when it sta
   assert.doesNotMatch(system(), /复活节是/);
   await wire.close();
 });
+
+test('hours read as meant (real replies, batch B): "五点以后" is five, "推迟到九点" from eight at night is nine at night', () => {
+  const invite = (ask: string, answer: string, reply: string, time: number) => quotedInvite([{ id: 'n0', speaker: 'NPC', text: ask, time },
+    { id: 'p1', speaker: '玩家', text: answer, time: time + 10 }, { id: 'n1', speaker: 'NPC', text: reply, time: time + 10 }], MEET_PLACES, summer(24));
+  assert.deepEqual(invite('啊，小林……你来啦。那个，我今天下午五点以后就没事了……要不要一起去海滩走走？', '当然好，我一定到。',
+    '真的吗……那说定了。我会提前收拾好，不让你等。是不是有点太兴奋了……', 1000), { day: summer(24), time: 1700, place: '海滩' });
+  assert.equal(invite('我下午五点以后有空，三点去海滩走走？', '好啊！', '嗯，说定了。', 1000), null, 'a clock before the hour she is free from');
+  const moved = (player: string, npc: string, time: number) => quotedChange(lines(1310, ['玩家', player], ['NPC', npc]),
+    { day: summer(15), time, place: '山上湖边' }, MEET_PLACES, summer(13));
+  assert.deepEqual(moved('后天的约推迟到九点可以吗？', '九点……行吧。反正那时候天也黑了。', 2000), { day: summer(15), time: 2100, place: '山上湖边', by: '玩家' });
+  assert.deepEqual(moved('后天的约提前到九点可以吗？', '行。', 2000), { day: summer(15), time: 900, place: '山上湖边', by: '玩家' });
+  assert.deepEqual(moved('后天的约改到八点吧？', '好啊。', 1900), { day: summer(15), time: 2000, place: '山上湖边', by: '玩家' }, 'the nearer one');
+});
+
+test('a reply going at another part of the day than the clock is unsure; one naming it for something else is not (batch B)', () => {
+  const ask = '嘿，小林。喏，蝙蝠翅膀，我自己弄到的战利品。*唉* 对了……今晚八点，去山上湖边坐会儿？';
+  const invite = (answer: string, reply: string) => quotedInvite([{ id: 'n0', speaker: 'NPC', text: ask, time: 1400 },
+    { id: 'p1', speaker: '玩家', text: answer, time: 1410 }, { id: 'n1', speaker: 'NPC', text: reply, time: 1410 }], MEET_PLACES, summer(23));
+  assert.equal(invite('行啊，不过我更想去海边，可以吗？', '*唉* 海边啊，夏天晒得我头疼……行吧，傍晚去，太阳下山了再去，说好了。'), null);
+  assert.deepEqual(invite('行啊，不过我更想去海边，可以吗？', '海边？行吧，八点海边见。'), { day: summer(23), time: 2000, place: '海滩' });
+  assert.deepEqual(invite('好啊！', '好，晚上八点湖边见，下午我还有课。'), { day: summer(23), time: 2000, place: '山上湖边' });
+});

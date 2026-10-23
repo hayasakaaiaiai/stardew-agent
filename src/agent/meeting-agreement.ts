@@ -381,6 +381,15 @@ export interface Invitation { day: number; time: number; place: string }
 const TODAY_WORDS = /今天|今早|晚点|晚些/;
 // A deadline or someone else's hour is not when they meet: "下午四点前我都有空", "十一点开始上课".
 const NOT_THE_TIME = /[零〇一二两三四五六七八九十\d]{1,3}(?:点|时)(?:半|一刻|三刻|[零〇一二两三四五六七八九十\d]{1,3}分)?(?=(?:以|之)?[前后]|开始|结束|上课|上班|下班|关门|开门)/g;
+// "下午五点以后就没事了": free from five, so a period said with it starts there, not at its usual hour (real-model batch B).
+const FROM_TIME = /[零〇一二两三四五六七八九十\d]{1,3}(?:点|时)(?:半|一刻|三刻|[零〇一二两三四五六七八九十\d]{1,3}分)?(?=(?:以|之)?后)/g;
+const PERIOD_WORDS = /凌晨|清晨|早上|早晨|上午|中午|下午|傍晚|晚上|明早|明晚/g;
+/** The latest hour the lines say someone is free from, read with the periods of its own sentence. */
+function freeFrom(texts: readonly string[]): number | undefined {
+  const bounds = texts.flatMap(text => (text.match(/[^。！!？?；;…\n]+/g) ?? []).flatMap(sentence =>
+    [...sentence.matchAll(FROM_TIME)].flatMap(match => clockTimes((sentence.match(PERIOD_WORDS) ?? []).join('') + match[0]).map(clock => clock.time))));
+  return bounds.length ? Math.max(...bounds) : undefined;
+}
 // Saying yes to being asked out takes a plain word for it: "嗯……我得看看农场的活儿" is a hedge (measured, docs/npc-invites.md §5).
 const PLAIN_YES = /好|行|可以|没问题|当然|一言为定|说定|乐意|愿意|奉陪|算我一个|一定(?:去|来|到)|走吧|去啊|去呀/;
 const HEDGE = /看看|看情况|不一定|说不准|尽量|争取|看能不能|有空(?:的话|就)|忙完/;
@@ -457,6 +466,16 @@ export function quotedInvite(lines: readonly TimedQuote[], places: Readonly<Reco
     if (!said.length || said.some(time => time !== said[0]) || asked.length && !asked.some(time => hour(time) === hour(said[0]!))) return null;
     found = said;
   }
+  // Her reply going at another part of the day than the clock ("今晚八点", then "傍晚去，太阳下山了再去") is unsure (batch B);
+  // only a clause about going or meeting counts, not "下午我还有课".
+  if (clocks.length && answered && found.length && timed[1]!.split(/[，,。！!？?；;…]+/).some(clause => /去|见|来|到|碰|走/.test(clause)
+    && PERIODS.some(([period, , start, end]) => period.test(clause) && (found[0]! < start || found[0]! >= end)))) return null;
+  // Free only from some hour: a period starts there, and a clock before it is unsure.
+  const from = freeFrom([ask.text, answer.text, ...(reply?.speaker === 'NPC' ? [reply.text] : [])]);
+  if (from !== undefined && found.length && found[0]! < from) {
+    if (clocks.length) return null;
+    found = [from];
+  }
   if (!found.length || found.some(time => time !== found[0]) || found[0]! < EARLIEST || found[0]! > LATEST
     || day === today && found[0]! <= later(agreed, 10)) return null;
   if (changedTime(found[0]!)) return null;
@@ -509,7 +528,15 @@ export function quotedChange(lines: readonly TimedQuote[], current: Kept, places
     if (placesSaid.length > 1 || days.size > 1) continue;
     const day = [...days][0] ?? current.day;
     const timed = [moved, answer.text].map(text => text.replace(/今晚/g, '今天晚上').replace(/今早/g, '今天早上'));
-    const clocks = readClocks(timed, time => day === today && time <= later(answer.time, 10) && time < 1200 ? time + 1200 : time);
+    // A bare hour is read against the one it moves: "推迟到九点" from 20:00 is 21:00, not nine in the morning (batch B).
+    const bare = (time: number) => {
+      const options = [time, time + 1200].filter(option => !(day === today && option <= later(answer.time, 10)));
+      const way = /推迟|延后|推后|晚(?:一|半|两|点|些)/.test(moved) ? options.filter(option => option > current.time)
+        : /提前|早(?:一|半|两|点|些)/.test(moved) ? options.filter(option => option < current.time) : options;
+      const pool = way.length ? way : options;
+      return pool.length ? pool.reduce((best, option) => Math.abs(option - current.time) < Math.abs(best - current.time) ? option : best) : time;
+    };
+    const clocks = readClocks(timed, bare);
     const periods = timed.flatMap(text => PERIODS.filter(([period]) => period.test(text))).map(([, time]) => time);
     const times = clocks.length ? clocks : periods;
     if (times.some(time => time !== times[0])) continue;

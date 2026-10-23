@@ -472,5 +472,160 @@
       }
     ],
     "note": "生日在明天"
+  },
+  "C-invite-maru-free": {
+    "appointments": [
+      {
+        "day": 0,
+        "time": 1800,
+        "place": "星之果实餐吧"
+      }
+    ],
+    "note": "玩家“四点以后才有空”，她说“那就六点吧”"
+  },
+  "C-invite-sebastian-no": {
+    "appointments": [],
+    "note": "他只说“要不要一起去哪儿走走”，玩家也拒绝了"
+  },
+  "C-invite-haley-yes": {
+    "appointments": [
+      {
+        "day": 0,
+        "time": 1800,
+        "place": "星之果实餐吧"
+      }
+    ]
+  },
+  "C-invite-shane-place": {
+    "appointments": [
+      {
+        "day": 0,
+        "time": 1900,
+        "place": "墓地"
+      }
+    ],
+    "note": "玩家改去墓地，他“行吧”"
+  },
+  "C-change-abigail-later": {
+    "appointments": [
+      {
+        "day": 2,
+        "time": 2000,
+        "place": "墓地"
+      }
+    ]
+  },
+  "C-change-penny-both": {
+    "appointments": [
+      {
+        "day": 0,
+        "time": 1600,
+        "place": "杂货店"
+      }
+    ]
+  },
+  "C-change-leah-maybe": {
+    "appointments": [
+      {
+        "day": 0,
+        "time": 1500,
+        "place": "森林河边"
+      }
+    ],
+    "note": "她说不麻烦，照旧"
+  },
+  "C-change-sam-tonight": {
+    "appointments": [
+      {
+        "day": 0,
+        "time": 1900,
+        "place": "海滩"
+      }
+    ],
+    "note": "改到今晚海边，他问“几点？”，时段是晚上"
+  },
+  "C-today-haley-pier": {
+    "appointments": [
+      {
+        "day": 0,
+        "time": 1500,
+        "place": "海滩"
+      }
+    ]
+  },
+  "C-today-maru-now": {
+    "appointments": [
+      {
+        "day": 0,
+        "time": 0,
+        "place": "博物馆",
+        "soon": true
+      }
+    ],
+    "note": "“等我一下，我跟哈维说一声”，马上去"
+  },
+  "C-today-shane-drink": {
+    "appointments": [],
+    "note": "答应喝一杯，但没说在哪"
+  },
+  "C-day-sebastian-tomorrow": {
+    "appointments": [],
+    "note": "他只反问“你要去那儿干嘛”，没答应"
+  },
+  "C-day-penny-after": {
+    "appointments": [
+      {
+        "day": 2,
+        "time": 1200,
+        "place": "镇广场"
+      }
+    ]
+  },
+  "C-day-sam-next": {
+    "appointments": [],
+    "note": "他婉拒了"
+  },
+  "C-off-maru-cant": {
+    "appointments": []
+  },
+  "C-off-haley-still": {
+    "appointments": [
+      {
+        "day": 0,
+        "time": 1600,
+        "place": "海滩"
+      }
+    ]
+  },
+  "C-off-shane-later": {
+    "appointments": []
+  },
+  "C-fest-leah-fair": {
+    "appointments": [
+      {
+        "day": 2,
+        "time": 900,
+        "place": "星露谷展览会"
+      }
+    ]
+  },
+  "C-fest-abigail-spirits": {
+    "appointments": [
+      {
+        "day": 1,
+        "time": 2200,
+        "place": "万灵节"
+      }
+    ],
+    "note": "说对了在镇广场"
+  },
+  "C-fest-haley-birthday": {
+    "appointments": [
+      {
+        "day": 2,
+        "time": 1400,
+        "place": "海滩"
+      }
+    ]
   }
 }
