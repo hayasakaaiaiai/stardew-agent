@@ -9,7 +9,7 @@ import { WebSocket, WebSocketServer } from 'ws';
 import { BridgeServer } from '../src/bridge/server.ts';
 import { parseModMessage, PROTOCOL_VERSION } from '../src/bridge/protocol.ts';
 import { BACKSTAGE_THINKING } from '../src/agent/backstage.ts';
-import { nightlyConsolidator } from '../src/agent/nightly.ts';
+import { NIGHTLY_THINKING, nightlyConsolidator } from '../src/agent/nightly.ts';
 import { nextStop, type ScheduleStop } from '../src/agent/schedule.ts';
 import { ModelClient, modelConfigFromEnv, type ChatModel, type ChatMessage, type ChatOptions, type Completion, type StreamHandlers } from '../src/services/model/client.ts';
 import { ModelGateway } from '../src/services/model/gateway.ts';
@@ -28,10 +28,11 @@ import { runOuting, type OutingState } from './game-outing.ts';
 import { runInvites, type InvitesState } from './game-invites.ts';
 import { runMeetingsMore, type MoreState } from './game-meetings-more.ts';
 import { runLaterMeetings } from './game-later-meetings.ts';
+import { runRealMeetings } from './game-real-meetings.ts';
 
 interface Config { RequestId: string; UniqueId: string; SaveFolder: string; SaveDirectory: string; RunDirectory: string; GamePath: string; BackendUrl: string; World: boolean; Offline: boolean; Section: string }
 interface Npc { id: string; name: string; location: string; x: number; y: number; speed: number; ignoreScheduleToday: boolean; controller: boolean; temporary: boolean; queued: number; destroys: boolean; schedule: ScheduleStop[] | null }
-export interface State { ready: boolean; canChat: boolean; displaySleepAllowed?: boolean | null; time: number; nonce: string; generation: number; location: string; weather: string; npcs: Npc[] | null; actions?: ActionState; farm?: FarmState; mine?: MineState; player?: { x: number; y: number; facing: number } | null;
+export interface State { ready: boolean; canChat: boolean; eventUp?: boolean; displaySleepAllowed?: boolean | null; time: number; nonce: string; generation: number; location: string; weather: string; npcs: Npc[] | null; actions?: ActionState; farm?: FarmState; mine?: MineState; player?: { x: number; y: number; facing: number } | null;
   festival: { id: string; isFestival: boolean; actors: string[]; schedules: Record<string, unknown>; dance: string | null; soup: number | null; grangeScore: number; giver: string | null } | null;
   native: Record<string, unknown> | null; outing?: OutingState; invites?: InvitesState; more?: MoreState; reply: { npc: string; text: string } | null; minigame: string | null }
 interface Command { id: number; operation: string; completed: boolean; success: boolean; error?: string; state: State }
@@ -42,7 +43,9 @@ const ROOT = resolve(import.meta.dirname, '..');
 const configPath = resolve(process.argv[2]!);
 const config = JSON.parse((await readFile(configPath, 'utf8')).replace(/^\uFEFF/, '')) as Config;
 assert.equal(config.World, true); assert.equal(config.SaveFolder, `MemoryTest_${config.UniqueId}`); assert.notEqual(config.UniqueId, '436774213');
-assert.ok(['all', 'schedules', 'backstage', 'festivals', 'content', 'fair-return', 'actions', 'actions-edge', 'actions-timing', 'actions-checks', 'actions-places', 'actions-incoming', 'farm-help', 'farm-chores', 'farm-visits', 'farm-save', 'mine', 'mine-core', 'mine-rescue', 'mine-edges', 'mine-worlds', 'mine-dungeons', 'mine-save', 'same-day', 'same-day-core', 'same-day-edges', 'call-off', 'call-off-arrival', 'call-off-arrival-save', 'farm-animals', 'meeting-warp-places', 'meeting-warp', 'meeting-warp-edges', 'meeting-spouses', 'meeting-friendship', 'later-meetings', 'friendship-boundaries', 'outing', 'outing-core', 'outing-activities', 'outing-edges', 'outing-save', 'invites', 'invites-core', 'invites-edges', 'invites-changes', 'meetings-more', 'more-dialogue', 'more-festivals', 'more-leading', 'more-visits', 'more-mining', 'more-moods'].includes(config.Section), 'Unknown native world test section.');
+assert.ok(['all', 'schedules', 'backstage', 'festivals', 'content', 'fair-return', 'actions', 'actions-edge', 'actions-timing', 'actions-checks', 'actions-places', 'actions-incoming', 'farm-help', 'farm-chores', 'farm-visits', 'farm-save', 'mine', 'mine-core', 'mine-rescue', 'mine-edges', 'mine-worlds', 'mine-dungeons', 'mine-save', 'same-day', 'same-day-core', 'same-day-edges', 'call-off', 'call-off-arrival', 'call-off-arrival-save', 'farm-animals', 'meeting-warp-places', 'meeting-warp', 'meeting-warp-edges', 'meeting-spouses', 'meeting-friendship', 'later-meetings', 'friendship-boundaries', 'outing', 'outing-core', 'outing-activities', 'outing-edges', 'outing-save', 'invites', 'invites-core', 'invites-edges', 'invites-changes', 'meetings-more', 'more-dialogue', 'more-festivals', 'more-leading', 'more-visits', 'more-mining', 'more-moods', 'real-meetings', 'real-meetings-live', 'real-meetings-edges'].includes(config.Section), 'Unknown native world test section.');
+const realMeetings = config.Section.startsWith('real-meetings');
+if (realMeetings && config.Section !== 'real-meetings-edges') assert.equal(config.Offline, false, 'The seven live meeting scenarios require the real model.');
 assert.equal(resolve(config.SaveDirectory), resolve(process.env.APPDATA!, 'StardewValley/Saves', config.SaveFolder));
 assert.ok(resolve(config.RunDirectory).startsWith(resolve(ROOT, '.runtime') + '\\'));
 const directory = config.RunDirectory;
@@ -52,6 +55,8 @@ for (const file of ['tools/test-game-world.ts', 'tools/game-actions.ts', 'tools/
   'mod/StardewAgentBridge/SaveSync.cs', 'mod/StardewAgentBridge/ModEntry.cs', 'mod/StardewAgentBridge/Friendship.cs',
   'src/bridge/server.ts', 'src/bridge/protocol.ts', 'src/bridge/memory.ts', 'mod/StardewAgentBridge/ModConfig.cs', 'mod/StardewAgentBridge/GameState.cs',
   'mod/StardewAgentBridge/WorldTest.cs', 'mod/StardewAgentBridge/MemoryTest.cs', 'mod/StardewAgentBridge/Festivals.cs'])
+  await copyFile(join(ROOT, file), join(directory, 'sources', file.split('/').at(-1)!));
+if (realMeetings) for (const file of ['tools/game-real-meetings.ts', 'tools/test-game-real-meetings.ps1'])
   await copyFile(join(ROOT, file), join(directory, 'sources', file.split('/').at(-1)!));
 const json = async (file: string, value: unknown) => {
   await writeFile(file + '.tmp', JSON.stringify(value, null, 2));
@@ -78,6 +83,7 @@ const log = (line: string) => { logs.push(line); console.log(line); void appendF
 if (!config.Offline) process.loadEnvFile(join(ROOT, '.env'));
 const paid = config.Offline ? undefined : new ModelClient(modelConfigFromEnv());
 const paidBackstage = paid ? new ModelClient({ ...paid.config, thinking: BACKSTAGE_THINKING }) : undefined;
+const paidNightly = paid ? new ModelClient({ ...paid.config, thinking: NIGHTLY_THINKING }) : undefined;
 const calls: { kind: Kind; real: boolean; messages: ChatMessage[]; content: string; usage: Completion['usage']; timing: Completion['timing']; thinking: string | null }[] = [];
 const starts: { kind: Kind; time: number; held: boolean }[] = [];
 const reports: { day: number; usage: ReturnType<ModelGateway['usage']>; line: string }[] = [];
@@ -88,6 +94,7 @@ let actionSeedFarm = false;
 let actionSeedMine = '';
 let actionTodayReply = '';
 let actionTodayMood = 0;
+let fixedMeetingModel = false;
 const seedNight = (enabled: boolean, farm = false, mine = '') => { actionSeedNight = enabled; actionSeedFarm = farm; actionSeedMine = mine; };
 const fixed = (content: unknown): Completion => ({ content: JSON.stringify(content), reasoning: '', finishReason: 'stop',
   usage: { inputTokens: 120, cachedInputTokens: 60, outputTokens: 20, reasoningTokens: null }, timing: { firstReasoningMs: null, firstContentMs: 1, totalMs: 1 } });
@@ -95,9 +102,10 @@ function model(kind: Kind): ChatModel {
   return { async chat(messages: ChatMessage[], handlers: StreamHandlers = {}, options: ChatOptions = {}) {
     starts.push({ kind, time: Date.now(), held: !!heldBackstage });
     if (kind === 'background') await heldBackstage?.promise;
-    const real = !config.Offline && (kind === 'dialogue' || kind === 'background') && !actionSeedNight;
+    const real = !config.Offline && (kind === 'dialogue' || kind === 'background' || realMeetings && kind === 'nightly') && !actionSeedNight && !fixedMeetingModel;
     let result: Completion;
-    if (real) result = await (kind === 'background' ? paidBackstage! : paid!).chat(messages, handlers, options);
+    const client = kind === 'background' ? paidBackstage : kind === 'nightly' ? paidNightly : paid;
+    if (real) result = await client!.chat(messages, handlers, options);
     else {
       const text = messages.map(message => message.content).join('\n');
       const schedule = /今日行程[^\n]*?）：([^\n]+)/.exec(text)?.[1] ?? '';
@@ -113,7 +121,7 @@ function model(kind: Kind): ChatModel {
           : remembered || (schedule ? `我的安排是：${schedule}` : '我还没有确定安排。')), emotion: 'neutral', options: ['继续聊', '换个话题', '再见'], remember: [], mood: actionTodayMood, end: false });
       handlers.onContent?.(result.content);
     }
-    const call = { kind, real, messages, content: result.content, usage: result.usage, timing: result.timing, thinking: real ? (kind === 'background' ? paidBackstage! : paid!).config.thinking : null };
+    const call = { kind, real, messages, content: result.content, usage: result.usage, timing: result.timing, thinking: real ? client!.config.thinking : null };
     calls.push(call); await appendFile(join(directory, 'model-calls.jsonl'), JSON.stringify(call) + '\n');
     return result;
   } };
@@ -442,6 +450,23 @@ try {
   if (['all', 'backstage', 'content'].includes(config.Section)) await backstage();
   if (config.Section === 'all' || config.Section === 'festivals') await festivals();
   if (config.Section === 'fair-return') await fairReturn();
+  if (realMeetings) await runRealMeetings({ rpc, chapter, check, contentCheck, say, close, packets: modPackets, wireCount: () => packets.length,
+    latestSystem: () => latestDialogue().messages[0]!.content, seedNight, meetingEntries,
+    setReply: (text: string) => { actionTodayReply = text; }, setMood: (mood: number) => { actionTodayMood = mood; },
+    fixedModel: (enabled: boolean) => { fixedMeetingModel = enabled; },
+    dayMeetings: (from = 0) => packets.slice(from).filter(row => row.direction === 'backend' && row.packet.type === 'day.meetings').map(row => row.packet),
+    restart: async () => { await server.close(); server = await BridgeServer.start(options); await rpc('wait', { ticks: 120 }); },
+    logMark: () => logs.length,
+    settleNightly: async (from: number) => {
+      const deadline = Date.now() + 150000;
+      while (!logs.slice(from).some(line => line.startsWith('夜间整合完成'))) {
+        assert.ok(Date.now() < deadline, 'The real nightly consolidation did not finish; original failure retained.');
+        await rpc('wait', { ticks: 30 });
+      }
+    },
+    evidence: async (label: string, data: unknown) => { await appendFile(join(directory, 'real-meetings-scenes.jsonl'), JSON.stringify({ label, data }) + '\n'); },
+    transcript: async (label: string, text: string) => { await appendFile(join(directory, 'real-meetings-transcripts.md'), `\n## ${label}\n\n${text}\n`); },
+  }, config.Section);
   if (config.Section === 'all' || config.Section === 'actions') await runActions({ rpc, chapter, check, say, close, packets: modPackets, wireCount: () => packets.length,
     latestSystem: () => latestDialogue().messages[0]!.content, seedNight, meetingEntries });
   if (config.Section === 'actions-edge') await runActionEdges({ rpc, chapter, check, say, close, packets: modPackets, wireCount: () => packets.length,
@@ -501,6 +526,9 @@ try {
   if (!config.Offline) {
     check('real-dialogue-preserves-configured-thinking', calls.filter(call => call.real && call.kind === 'dialogue').every(call => call.thinking === paid!.config.thinking));
     check('real-backstage-disables-thinking', calls.filter(call => call.real && call.kind === 'background').every(call => call.thinking === 'disabled'));
+    if (realMeetings && config.Section !== 'real-meetings-edges') check('real-meetings-used-live-dialogue-and-nightly-high',
+      calls.some(call => call.real && call.kind === 'nightly') && calls.some(call => call.real && call.kind === 'dialogue')
+      && calls.filter(call => call.real && call.kind === 'nightly').every(call => call.thinking === NIGHTLY_THINKING));
   }
   check('no-protocol-or-native-reply-errors', errors.length === 0, errors);
   await rpc('title'); await rpc('finish'); technicalSuccess = true;

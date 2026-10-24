@@ -256,6 +256,7 @@ internal sealed partial class ModEntry
             switch (this.worldTestOperation)
             {
                 case "snapshot": this.WorldComplete(); break;
+                case "meeting-test-clear-hud": Game1.hudMessages.Clear(); this.WorldComplete(); break;
                 case "wait": this.WorldWait("ticks", Number("ticks", 60)); break;
                 case "title":
                     this.CloseSocialMenu(); Game1.ExitToTitle(); this.WorldWait("title"); break;
