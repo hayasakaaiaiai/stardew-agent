@@ -4,7 +4,9 @@ const TOMORROW = /明天|明早|明晚|明儿|明日/;
 const REFUSED = /不(?:去了?|来了?|想去|想来|想见|能去|能来|方便|同意|答应|确定|一定|知道|用来|和你|跟你|见面|约)|别(?:来|等)|没(?:空|时间|答应|同意)|不行|不了|算了|改天|再说|想想|考虑|还没(?:决定|想好|定)|不能确定|待定|暂定/;
 // "可能" and "也许" put it off only about coming or going: "我可能去不了", not "我可能会有点不自在" (docs/real-model-meetings.md §10).
 const MAYBE = /(?:可能|也许)[^，,。！!？?；;…]{0,8}(?:去|来|到|空|赶|时间|见|走)/;
-const refused = (text: string) => REFUSED.test(text) || MAYBE.test(text);
+// A positive keyword inside a plain denial still refuses (Windows review, docs/real-model-meetings.md §11).
+const NEGATED_ACCEPT = /不(?:是|算)(?:什么|个|一个)?好主意|未(?:曾)?答应|没有(?:答应|同意)/;
+const refused = (text: string) => REFUSED.test(text) || MAYBE.test(text) || NEGATED_ACCEPT.test(text);
 // Not the "要是" in "主要是冲着吃的" (batch E).
 const CONDITIONAL = /如果|(?<![主只需重])要是|除非|才会|看情况/;
 const YES = /(?:^|[，,。！!；;\s])(?:我)?(?:嗯(?:嗯)?|好(?:啊|呀|的|吧|嘞)?|行(?:啊|呀|的)?|可以(?:啊|呀|的)?|没问题|当然(?:可以)?|愿意|同意|说定了|一言为定|就这么定)(?:$|[，,。！!；;\s])/;
@@ -39,7 +41,7 @@ function clockTimes(text: string): { time: number; ambiguous: boolean }[] {
   }
   return matches.map(({ hour, minute, clock }) => {
     const ambiguous = !clock && hour > 0 && hour < 12 && !/凌晨|清晨|早上|早晨|上午|中午|下午|傍晚|晚上|明早|明晚/.test(text);
-    if (hour < 12 && (/下午|傍晚|晚上|明晚/.test(text) || !clock && hour < 8 && !/凌晨|清晨|早上|早晨|上午|明早/.test(text))) hour += 12;
+    if (!clock && hour < 12 && (/下午|傍晚|晚上|明晚/.test(text) || hour < 8 && !/凌晨|清晨|早上|早晨|上午|明早/.test(text))) hour += 12;
     return { time: hour * 100 + Math.floor(minute / 10) * 10, ambiguous };
   });
 }
@@ -404,6 +406,14 @@ const RETIME = /(?:晚|早|推迟|提前|延后|推后)(?:一|半|两)个?(?:小
 // The sentences that ask: "今天农活忙完了吧？" is small talk, "明天你有空吗？" is not.
 const ASKING = /要不要|一起|陪|怎么样|有空吗|有空没|有没有空|来吗|来不来|去吗|去不去|好吗|行吗|可以吗/;
 
+/** A new clock must match both an explicit clock and a relative shift the requesting side said. */
+function requestedTimeMatches(text: string, time: number, original?: number): boolean {
+  const request = text.replace(NOT_THE_TIME, '');
+  if (clockTimes(request).some(clock => clock.ambiguous ? clock.time % 1200 !== time % 1200 : clock.time !== time)) return false;
+  const shiftedTime = original === undefined ? undefined : shifted(request, original);
+  return shiftedTime === undefined || shiftedTime === time;
+}
+
 /**
  * The NPC opened the conversation by asking the player out (docs/npc-invites.md). Its opening is read by whole
  * sentences, unlike an NPC's line elsewhere, since there the time is the invitation's own; only sentences naming a place
@@ -426,10 +436,15 @@ export function quotedInvite(lines: readonly TimedQuote[], places: Readonly<Reco
   if (after.some(quote => quote.speaker === '玩家' && (refused(quote.text) || DECLINED.test(quote.text) || changesDay(quote.text)))) return null;
   const changedTime = (time: number) => after.some(quote => /还是|改|换/.test(quote.text)
     && times(quote.text.replace(NOT_THE_TIME, ''), false).some(other => other !== time));
+  // Keep a relative counterproposal tied to the opening's concrete clock, even when the player repeats the place.
+  const openingClocks = readClocks([ask.text.replace(NOT_THE_TIME, '')], time => !namedDays(ask.text, today).some(day => day !== today)
+    && time <= later(answer.time, 10) && time < 1200 ? time + 1200 : time);
+  const openingTime = openingClocks.length && openingClocks.every(time => time === openingClocks[0]) ? openingClocks[0] : undefined;
   // A concrete counterproposal accepted in the reply replaces the opening, using the existing agreement guards.
   if (named(answer.text).length) {
     const revised = quotedToday(lines.slice(1, 3), places, today);
-    if (revised && !revised.soon) return changedTime(revised.time) || quotedCallOff(lines, places[revised.place]!, places, today)
+    if (revised && !revised.soon) return !requestedTimeMatches(answer.text, revised.time, openingTime)
+      || changedTime(revised.time) || quotedCallOff(lines, places[revised.place]!, places, today)
       ? null : { day: today, time: revised.time, place: revised.place };
   }
   // A greeting names no time ("晚上好"), and "今晚的风" no day.
@@ -469,7 +484,7 @@ export function quotedInvite(lines: readonly TimedQuote[], places: Readonly<Reco
   if (RETIME.test(answer.text) || asked.some(time => !offeredHours.includes(hour(time)))) {
     const said = answered && timed[1] !== undefined ? readClocks([timed[1], ...timed.filter((_, index) => index !== 1)], bare)
       .slice(0, clockTimes(timed[1]).length) : [];
-    if (!said.length || said.some(time => time !== said[0]) || asked.length && !asked.some(time => hour(time) === hour(said[0]!))) return null;
+    if (!said.length || said.some(time => time !== said[0])) return null;
     found = said;
   }
   // Her reply going at another part of the day than the clock ("今晚八点", then "傍晚去，太阳下山了再去") is unsure (batch B);
@@ -484,6 +499,7 @@ export function quotedInvite(lines: readonly TimedQuote[], places: Readonly<Reco
   }
   if (!found.length || found.some(time => time !== found[0]) || found[0]! < EARLIEST || found[0]! > LATEST
     || day === today && found[0]! <= later(agreed, 10)) return null;
+  if (!requestedTimeMatches(answer.text, found[0]!, openingTime)) return null;
   if (changedTime(found[0]!)) return null;
   // Taken back, or moved to another day, later in the conversation.
   const words = places[placesSaid[0]!]!;
@@ -561,11 +577,12 @@ export function quotedChange(lines: readonly TimedQuote[], current: Kept, places
     const fits = onItsDay(place, FESTIVAL_DAYS[place] && !days.size ? festivalDay(place, today) : day, times[0] ?? shifted(moved, current.time) ?? current.time);
     if (!fits) continue;
     const time = fits.time;
+    if (!requestedTimeMatches(moved, time, current.time)) continue;
     if (fits.day === current.day && time === current.time && place === current.place) continue;
     if (fits.day < today || fits.day > today + LATER_DAYS || !FESTIVAL_DAYS[place] && (time < EARLIEST || time > LATEST || fits.day === today
       && time <= later(answer.time, 10))) continue;
     // Taken back afterwards: then it is a call-off, not a move.
-    if (lines.slice(i + 2).some(quote => quote.speaker === '玩家' && (PLAYER_OFF.test(quote.text) || /算了/.test(quote.text)))) return null;
+    if (lines.slice(i + 2).some(quote => quote.speaker === '玩家' && (playerCallsOff(quote.text, places[place]!) || /算了/.test(quote.text)))) return null;
     found = { day: fits.day, time, place, by: ask.speaker };
   }
   return found;
@@ -573,7 +590,8 @@ export function quotedChange(lines: readonly TimedQuote[], current: Kept, places
 
 // Plain words only, unlike REFUSED above: a wrong call-off walks the NPC away. Questions and conditions never count.
 // "后天的酒我就不去喝了" names what is not done there (batch C), but not "我不去换衣服了，直接过去".
-const PLAYER_OFF = /不(?:去|来)(?:喝|玩|吃|看|逛|钓鱼?|拍照?|散步|坐坐?|走走?)?了|别(?:去|来|等(?:我)?)了|不用(?:去|来)了|改天(?:再)?去|下次(?:再)?去/;
+const PLAYER_OFF = /不(?:去|来)了|别(?:去|来|等(?:我)?)了|不用(?:去|来)了|改天(?:再)?去|下次(?:再)?去/;
+const ACTIVITY_OFF = /不(?:去|来)(?:喝|玩|吃|看|逛|钓鱼?|拍照?|散步|坐坐?|走走?)了/;
 // "你别等我" without "了", about the meeting (batch C); not "你先去，别等我，我马上到", nor "别等我，你先吃吧".
 const DONT_WAIT = /别等(?:我)?(?:了|啦)?(?=$|[。！!，,；;…])/;
 const COMING = /马上|随后|一会儿?|待会儿?|稍后|晚点|晚一点|就到|就来|先(?:去|走)/;
@@ -586,13 +604,19 @@ const NPC_OFF = /去不了|来不了|不能去了|不能来了|没法去|没办�
 const ABOUT = /约|见面|今天|待会|等会|一会|上午|中午|下午|傍晚|晚上/;
 const ON_AGAIN = /还是(?:去|一起|见|要)|开玩笑|逗你/;
 
+function playerCallsOff(text: string, words: RegExp): boolean {
+  const kept = text.split(/[，,。！!；;]+/).some(clause => (words.test(clause) || ABOUT.test(clause))
+    && /照常|照旧|照计划|不变|不改|还是(?:要)?(?:见|碰面|去|来|到)|仍(?:然|旧)?(?:要)?(?:见|碰面|去|来|到)/.test(clause));
+  return PLAYER_OFF.test(text) || ACTIVITY_OFF.test(text) && !kept;
+}
+
 /** A line that takes an appointment at `words` back, or sends company home; a question or a condition never does. */
 function offLine(quote: TimedQuote, words: RegExp): boolean {
   const text = quote.text;
   if (/[吗？?]/.test(text) || CONDITIONAL.test(text)) return false;
   return quote.speaker === '玩家'
     // "今天就算了吧", "矿洞那边取消吧": in the same clause, not "算了，我回农场了".
-    ? PLAYER_OFF.test(text) || DONT_WAIT.test(text) && !COMING.test(text) && (words.test(text) || ABOUT.test(text) || DATE_WORDS.test(text) || TOMORROW.test(text))
+    ? playerCallsOff(text, words) || DONT_WAIT.test(text) && !COMING.test(text) && (words.test(text) || ABOUT.test(text) || DATE_WORDS.test(text) || TOMORROW.test(text))
       || SEND_HOME.test(text)
       || text.split(/[，,。！!；;]+/).some(clause => PLAYER_CANCEL.test(clause) && (words.test(clause) || ABOUT.test(clause)))
       // "不去矿洞那边了", "今天不下矿了".

@@ -144,12 +144,15 @@ Windows 后续按用户“测一下之后修复”，在 `codex/meeting-warp-win
 
 2026-10-23 用户选“复核后快进 main”。Mac 上看过十类修复的生产代码改动（节日到场只认实际演员、固定钟点一起逛按约定时间结束、送礼表情等间隔、邀约前重新核对资格、邀约反悔和改口的原话核对、节日约定按节日日期和开场时间读回），`m2c-meetings-more` 快进到 `837f03a`；279/279、类型检查、构建通过，Mod 和 C# 流程检查项目 Release 编译 0 警告 0 错误（C# 流程检查在 Mac 上加载不了游戏程序集，以 Windows 54/54 为准）。随后 main 从 `b477df2` 快进到本提交并推送。下一步按用户选择用真实模型跑约定线。
 
+2026-10-24 Windows 按用户“看新提交，之后开始测”拉取 `m2c-real-meetings / f6d725f` 的六个新提交，在本地 `codex/real-meetings-windows-tests` 复核。先完成 290/290，再复现五个完整后端反例；用户选择先修四类错记／误取消、含蓄答应暂不放宽。现已修复相对改时冲突、明确上午／晚上冲突、否定肯定词误建约、取消其他活动误撤见面。最终 **299/299 Node、54/54 C#、类型检查和构建通过**，Mod Release 0 警告／错误；真实模型 20 段、43 次调用，**16 对、3 漏记、1 未改约**，修复后免费重放结果及 prompt 不变。新增九项回归从 0/9 到 9/9。没有启动游戏、操作原档或正式部署；§8 七项游戏清单交给用户。本轮仅本地提交，未推送、未合入 main。原话、成本和覆盖边界见 [Windows 复核报告](test-results/2026-10-24-real-meetings-windows.md)。
+
 ## 3. 分支
 
 GitHub 私有仓库：https://github.com/hayasakaaiaiai/stardew-agent
 
 | 分支 | 内容 | Mac 上的目录 |
 |---|---|---|
+| `codex/real-meetings-windows-tests` | `m2c-real-meetings / f6d725f` 的 Windows 后端复核与四类保守修复，299/54 自动检查，真实样本 16/20；本地提交，未推送 | Windows：`E:\stardew-agent` |
 | `main` | 已合入的基线：记忆内核 + 对话 + M3a + M3b + 夜间整合 + M2b 第一至八步 + 公开家庭信息 + 临时日志清理 + 遗留清理、后台传话、小动作、群体事件、节日、调度器、行程 + 整条约定线（主动靠近到约定线收尾，2026-10-23） | `/Users/a11/Documents/ChatGPT/stardew-agent-dialogue`（目录名是以前留下的） |
 | `codex/npc-memory-store` | 记忆系统的开发分支，做完一步快进合并回 `main` | `/Users/a11/Documents/ChatGPT/stardew-agent` |
 | `hardware-companion` | `main` + 硬件陪伴（机器人），还没合并 | `/Users/a11/Documents/ChatGPT/stardew-agent-hardware` |
@@ -290,7 +293,7 @@ dotnet build mod/StardewAgentBridge   # 编译 Mod，编译完自动装进游戏
 
 | 问题 | 在哪记的 |
 |---|---|
-| 约定线真实模型测试最后一轮 0 错记；仍漏记的是只暗示的答应（“别迟到啊”“等我一下，我跟哈维说一声”“总算有人提点像样的事了”）和“碰个头”“当然得去”，NPC 嘴上答应了却不去；“两天以后”（带“以后”）不会记成后天 | `test-results/2026-10-24-real-meetings-D.md` §5 |
+| Mac 小批 E 最后一轮 0 错记；Windows 新回复 20 段仍有 3 漏记、1 未改约（“可以是可以”保留原钟点）。只暗示的答应、无关“想想”等保守过滤暂不放宽；“两天以后”（带“以后”）也仍不会记成后天。新发现的四类错记／误取消风险已修复 | `test-results/2026-10-24-real-meetings-windows.md` §1、§3；`test-results/2026-10-24-real-meetings-D.md` §5 |
 | 当天约当天由代码核对原话，没明说的答应（“我早就想去了”“两点应该能抽开身”）会漏，留出批次 19 段存下 12 段；漏了 NPC 当天不去，靠 HUD 提示让玩家再确认一句 | `npc-same-day-meetings.md` §3、§8 |
 | 改口和送别只认明说的词：留出批次 21 段认出 17 段；NPC 半推半就（“我才不是害怕……好吧”）会被当成不肯走而留下；NPC 主动取消从没出现过，只有单元测试；取消后当天不能再约 | `npc-call-off.md` §3、§8 |
 | “陪我下矿吧／我去找你”这类说法，模型有时把地点写成农场（11 次 3 次），被原话核对拦下，结果是没约成而不是去错地方 | `npc-mine-companion.md` §5.4 |
@@ -333,6 +336,7 @@ dotnet build mod/StardewAgentBridge   # 编译 Mod，编译完自动装进游戏
 | 文档 | 讲什么 |
 |---|---|
 | `docs/real-model-meetings.md` | 用真实模型跑约定线的测试计划和结果 |
+| `docs/test-results/2026-10-24-real-meetings-windows.md` | 六个新提交的 Windows 后端复核、四类修复、299/54 检查、真实回复 16/20、原话和调用成本、用户游戏内清单 |
 | `docs/test-results/2026-10-23-real-meetings-A.md` | 约定线真实模型 A 批：旧对话重放、40 段结果、每处漏记错记的原话和原因 |
 | `docs/test-results/2026-10-23-real-meetings-B.md` | 按 A 批修了以后的 A 批 39/40、节日那一行写日子的对比、留出的 B 批 15/20 与剩下的问题、成本 |
 | `docs/test-results/2026-10-23-real-meetings-C.md` | B 批三处记错的修复、留出的 C 批 16/20 与两处取消/改约说法的缺口、全程成本 |

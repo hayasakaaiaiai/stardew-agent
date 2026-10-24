@@ -9,6 +9,46 @@ const summer = (day: number) => 28 + day;
 const lines = (time: number, ...said: ['玩家' | 'NPC', string][]): TimedQuote[] =>
   said.map(([speaker, text], index) => ({ id: `${speaker === '玩家' ? 'p' : 'n'}${index}`, speaker, text, time }));
 
+test('an invitation counterproposal must match the requested shift and the full explicit clock', () => {
+  const invite = (answer: string, reply: string, opening = '今天下午两点博物馆见，要不要一起？') => quotedInvite([
+    { id: 'n0', speaker: 'NPC', text: opening, time: 1000 },
+    ...lines(1010, ['玩家', answer], ['NPC', reply]),
+  ], MEET_PLACES, summer(18));
+  assert.equal(invite('好啊，不过能晚一个小时吗？', '好，下午四点博物馆见。'), null);
+  assert.equal(invite('好啊，不过能晚一个小时，博物馆见吗？', '好，下午四点博物馆见。'), null, 'a repeated place must not bypass the shift check');
+  assert.deepEqual(invite('好啊，不过能晚一个小时吗？', '好，下午三点博物馆见。'), { day: summer(18), time: 1500, place: '博物馆' });
+  assert.equal(invite('好啊，不过改到上午八点可以吗？', '好，晚上八点海边见。', '今天晚上八点海边见，要不要一起？'), null);
+  assert.equal(invite('好啊，不过改到 08:00 可以吗？', '好，晚上八点海边见。', '今天晚上八点海边见，要不要一起？'), null);
+  assert.equal(invite('好啊，不过改到 08:00 可以吗？我下午有事。', '好，晚上八点海边见。', '今天晚上八点海边见，要不要一起？'), null,
+    'an unrelated afternoon must not turn an explicit 08:00 into 20:00');
+  assert.deepEqual(invite('好啊，不过改到晚上八点可以吗？', '好，晚上八点博物馆见。'), { day: summer(18), time: 2000, place: '博物馆' });
+});
+
+test('a relative move of an existing appointment cannot take a conflicting clock from the reply', () => {
+  const current = { day: summer(20), time: 1400, place: '海滩' };
+  const move = (reply: string) => quotedChange(lines(1010, ['玩家', '后天的约往后推一个小时行吗？'], ['NPC', reply]), current, MEET_PLACES, summer(18));
+  assert.equal(move('好啊，下午五点海边见。'), null);
+  assert.deepEqual(move('好啊，下午三点海边见。'), { ...current, time: 1500, by: '玩家' });
+  assert.deepEqual(move('好啊。'), { ...current, time: 1500, by: '玩家' }, 'the explicit relative shift itself is enough');
+});
+
+test('a negated new acceptance phrase does not make a today or later appointment', () => {
+  for (const reply of ['这不算好主意。', '这不算什么好主意。', '我未答应你。', '我没有答应你。']) {
+    assert.equal(quotedToday(lines(1010, ['玩家', '今天下午两点一起去海边？'], ['NPC', reply]), MEET_PLACES, summer(18)), null, reply);
+    assert.equal(quotedLater(lines(1010, ['玩家', '后天下午两点一起去海边？'], ['NPC', reply]), MEET_PLACES, summer(18)), null, reply);
+  }
+  assert.deepEqual(quotedToday(lines(1010, ['玩家', '今天下午两点一起去海边？'], ['NPC', '好主意，答应你。']), MEET_PLACES, summer(18)),
+    { time: 1400, place: '海滩', soon: false });
+});
+
+test('cancelling another activity while expressly keeping the meeting does not call it off', () => {
+  const off = (player: string) => quotedLaterCallOff(lines(1010, ['玩家', player], ['NPC', '好。']), MEET_PLACES['海滩']!, MEET_PLACES, summer(20), summer(18));
+  assert.equal(off('后天我不去吃了，下午两点海边照常见。'), null);
+  assert.equal(off('后天我不去吃了，下午照常见。'), null);
+  assert.equal(off('后天我不去吃了，海边的约不变。'), null);
+  assert.equal(off('后天海边我不去玩了，你别等我。'), '玩家');
+});
+
 test('today: a yes said as "老地方见", "我肯定到" or "答应你", to a proposal with no "一起" or "见" (real replies)', () => {
   assert.deepEqual(quotedToday(lines(1010, ['玩家', '下午两点一起去墓地走走？'], ['NPC', '墓地？欸，这提议不错。下午两点，老地方见。别迟到啊。']),
     MEET_PLACES, summer(22)), { time: 1400, place: '墓地', soon: false });
