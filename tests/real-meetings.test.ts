@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { type TimedQuote, quotedChange, quotedInvite, quotedLater, quotedToday } from '../src/agent/meeting-agreement.ts';
+import { type TimedQuote, quotedCallOff, quotedChange, quotedInvite, quotedLater, quotedLaterCallOff, quotedToday } from '../src/agent/meeting-agreement.ts';
 import { checkMeet, farInvitation, festivalVenue, MEET_PLACES } from '../src/agent/meetings.ts';
 import { connect, harness, openTalk, WORLD } from './helpers/bridge.ts';
 
@@ -115,4 +115,20 @@ test('a reply going at another part of the day than the clock is unsure; one nam
   assert.equal(invite('行啊，不过我更想去海边，可以吗？', '*唉* 海边啊，夏天晒得我头疼……行吧，傍晚去，太阳下山了再去，说好了。'), null);
   assert.deepEqual(invite('行啊，不过我更想去海边，可以吗？', '海边？行吧，八点海边见。'), { day: summer(23), time: 2000, place: '海滩' });
   assert.deepEqual(invite('好啊！', '好，晚上八点湖边见，下午我还有课。'), { day: summer(23), time: 2000, place: '山上湖边' });
+});
+
+test('a move by "往后推一个小时" and a call-off by "不去喝了，你别等我" (real lines, batch C)', () => {
+  const grave = { day: summer(27), time: 1900, place: '墓地' };
+  const moved = (player: string, npc: string) => quotedChange(lines(1110, ['玩家', player], ['NPC', npc]), grave, MEET_PLACES, summer(25));
+  assert.deepEqual(moved('后天的约往后推一个小时，八点行吗？', '八点？行啊，天黑透了更带劲。欸，别迟到就行。'), { ...grave, time: 2000, by: '玩家' });
+  assert.deepEqual(moved('后天的约往后推一个小时行吗？', '行啊。'), { ...grave, time: 2000, by: '玩家' }, 'no hour said: shifted');
+  assert.deepEqual(moved('后天能提前半个小时吗？', '可以呀。'), { ...grave, time: 1830, by: '玩家' });
+  assert.equal(moved('后天的约往后推一个小时行吗？', '不行，那太晚了。'), null);
+  const saloon = MEET_PLACES['星之果实餐吧']!;
+  const off = (player: string) => quotedLaterCallOff(lines(1210, ['玩家', player], ['NPC', '……哦。']), saloon, MEET_PLACES, summer(24), summer(22));
+  assert.equal(off('后天的酒我就不去喝了，你别等我。'), '玩家');
+  assert.equal(off('后天你别等我。'), '玩家');
+  assert.equal(off('后天你先去餐吧，别等我，我晚点到。'), null, 'go ahead, I am coming');
+  assert.equal(off('后天我不去换衣服了，直接去餐吧。'), null);
+  assert.equal(quotedCallOff(lines(1210, ['玩家', '别等我，你先吃吧。'], ['NPC', '好。']), saloon, MEET_PLACES, summer(22)), null, 'not about the meeting');
 });

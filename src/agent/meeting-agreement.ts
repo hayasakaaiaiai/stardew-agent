@@ -503,8 +503,19 @@ export interface Kept { day: number; time: number; place: string }
 /** It moved to another day, time or place, at whose asking (docs/npc-meetings-more.md §1). */
 export type Change = Kept & { by: CallOff };
 
-// What follows is the new day, time or place: "三点改成五点" is five, "周六改到周日" Sunday.
-const CHANGE = /改(?:成|到|在|去|为)|换(?:成|到|去)|挪到|推(?:到|迟到?)|提前到?|延(?:后到?|到|迟到?)|还是/;
+// What follows is the new day, time or place: "三点改成五点" is five, "周六改到周日" Sunday; "往后推一个小时" too (batch C).
+const CHANGE = /改(?:成|到|在|去|为)|换(?:成|到|去)|挪到|推(?:到|迟到?)|提前到?|延(?:后到?|到|迟到?)|还是|往(?:后|前)(?:推|挪|延)|推后|挪后|(?:晚|早)(?:一|半|两)个?(?:小时|钟头)/;
+const LATER_WAY = /推迟|延后|推后|往后|晚(?:一|半|两|点|些)/;
+const EARLIER_WAY = /提前|往前|早(?:一|半|两|点|些)/;
+// "往后推一个小时", "提前半小时" with no hour said: the time it moves, shifted.
+const SHIFT = /(?:推迟|延后|推后|往后|晚|提前|往前|早)(?:推|挪|延)?(一|两|二|三|半)个?(?:小时|钟头)/;
+function shifted(text: string, time: number): number | undefined {
+  const found = SHIFT.exec(text);
+  if (!found) return undefined;
+  const minutes = ({ 一: 60, 两: 120, 二: 120, 三: 180, 半: 30 } as Record<string, number>)[found[1]!]! * (EARLIER_WAY.test(found[0]) ? -1 : 1);
+  const total = Math.floor(time / 100) * 60 + time % 100 + minutes;
+  return Math.floor(total / 60) * 100 + total % 60;
+}
 
 /**
  * One side moves an appointment made before this conversation, the other plainly says yes (docs/npc-meetings-more.md
@@ -531,8 +542,8 @@ export function quotedChange(lines: readonly TimedQuote[], current: Kept, places
     // A bare hour is read against the one it moves: "推迟到九点" from 20:00 is 21:00, not nine in the morning (batch B).
     const bare = (time: number) => {
       const options = [time, time + 1200].filter(option => !(day === today && option <= later(answer.time, 10)));
-      const way = /推迟|延后|推后|晚(?:一|半|两|点|些)/.test(moved) ? options.filter(option => option > current.time)
-        : /提前|早(?:一|半|两|点|些)/.test(moved) ? options.filter(option => option < current.time) : options;
+      const way = LATER_WAY.test(moved) ? options.filter(option => option > current.time)
+        : EARLIER_WAY.test(moved) ? options.filter(option => option < current.time) : options;
       const pool = way.length ? way : options;
       return pool.length ? pool.reduce((best, option) => Math.abs(option - current.time) < Math.abs(best - current.time) ? option : best) : time;
     };
@@ -541,7 +552,7 @@ export function quotedChange(lines: readonly TimedQuote[], current: Kept, places
     const times = clocks.length ? clocks : periods;
     if (times.some(time => time !== times[0])) continue;
     const place = placesSaid[0] ?? current.place;
-    const fits = onItsDay(place, FESTIVAL_DAYS[place] && !days.size ? festivalDay(place, today) : day, times[0] ?? current.time);
+    const fits = onItsDay(place, FESTIVAL_DAYS[place] && !days.size ? festivalDay(place, today) : day, times[0] ?? shifted(moved, current.time) ?? current.time);
     if (!fits) continue;
     const time = fits.time;
     if (fits.day === current.day && time === current.time && place === current.place) continue;
@@ -555,7 +566,11 @@ export function quotedChange(lines: readonly TimedQuote[], current: Kept, places
 }
 
 // Plain words only, unlike REFUSED above: a wrong call-off walks the NPC away. Questions and conditions never count.
-const PLAYER_OFF = /不(?:去|来)了|别(?:去|来|等(?:我)?)了|不用(?:去|来)了|改天(?:再)?去|下次(?:再)?去/;
+// "后天的酒我就不去喝了" names what is not done there (batch C), but not "我不去换衣服了，直接过去".
+const PLAYER_OFF = /不(?:去|来)(?:喝|玩|吃|看|逛|钓鱼?|拍照?|散步|坐坐?|走走?)?了|别(?:去|来|等(?:我)?)了|不用(?:去|来)了|改天(?:再)?去|下次(?:再)?去/;
+// "你别等我" without "了", about the meeting (batch C); not "你先去，别等我，我马上到", nor "别等我，你先吃吧".
+const DONT_WAIT = /别等(?:我)?(?:了|啦)?(?=$|[。！!，,；;…])/;
+const COMING = /马上|随后|一会儿?|待会儿?|稍后|晚点|晚一点|就到|就来|先(?:去|走)/;
 // Sending company home; one that says it is staying ("凭什么让我先走？再往下一点点嘛") stays until the player insists.
 const SEND_HOME = /你(?:先)?(?:回去|回家|走)吧|你可以(?:回去|回家|走)了|不用(?:再)?(?:陪|帮|等)(?:我)?了|今天(?:就)?(?:到这|先这样)/;
 const STAY = /才不|不要|不走|不回|凭什么|赶我|再(?:往下|走|待|呆|玩)|还没(?:看够|玩够|走够)|别赶/;
@@ -571,7 +586,9 @@ function offLine(quote: TimedQuote, words: RegExp): boolean {
   if (/[吗？?]/.test(text) || CONDITIONAL.test(text)) return false;
   return quote.speaker === '玩家'
     // "今天就算了吧", "矿洞那边取消吧": in the same clause, not "算了，我回农场了".
-    ? PLAYER_OFF.test(text) || SEND_HOME.test(text) || text.split(/[，,。！!；;]+/).some(clause => PLAYER_CANCEL.test(clause) && (words.test(clause) || ABOUT.test(clause)))
+    ? PLAYER_OFF.test(text) || DONT_WAIT.test(text) && !COMING.test(text) && (words.test(text) || ABOUT.test(text) || DATE_WORDS.test(text) || TOMORROW.test(text))
+      || SEND_HOME.test(text)
+      || text.split(/[，,。！!；;]+/).some(clause => PLAYER_CANCEL.test(clause) && (words.test(clause) || ABOUT.test(clause)))
       // "不去矿洞那边了", "今天不下矿了".
       || new RegExp(`不(?:去|来)?.{0,2}(?:${words.source}).{0,4}了`).test(text) || NPC_OFF.test(text) && (words.test(text) || ABOUT.test(text) || /(?:不了|不成|不能去|不能来)了[。！!～~]?$/.test(text))
     : NPC_OFF.test(text) && (words.test(text) || ABOUT.test(text));

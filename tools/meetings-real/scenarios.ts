@@ -1,6 +1,6 @@
 /**
  * The scenes for tools/test-meetings-real.ts (docs/real-model-meetings.md §3). The player's lines are new, not the unit
- * tests' own. Batch A is for finding problems; batches B and C are each written only after rule changes and never tuned on.
+ * tests' own. Batch A is for finding problems; batches B, C and D are each written only after rule changes and never tuned on.
  * Year 1; no scene falls on a festival day unless it is about one. Summer 15 is a Monday.
  */
 import type { Season } from '../../src/agent/dialogue.ts';
@@ -10,7 +10,7 @@ export type Kind = '主动邀约' | '改约' | '当天约' | '明天后天更远
 
 export interface Scenario {
   id: string;
-  batch: 'A' | 'B' | 'C';
+  batch: 'A' | 'B' | 'C' | 'D';
   kind: Kind;
   /** The game's name, e.g. "Abigail". */
   npc: string;
@@ -220,4 +220,52 @@ export const SCENARIOS: Scenario[] = [
     say: ['明晚一起去万灵节吧？'], sleep: true },
   { id: 'C-fest-haley-birthday', batch: 'C', kind: '节日生日', npc: 'Haley', date: ['spring', 12], time: 1000, location: '海滩', birthday: ['spring', 14],
     say: ['你生日那天下午我们去海边拍照好不好？'] },
+
+  // Batch D, written after the two batch C fixes (docs/test-results/2026-10-24-real-meetings-D.md) and never tuned on;
+  // four NPCs the earlier batches did not have.
+  { id: 'D-invite-emily-yes', batch: 'D', kind: '主动邀约', npc: 'Emily', date: ['summer', 12], time: 1100, location: '鹈鹕镇', invite: true,
+    say: ['好啊，我一定去！'], sleep: true },
+  { id: 'D-invite-alex-later', batch: 'D', kind: '主动邀约', npc: 'Alex', date: ['summer', 13], time: 1300, location: '海滩', invite: true,
+    say: ['可以，不过能再晚半个小时吗？'], sleep: true },
+  { id: 'D-invite-elliott-hedge', batch: 'D', kind: '主动邀约', npc: 'Elliott', date: ['summer', 14], time: 1500, location: '海滩', invite: true,
+    say: ['听起来不错，不过我得先把地浇完再说。'] },
+  { id: 'D-invite-harvey-no', batch: 'D', kind: '主动邀约', npc: 'Harvey', date: ['summer', 15], time: 1000, location: '诊所', invite: true,
+    say: ['谢谢，不过这几天都没空。'] },
+
+  { id: 'D-change-emily-earlier', batch: 'D', kind: '改约', npc: 'Emily', date: ['summer', 16], time: 1100, location: '鹈鹕镇',
+    setup: today(900, '今天下午三点在镇广场见？', '好呀，下午三点广场见！', 1500, '镇广场'), say: ['能往前挪半个小时吗？'] },
+  { id: 'D-change-alex-hour', batch: 'D', kind: '改约', npc: 'Alex', date: ['summer', 17], time: 1000, location: '鹈鹕镇',
+    setup: later(900, '后天下午两点海边见？', '行啊，后天下午两点海滩见。', 1400, '海滩'), say: ['后天晚一个钟头行不行？'] },
+  { id: 'D-change-elliott-place', batch: 'D', kind: '改约', npc: 'Elliott', date: ['summer', 18], time: 1100, location: '海滩',
+    setup: later(900, '后天下午四点海边见？', '好，后天下午四点海边见。', 1600, '海滩'), say: ['后天的约换到森林河边吧，时间不变。'] },
+  { id: 'D-change-harvey-late', batch: 'D', kind: '改约', npc: 'Harvey', date: ['summer', 19], time: 1200, location: '诊所',
+    setup: today(900, '今天下午五点博物馆见？', '好的，下午五点博物馆见。', 1700, '博物馆'), say: ['今天能改到晚上九点吗？'] },
+
+  { id: 'D-today-emily-saloon', batch: 'D', kind: '当天约', npc: 'Emily', date: ['summer', 20], time: 1100, location: '鹈鹕镇',
+    say: ['晚上七点来星之果实找我吧？'] },
+  { id: 'D-today-alex-now', batch: 'D', kind: '当天约', npc: 'Alex', date: ['summer', 21], time: 1500, location: '鹈鹕镇',
+    say: ['现在去海边扔会儿橄榄球？'] },
+  { id: 'D-today-elliott-noon', batch: 'D', kind: '当天约', npc: 'Elliott', date: ['summer', 22], time: 1000, location: '海滩',
+    say: ['中午一起在海边散散步，好吗？'] },
+
+  { id: 'D-day-harvey-tomorrow', batch: 'D', kind: '明天后天更远', npc: 'Harvey', date: ['summer', 23], time: 1100, location: '诊所',
+    say: ['明天上午九点在博物馆碰面，可以吗？'], sleep: true },
+  { id: 'D-day-emily-after', batch: 'D', kind: '明天后天更远', npc: 'Emily', date: ['summer', 24], time: 1400, location: '鹈鹕镇',
+    say: ['后天傍晚去山上湖边看日落吧？'] },
+  { id: 'D-day-alex-four', batch: 'D', kind: '明天后天更远', npc: 'Alex', date: ['summer', 25], time: 1000, location: '鹈鹕镇',
+    say: ['四天后一起去海边训练？'] },
+
+  { id: 'D-off-elliott-later', batch: 'D', kind: '改口取消', npc: 'Elliott', date: ['summer', 24], time: 1100, location: '海滩',
+    setup: later(900, '后天下午三点森林河边见？', '好，后天下午三点森林河边见。', 1500, '森林河边'), say: ['后天我就不去河边散步了，你别等我。'] },
+  { id: 'D-off-harvey-maybe', batch: 'D', kind: '改口取消', npc: 'Harvey', date: ['summer', 27], time: 1200, location: '诊所',
+    setup: today(900, '今天下午四点博物馆见？', '好的，下午四点博物馆见。', 1600, '博物馆'), say: ['下午诊所要是忙，你就别过来了。'] },
+  { id: 'D-off-emily-late', batch: 'D', kind: '改口取消', npc: 'Emily', date: ['summer', 12], time: 1200, location: '鹈鹕镇',
+    setup: today(900, '今天下午四点海边见？', '好呀，下午四点海边见！', 1600, '海滩'), say: ['下午我可能晚点到，你别等太久。'] },
+
+  { id: 'D-fest-alex-egg', batch: 'D', kind: '节日生日', npc: 'Alex', date: ['spring', 11], time: 1000, location: '鹈鹕镇',
+    say: ['后天复活节一起去吧？'] },
+  { id: 'D-fest-emily-ice', batch: 'D', kind: '节日生日', npc: 'Emily', date: ['winter', 6], time: 1300, location: '鹈鹕镇',
+    say: ['后天冰雪节，一起去森林里看冰雕吧？'] },
+  { id: 'D-fest-elliott-birthday', batch: 'D', kind: '节日生日', npc: 'Elliott', date: ['fall', 3], time: 1000, location: '海滩', birthday: ['fall', 5],
+    say: ['你生日那天晚上一起去餐吧坐坐？'] },
 ];

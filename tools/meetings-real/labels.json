@@ -627,5 +627,154 @@
         "place": "海滩"
       }
     ]
+  },
+  "D-invite-emily-yes": {
+    "appointments": [
+      {
+        "day": 0,
+        "time": 1900,
+        "place": "星之果实餐吧"
+      }
+    ],
+    "note": "她只说“今晚”来酒吧，按时段"
+  },
+  "D-invite-alex-later": {
+    "appointments": [],
+    "note": "他只问“晚些时候有空吗”，没说地点钟点"
+  },
+  "D-invite-elliott-hedge": {
+    "appointments": [],
+    "note": "玩家“浇完再说”，含糊；他却以为说好了七点"
+  },
+  "D-invite-harvey-no": {
+    "appointments": [],
+    "note": "他开场没有约"
+  },
+  "D-change-emily-earlier": {
+    "appointments": [
+      {
+        "day": 0,
+        "time": 1430,
+        "place": "镇广场"
+      }
+    ]
+  },
+  "D-change-alex-hour": {
+    "appointments": [
+      {
+        "day": 2,
+        "time": 1500,
+        "place": "海滩"
+      }
+    ]
+  },
+  "D-change-elliott-place": {
+    "appointments": [
+      {
+        "day": 2,
+        "time": 1600,
+        "place": "森林河边"
+      }
+    ]
+  },
+  "D-change-harvey-late": {
+    "appointments": [
+      {
+        "day": 0,
+        "time": 2100,
+        "place": "博物馆"
+      }
+    ]
+  },
+  "D-today-emily-saloon": {
+    "appointments": [
+      {
+        "day": 0,
+        "time": 1900,
+        "place": "星之果实餐吧"
+      }
+    ]
+  },
+  "D-today-alex-now": {
+    "appointments": [],
+    "note": "他婉拒了"
+  },
+  "D-today-elliott-noon": {
+    "appointments": [
+      {
+        "day": 0,
+        "time": 1200,
+        "place": "海滩"
+      }
+    ]
+  },
+  "D-day-harvey-tomorrow": {
+    "appointments": [
+      {
+        "day": 1,
+        "time": 900,
+        "place": "博物馆"
+      }
+    ],
+    "note": "“应该没问题，我会准时到的”"
+  },
+  "D-day-emily-after": {
+    "appointments": [],
+    "note": "“收工后去湖边找你？”，时间不定还是问句"
+  },
+  "D-day-alex-four": {
+    "appointments": [],
+    "npcWrong": "四天后的约他答应了（“那说定了！四天后海滩见”），应婉拒"
+  },
+  "D-off-elliott-later": {
+    "appointments": []
+  },
+  "D-off-harvey-maybe": {
+    "appointments": [
+      {
+        "day": 0,
+        "time": 1600,
+        "place": "博物馆"
+      }
+    ],
+    "note": "他说就算忙也去"
+  },
+  "D-off-emily-late": {
+    "appointments": [
+      {
+        "day": 0,
+        "time": 1600,
+        "place": "海滩"
+      }
+    ],
+    "note": "只是会晚到"
+  },
+  "D-fest-alex-egg": {
+    "appointments": [
+      {
+        "day": 2,
+        "time": 900,
+        "place": "复活节"
+      }
+    ]
+  },
+  "D-fest-emily-ice": {
+    "appointments": [
+      {
+        "day": 2,
+        "time": 900,
+        "place": "冰雪节"
+      }
+    ],
+    "note": "说对了九点河边"
+  },
+  "D-fest-elliott-birthday": {
+    "appointments": [
+      {
+        "day": 2,
+        "time": 1900,
+        "place": "星之果实餐吧"
+      }
+    ]
   }
 }
