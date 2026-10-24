@@ -5,7 +5,8 @@ const REFUSED = /不(?:去了?|来了?|想去|想来|想见|能去|能来|方便
 // "可能" and "也许" put it off only about coming or going: "我可能去不了", not "我可能会有点不自在" (docs/real-model-meetings.md §10).
 const MAYBE = /(?:可能|也许)[^，,。！!？?；;…]{0,8}(?:去|来|到|空|赶|时间|见|走)/;
 const refused = (text: string) => REFUSED.test(text) || MAYBE.test(text);
-const CONDITIONAL = /如果|要是|除非|才会|看情况/;
+// Not the "要是" in "主要是冲着吃的" (batch E).
+const CONDITIONAL = /如果|(?<![主只需重])要是|除非|才会|看情况/;
 const YES = /(?:^|[，,。！!；;\s])(?:我)?(?:嗯(?:嗯)?|好(?:啊|呀|的|吧|嘞)?|行(?:啊|呀|的)?|可以(?:啊|呀|的)?|没问题|当然(?:可以)?|愿意|同意|说定了|一言为定|就这么定)(?:$|[，,。！!；;\s])/;
 const PERIODS: [RegExp, number, number, number][] = [
   [/早上|早晨|明早/, 900, 600, 1200], [/上午/, 1000, 600, 1200], [/中午/, 1200, 1100, 1400],
@@ -112,7 +113,7 @@ export type TimedQuote = Quote & { time: number };
 export interface TodayAgreement { time: number; place: string; soon: boolean }
 
 // Another day, or none in particular, belongs to the nightly `meet` or to nobody; the NPC may mention its own past.
-const ANOTHER_DAY = /明天|明早|明晚|明儿|明日|后天|下周|下个|下次|以后|改天|哪天|(?:等.{0,3}|以后)有空|有空的时候|有空再|有机会|什么时候|周末|过几天|找(?:个)?时间|这周|这个月|将来/;
+const ANOTHER_DAY = /明天|明早|明晚|明儿|明日|后天|下周|下个|下次|以后|改天|哪天|(?:等.{0,3}|以后)有空|有空的时候|有空再|有机会|什么时候|周末|过几天|几天(?:以|之)?后|找(?:个)?时间|这周|这个月|将来/;
 /**
  * The festivals that take the whole town, with their day and when they begin (reference/wiki/zh/Festivals.md). On
  * that day an appointment is to go to the festival together; nowhere else (docs/npc-meetings-more.md §3).
@@ -157,9 +158,11 @@ function onItsDay(place: string, day: number, time: number): { day: number; time
 
 // A day named outright: "后天", "周六", "下周一", "15号", a festival, or a birthday made "第41天" (docs/npc-later-meetings.md,
 // docs/npc-meetings-more.md §3).
-const DATE_WORDS = new RegExp(`后天|(?:周|星期|礼拜)[一二三四五六日天](?!起)|[\\d一二三四五六七八九十]{1,3}号|第\\d+天|${FESTIVAL_WORDS.source}`);
+// "四天后", "过三天", "一周后" (batch D); "过两天" is as often just "soon".
+const DAYS_AFTER = /([一二两三四五六七八九十\d]{1,2})天(?:以|之)?后|过([三四五六七八九十\d]{1,2})天|([一两])个?(?:星期|礼拜|周)(?:以|之)?后/g;
+const DATE_WORDS = new RegExp(`后天|(?:周|星期|礼拜)[一二三四五六日天](?!起)|[\\d一二三四五六七八九十]{1,3}号|第\\d+天|${DAYS_AFTER.source}|${FESTIVAL_WORDS.source}`);
 // No day in particular.
-const VAGUE = /下次|以后|改天|哪天|(?:等.{0,3}|以后)有空|有空的时候|有空再|有机会|什么时候|周末|过几天|找(?:个)?时间|这个月|将来/;
+const VAGUE = /下次|以后|改天|哪天|(?:等.{0,3}|以后)有空|有空的时候|有空再|有机会|什么时候|周末|过几天|几天(?:以|之)?后|找(?:个)?时间|这个月|将来/;
 /** How far ahead an appointment may be: today, tomorrow and the day after, as the user set (docs/npc-later-meetings.md). */
 const LATER_DAYS = 2;
 const WEEK = '一二三四五六日';
@@ -187,6 +190,7 @@ export function namedDays(text: string, today: number): number[] {
   // A festival by name, and a birthday the conversation made a day (meetings.ts lastConversation).
   for (const name of Object.keys(FESTIVAL_DAYS)) if (FESTIVAL_DAYS[name]!.words.test(text)) days.push(festivalDay(name, today));
   for (const match of text.matchAll(/第(\d+)天/g)) days.push(Number(match[1]));
+  for (const match of text.matchAll(DAYS_AFTER)) days.push(today + (match[3] ? number(match[3]) * 7 : number(match[1] ?? match[2]!)));
   return days;
 }
 // "花舞节那天", "生日那天" are ahead, not past.
@@ -209,7 +213,9 @@ const ACCEPT = new RegExp(`(?:^|${STOP})我?(?:(?:好|行)(?:啊|呀|的|吧|嘞
   // "我当然愿意", "当然要去啊", "哦、那说定了啊".
   // Not "这可不是什么好主意", "我不能答应你", "当然去不了".
   + `|(?:^|${STOP})那(?:就|可)?更好|(?<!不是(?:什么|个)?)好主意|(?:这|那)个?(?:提议|主意)(?:不错|挺好|很好)|我(?:可|就)?记(?:住|下)了|(?<![不没能会想法])答应你`
-  + `|(?:^|${STOP})我?(?:当然|很|也)(?:愿意|乐意)|(?:^|${STOP})(?:我)?当然(?:要|会)?(?:去|来)(?![不吗？?])`);
+  + `|(?:^|${STOP})我?(?:当然|很|也)(?:愿意|乐意)|(?:^|${STOP})(?:我)?当然(?:要|会)?(?:去|来)(?![不吗？?])`
+  // "复活节？去啊！" (batch D).
+  + `|(?:^|${STOP})(?:那就|好)?(?:去|来)(?:啊|呀)(?:$|${AFTER})`);
 const GOING = /(?:那就|到时|我们|咱们).{0,10}(?:见|碰面)|那就(?:这么(?:定|说)|改到|换到|定在|约在)|我(?:确定|一定|肯定|准时|会|这就|马上).{0,8}(?:到|去|来|参加|过去)|走吧|走啦|走啊|走呀|出发吧|这就(?:去|走|来|过去)/;
 // "三点沙滩见", "下午见", "门口见", "老地方见"; not "再见", "看见" or "见过".
 const SEE_YOU = /(?:点半?|边|口|滩|场|地|方|馆|吧|店|里|洞|山|那儿|那里|午|上|后|头|会儿?)见(?!过|到|识)/;

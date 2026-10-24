@@ -290,7 +290,7 @@ dotnet build mod/StardewAgentBridge   # 编译 Mod，编译完自动装进游戏
 
 | 问题 | 在哪记的 |
 |---|---|
-| 真实模型 D 批还有 1 段记错：“四天后一起去海边训练？”认不出是哪天，当成今天马上去，NPC 当场走去海边；太远的婉拒也因此没加。另有 NPC 回话里的“去啊”“别迟到啊”和只暗示的答应（“等我一下，我跟哈维说一声”），以及“碰个头”“当然得去”漏记 | `test-results/2026-10-24-real-meetings-D.md` |
+| 约定线真实模型测试最后一轮 0 错记；仍漏记的是只暗示的答应（“别迟到啊”“等我一下，我跟哈维说一声”“总算有人提点像样的事了”）和“碰个头”“当然得去”，NPC 嘴上答应了却不去；“两天以后”（带“以后”）不会记成后天 | `test-results/2026-10-24-real-meetings-D.md` §5 |
 | 当天约当天由代码核对原话，没明说的答应（“我早就想去了”“两点应该能抽开身”）会漏，留出批次 19 段存下 12 段；漏了 NPC 当天不去，靠 HUD 提示让玩家再确认一句 | `npc-same-day-meetings.md` §3、§8 |
 | 改口和送别只认明说的词：留出批次 21 段认出 17 段；NPC 半推半就（“我才不是害怕……好吧”）会被当成不肯走而留下；NPC 主动取消从没出现过，只有单元测试；取消后当天不能再约 | `npc-call-off.md` §3、§8 |
 | “陪我下矿吧／我去找你”这类说法，模型有时把地点写成农场（11 次 3 次），被原话核对拦下，结果是没约成而不是去错地方 | `npc-mine-companion.md` §5.4 |
@@ -326,7 +326,7 @@ dotnet build mod/StardewAgentBridge   # 编译 Mod，编译完自动装进游戏
 15. **碰面后一起逛**：Windows 已修复时长与送礼间隔，完整限定脚本 83/83，保存回滚先确认写入再验证撤回。见 `npc-outing.md` §9 和 10 月 23 日统一报告。
 16. **NPC 主动约你**：Windows 已完成缓存资格、邀约反悔及最新原话核对修复，完整限定脚本 43/43。开口约的那次对话仍单独核对（`npc-invites.md` §2），不改用户已确认的玩法。
 17. **约定线收尾**：新分支 `83bedb4` 已下载并完成六类修复，§9 清单脚本化，完整限定原生 95/95；共享下矿、农场及配偶回归合计后整套 343/343。原始失败和未覆盖边界见 `npc-meetings-more.md` §12 及统一报告。本轮修复 e808287 已按用户指令推送到 `codex/outing-windows-tests`，远端核对一致。用户说“约定线做完”；2026-10-23 用户选“复核后快进 main”，已合入 main。
-18. **真实模型跑约定线**（用户 2026-10-23 选定，分支 `m2c-real-meetings`，已推送、未合入 main）：脚本 `tools/test-meetings-real.ts` 起真实后端、模拟 Mod，对话和夜间整合用真实模型，先标注再对比，能离线重放。每批找出的问题由用户定修法，修完再写一批新的留出：A 批 29/40 → 39/40；留出 B 批 15/20 → 18/20；留出 C 批 16/20 → 18/20；留出 D 批 18/20（4 位新 NPC），剩下“四天后”认不出是哪天、记成马上去（原来就有）和一处“去啊”漏记。改动都在代码核对里，只有提到节日的那一轮多 24–27 token。共 286 次调用，输入 52.4 万（命中缓存 39.2 万）、输出 6.9 万。Windows 游戏内真实模型清单见 `real-model-meetings.md` §8。报告：[A](test-results/2026-10-23-real-meetings-A.md)、[B](test-results/2026-10-23-real-meetings-B.md)、[C](test-results/2026-10-23-real-meetings-C.md)、[D](test-results/2026-10-24-real-meetings-D.md)。
+18. **真实模型跑约定线**（用户 2026-10-23 选定，分支 `m2c-real-meetings`，已推送、未合入 main）：脚本 `tools/test-meetings-real.ts` 起真实后端、模拟 Mod，对话和夜间整合用真实模型，先标注再对比，能离线重放。每批找出的问题由用户定修法，修完再写新的留出：A 批 29/40 → 39/40；留出 B 15/20 → 18/20；留出 C 16/20 → 18/20；留出 D 18/20（4 位新 NPC）→ 修“四天后”（原来会记成马上去）后小批 E 10 段加重跑 1 段 0 错记。改动都在代码核对里，只有提到节日的那一轮多 24–27 token。共 308 次调用，输入 56.5 万（命中缓存 42.3 万）、输出 7.2 万。下一步把 `real-model-meetings.md` §8 的清单交给 Windows 用真实模型在游戏里跑。报告：[A](test-results/2026-10-23-real-meetings-A.md)、[B](test-results/2026-10-23-real-meetings-B.md)、[C](test-results/2026-10-23-real-meetings-C.md)、[D 和 E](test-results/2026-10-24-real-meetings-D.md)。
 
 ## 8. 文档索引
 
@@ -336,7 +336,7 @@ dotnet build mod/StardewAgentBridge   # 编译 Mod，编译完自动装进游戏
 | `docs/test-results/2026-10-23-real-meetings-A.md` | 约定线真实模型 A 批：旧对话重放、40 段结果、每处漏记错记的原话和原因 |
 | `docs/test-results/2026-10-23-real-meetings-B.md` | 按 A 批修了以后的 A 批 39/40、节日那一行写日子的对比、留出的 B 批 15/20 与剩下的问题、成本 |
 | `docs/test-results/2026-10-23-real-meetings-C.md` | B 批三处记错的修复、留出的 C 批 16/20 与两处取消/改约说法的缺口、全程成本 |
-| `docs/test-results/2026-10-24-real-meetings-D.md` | C 批两处的修复、留出的 D 批 18/20（含 4 位新 NPC）、“四天后”记成马上去、全程成本 |
+| `docs/test-results/2026-10-24-real-meetings-D.md` | C 批两处的修复、留出的 D 批 18/20（含 4 位新 NPC）、“四天后”的修复与小批 E、全程成本 |
 | `docs/test-results/2026-10-23-outing-invites-windows.md` | 三个新功能分支的 Windows 组合、十类修复、279/54 自动检查、343 项限定原生及息屏和存档校验 |
 | `docs/test-results/2026-10-23-meetings-more-windows.md` | 约定线收尾的六类修复、六章原生 95/95、真实节日与带路、挖矿和心情保存，含夹具失败与边界 |
 | `docs/test-results/2026-10-21-ambient-windows.md` | 同图小动作、群体事件与原生疏远状态；三处修复、149/22 检查、真实定向内容和完整组合超时失败 |

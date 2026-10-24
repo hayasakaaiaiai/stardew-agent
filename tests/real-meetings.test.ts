@@ -132,3 +132,23 @@ test('a move by "往后推一个小时" and a call-off by "不去喝了，你别
   assert.equal(off('后天我不去换衣服了，直接去餐吧。'), null);
   assert.equal(quotedCallOff(lines(1210, ['玩家', '别等我，你先吃吧。'], ['NPC', '好。']), saloon, MEET_PLACES, summer(22)), null, 'not about the meeting');
 });
+
+test('"四天后" is a day four days ahead, never today; "几天后" is no day in particular; and "去啊" agrees (real lines, batch D)', () => {
+  const said = (player: string, npc: string) => lines(1010, ['玩家', player], ['NPC', npc]);
+  const four = said('四天后一起去海边训练？', '真的？哈，那说定了！四天后海滩见，我带你练点真东西，可别喊累啊。');
+  assert.equal(quotedToday(four, MEET_PLACES, summer(25)), null, 'it was kept as right away');
+  assert.equal(quotedLater(four, MEET_PLACES, summer(25)), null);
+  assert.match(farInvitation('四天后一起去海边训练？', summer(25))!, /^4 天后/);
+  assert.match(farInvitation('过三天陪我去博物馆好吗？', summer(25))!, /^3 天后/);
+  assert.match(farInvitation('一个星期后一起去山上看星星？', summer(25))!, /^7 天后/);
+  assert.equal(farInvitation('过两天一起去海边？', summer(25)), undefined, '"过两天" is just soon');
+  assert.equal(quotedToday(said('几天后一起去海边吧？', '好啊。'), MEET_PLACES, summer(25)), null);
+  assert.deepEqual(quotedLater(said('两天后下午一起去海边拍照？', '好呀，两天后下午海边见。'), MEET_PLACES, summer(25)), { day: summer(27), time: 1400, place: '海滩' });
+  assert.deepEqual(quotedLater(said('后天复活节一起去吧？', '复活节？去啊！找彩蛋我可是有好胜心的，哈哈，到时候可别怪我赢了。'), MEET_PLACES, 11),
+    { day: 13, time: 900, place: '复活节' });
+  assert.equal(quotedToday(said('下午两点一起去海边？', '你去啊，我不去。'), MEET_PLACES, summer(25)), null);
+  // "主要是" is no "要是" (batch E); "要是下雨就不去" still is.
+  assert.deepEqual(quotedLater(said('后天展览会一起去？', '哇，当然去！我每年都去，主要是冲着吃的。要不咱俩一起逛摊位？'), MEET_PLACES, 70),
+    { day: 72, time: 900, place: '星露谷展览会' });
+  assert.equal(quotedToday(said('下午两点一起去海边？', '好啊，要是不下雨的话。'), MEET_PLACES, summer(25)), null);
+});

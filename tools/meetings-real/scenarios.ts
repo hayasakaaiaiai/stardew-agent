@@ -10,7 +10,7 @@ export type Kind = '主动邀约' | '改约' | '当天约' | '明天后天更远
 
 export interface Scenario {
   id: string;
-  batch: 'A' | 'B' | 'C' | 'D';
+  batch: 'A' | 'B' | 'C' | 'D' | 'E';
   kind: Kind;
   /** The game's name, e.g. "Abigail". */
   npc: string;
@@ -268,4 +268,27 @@ export const SCENARIOS: Scenario[] = [
     say: ['后天冰雪节，一起去森林里看冰雕吧？'] },
   { id: 'D-fest-elliott-birthday', batch: 'D', kind: '节日生日', npc: 'Elliott', date: ['fall', 3], time: 1000, location: '海滩', birthday: ['fall', 5],
     say: ['你生日那天晚上一起去餐吧坐坐？'] },
+
+  // Batch E, a small check after the batch D fix ("四天后" and the like; docs/test-results/2026-10-24-real-meetings-D.md §5),
+  // never tuned on.
+  { id: 'E-far-abigail-three', batch: 'E', kind: '明天后天更远', npc: 'Abigail', date: ['summer', 20], time: 1100, location: '鹈鹕镇',
+    say: ['三天后一起去墓地吧？'] },
+  { id: 'E-far-penny-pass', batch: 'E', kind: '明天后天更远', npc: 'Penny', date: ['summer', 21], time: 1000, location: '博物馆',
+    say: ['过三天陪我去博物馆看新展品好吗？'] },
+  { id: 'E-far-maru-week', batch: 'E', kind: '明天后天更远', npc: 'Maru', date: ['summer', 15], time: 1300, location: '诊所',
+    say: ['一个星期后一起去山上看星星？'] },
+  { id: 'E-far-sam-five', batch: 'E', kind: '明天后天更远', npc: 'Sam', date: ['summer', 16], time: 1400, location: '鹈鹕镇',
+    say: ['五天以后去海边玩滑板？'] },
+  { id: 'E-near-haley-two', batch: 'E', kind: '明天后天更远', npc: 'Haley', date: ['summer', 17], time: 1000, location: '海滩',
+    say: ['两天后下午一起去海边拍照？'] },
+  { id: 'E-vague-leah-few', batch: 'E', kind: '明天后天更远', npc: 'Leah', date: ['summer', 18], time: 1100, location: '森林',
+    say: ['几天后一起去河边写生吧？'] },
+  { id: 'E-past-elliott', batch: 'E', kind: '当天约', npc: 'Elliott', date: ['summer', 19], time: 1000, location: '海滩',
+    say: ['三天前你在海边念的诗，我还记得呢。'] },
+  { id: 'E-now-emily', batch: 'E', kind: '当天约', npc: 'Emily', date: ['summer', 22], time: 1100, location: '鹈鹕镇',
+    say: ['现在一起去镇广场走走？'] },
+  { id: 'E-fest-sam-fair', batch: 'E', kind: '节日生日', npc: 'Sam', date: ['fall', 14], time: 1300, location: '鹈鹕镇',
+    say: ['后天展览会一起去？'] },
+  { id: 'E-fest-alex-star', batch: 'E', kind: '节日生日', npc: 'Alex', date: ['winter', 23], time: 1300, location: '鹈鹕镇',
+    say: ['冬日星盛宴那天一起去吧？'] },
 ];

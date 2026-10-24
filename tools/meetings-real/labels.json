@@ -776,5 +776,67 @@
         "place": "星之果实餐吧"
       }
     ]
+  },
+  "E-far-abigail-three": {
+    "appointments": [],
+    "note": "婉拒了"
+  },
+  "E-far-penny-pass": {
+    "appointments": [],
+    "note": "婉拒了"
+  },
+  "E-far-maru-week": {
+    "appointments": [],
+    "note": "婉拒了"
+  },
+  "E-far-sam-five": {
+    "appointments": [],
+    "note": "婉拒了"
+  },
+  "E-near-haley-two": {
+    "appointments": [
+      {
+        "day": 2,
+        "time": 1400,
+        "place": "海滩"
+      }
+    ],
+    "note": "只暗示答应：“总算有人提点像样的事了，不过你可别穿那身沾泥的进我的照片”"
+  },
+  "E-vague-leah-few": {
+    "appointments": [],
+    "note": "“几天后”没说哪天"
+  },
+  "E-past-elliott": {
+    "appointments": [],
+    "note": "说的是三天前"
+  },
+  "E-now-emily": {
+    "appointments": [
+      {
+        "day": 0,
+        "time": 0,
+        "place": "镇广场",
+        "soon": true
+      }
+    ]
+  },
+  "E-fest-sam-fair": {
+    "appointments": [
+      {
+        "day": 2,
+        "time": 900,
+        "place": "星露谷展览会"
+      }
+    ]
+  },
+  "E-fest-alex-star": {
+    "appointments": [
+      {
+        "day": 2,
+        "time": 900,
+        "place": "冬日星盛宴"
+      }
+    ]
   }
 }
