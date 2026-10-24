@@ -1,6 +1,6 @@
 # 节日记忆
 
-> 状态：已实现，Windows 自动检查通过，等用户游戏内验收（2026-10-21）。原分支 `festival-memories` 建在 `group-events` 上；Windows 最新验收分支 `codex/scheduler-windows-tests` 包含 `m2c-schedules / 9ae9da6` 与上一轮节日测试，最新 195/195 Node、32/32 C#，见 [后续报告](test-results/2026-10-21-scheduler-windows.md)。对应 `design.md` 状态表里“节日本身作为世界事件记入观察”。和设计稿不一样的地方见 §10。
+> 状态：已实现，Windows 自动检查通过，等用户游戏内验收（2026-10-21）。原分支 `festival-memories` 建在 `group-events` 上；Windows 最新验收分支 `codex/scheduler-windows-tests` 包含 `m2c-schedules / 9ae9da6` 与上一轮节日测试，最新 195/195 Node、32/32 C#，见 [后续报告](test-results/2026-10-21-scheduler-windows.md)。对应 `design.md` 状态表里“节日本身作为世界事件记入观察”。和设计稿不一样的地方见 §10。 当前分支归档与未解决问题以 [项目现状](status.md) 为准（2026-10-24）；下文旧分支名和“待验收”保留为阶段记录。
 
 ## 1. 效果
 

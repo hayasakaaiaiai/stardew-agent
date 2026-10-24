@@ -1,6 +1,6 @@
 # M2b 第三步：NPC 寄信
 
-> 状态：Windows 脚本验收通过并保留失败记录（2026-10-20）。上游 `m2b-mail` / `fa3e818` 建在 `m2b-bubbles` 上；Windows 在 `codex/mail-windows-tests` 完成寄信验收及格式失败恢复。最新 103/103 Node、18/18 C#；引用超限现保留待恢复、有限补跑，成功后刷新信件，见 [恢复报告](test-results/2026-10-20-nightly-recovery.md)。原寄信验收见 [Windows 报告](test-results/2026-10-20-mail-windows.md)。未合入 `main`。对应 `design.md` §8 的 `mail.send`。
+> 状态：Windows 脚本验收通过并保留失败记录（2026-10-20）。上游 `m2b-mail` / `fa3e818` 建在 `m2b-bubbles` 上；Windows 在 `codex/mail-windows-tests` 完成寄信验收及格式失败恢复。最新 103/103 Node、18/18 C#；引用超限现保留待恢复、有限补跑，成功后刷新信件，见 [恢复报告](test-results/2026-10-20-nightly-recovery.md)。原寄信验收见 [Windows 报告](test-results/2026-10-20-mail-windows.md)。已合入 `main`。对应 `design.md` §8 的 `mail.send`。 当前分支归档与未解决问题以 [项目现状](status.md) 为准（2026-10-24）；下文旧分支名和“待验收”保留为阶段记录。
 
 ## 1. 效果
 

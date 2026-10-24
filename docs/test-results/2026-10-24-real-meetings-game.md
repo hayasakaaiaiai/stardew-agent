@@ -71,8 +71,8 @@ Node **299/299**、C# 流程 **54/54**、类型检查和后端构建通过；Mod
 
 最终批保留 6 张原生截图，已查看博物馆与改约海滩的实际碰面画面：
 
-- [潘妮在博物馆](../../.runtime/game-memory-20261024-181028/live-tomorrow-met.png)
-- [阿比盖尔按改约到海滩](../../.runtime/game-memory-20261024-181028/live-change-met.png)
+- 潘妮在博物馆：`.runtime/game-memory-20261024-181028/live-tomorrow-met.png`（本地截图，未发布）
+- 阿比盖尔按改约到海滩：`.runtime/game-memory-20261024-181028/live-change-met.png`（本地截图，未发布）
 
 原话 `real-meetings-transcripts.md`、模型输入输出 `model-calls.jsonl`、每步状态 `commands.jsonl`、双向消息 `packets.json`、断言 `checks.json` 和 `content-audit.json` 均在最终目录。截图不代替游戏状态与消息证据。
 

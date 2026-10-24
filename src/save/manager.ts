@@ -37,7 +37,8 @@ export class SaveManager extends Service {
       if (existing && day?.status === 'open' && day.identity.loadNonce === input.loadNonce
         && day.identity.day === input.day && (input.commitId === day.identity.baseCommitId
           || (input.commitId === undefined && existing.ledger.head.parentId === null))) return existing;
-      await this.unload(input.lineageId, true);
+      // Keep the previous journal recoverable until the replacement has initialized; prune only after success below.
+      await this.unload(input.lineageId, false);
       const ctx = this.ownerCtx.isolate('save').isolate('day');
       const fiber = ctx.plugin(SaveScope, { ...input, ...this.config });
       try {

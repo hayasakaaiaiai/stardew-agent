@@ -1,6 +1,6 @@
 # 约好了就真的去：NPC 按约定赴约
 
-> 状态：用户 2026-10-21 说“推送，然后继续下一步”，沿用“后续有需要决定的地方你自行定夺”，按推荐自行决定（§2）。已实现（§7），等 Windows 验收（§8）。分支 `m2c-meetings`，建在 `m2c-approach` 上，目录 `/Users/a11/Documents/ChatGPT/stardew-agent-gifts`。这是 `status.md` §7 第 11 条路线的第 ② 步，也是 `npc-schedules.md` §9 推迟的“改日程”。
+> 状态：用户 2026-10-21 说“推送，然后继续下一步”，沿用“后续有需要决定的地方你自行定夺”，按推荐自行决定（§2）。已实现（§7），Windows 验收与覆盖边界见本文后续记录（§8）。分支 `m2c-meetings`，建在 `m2c-approach` 上，目录 `/Users/a11/Documents/ChatGPT/stardew-agent-gifts`。这是 `status-history-2026-10-24.md` §7 第 11 条路线的第 ② 步，也是 `npc-schedules.md` §9 推迟的“改日程”。 当前分支归档与未解决问题以 [项目现状](status.md) 为准（2026-10-24）；下文旧分支名和“待验收”保留为阶段记录。
 
 ## 1. 为什么做
 

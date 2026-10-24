@@ -1,6 +1,6 @@
 # 调度器：模型网关和后台场景
 
-> 状态：用户 2026-10-21 说“你继续推进度，后续有需要决定的地方你自行定夺”，按设计实现。第一步网关已实现（§3.4），第二步后台场景已实现（§4.10），等 Windows 验收（§5）。分支 `m2c-scheduler`，建在 `remember-source` 上（已合并 Windows 的 `codex/ambient-windows-tests / 5a1ef78`），目录 `/Users/a11/Documents/ChatGPT/stardew-agent-gifts`。对应 `design.md` §7.2–7.4（分级、快路径、合并调用）、§9.1（网关）、§13 第 8 条（调度测试）。
+> 状态：用户 2026-10-21 说“你继续推进度，后续有需要决定的地方你自行定夺”，按设计实现。第一步网关已实现（§3.4），第二步后台场景已实现（§4.10），Windows 验收与覆盖边界见本文后续记录（§5）。分支 `m2c-scheduler`，建在 `remember-source` 上（已合并 Windows 的 `codex/ambient-windows-tests / 5a1ef78`），目录 `/Users/a11/Documents/ChatGPT/stardew-agent-gifts`。对应 `design.md` §7.2–7.4（分级、快路径、合并调用）、§9.1（网关）、§13 第 8 条（调度测试）。 当前分支归档与未解决问题以 [项目现状](status.md) 为准（2026-10-24）；下文旧分支名和“待验收”保留为阶段记录。
 
 ## 1. 现状
 

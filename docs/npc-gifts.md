@@ -1,6 +1,6 @@
 # M2b 第五步：NPC 记得玩家送的礼物
 
-> 状态：已实现，Windows 组合脚本验收通过（2026-10-20）；证据在 `codex/social-windows-tests`，未合入 `main`。上游分支 `m2b-gifts` 建在 `m2b-npc-chat` 上，目录 `/Users/a11/Documents/ChatGPT/stardew-agent-gifts`。对应 `design.md` §10 的 `gift.given`。
+> 状态：已实现，Windows 组合脚本验收通过（2026-10-20）；证据在 `codex/social-windows-tests`，已合入 `main`。上游分支 `m2b-gifts` 建在 `m2b-npc-chat` 上，目录 `/Users/a11/Documents/ChatGPT/stardew-agent-gifts`。对应 `design.md` §10 的 `gift.given`。 当前分支归档与未解决问题以 [项目现状](status.md) 为准（2026-10-24）；下文旧分支名和“待验收”保留为阶段记录。
 
 ## 1. 效果
 

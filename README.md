@@ -1,135 +1,63 @@
-# Stardew NPC Agent：记忆内核
+# 星露谷 NPC Agent
 
-基于 Cordis 的轻量 NPC 记忆运行时。当前完成 M1：独立 NPC Session、中文记忆检索、游戏日提交与回滚，以及后端进程恢复。默认创建 34 个社交 NPC 的会话句柄，共享两个全局服务和一个数据库 Worker。
+让星露谷物语里的 34 位社交 NPC 自由聊天，记住你们的经历，并在游戏中赴约、帮忙和一起行动。后端使用 Node.js / TypeScript 和可配置的云端模型，SMAPI / C# Mod 复用原版界面。
 
-**本文只讲记忆内核。**对话、真实模型和游戏 Mod 见各自的设计文档，整个项目的进度、分支、环境和下一步见 [`docs/status.md`](docs/status.md)。记忆内核本身还没有自主行动循环：`NpcAgent` 现在是独立会话记忆句柄，验证的是数据与存档规则。
+当前为单人开发版本。Windows 已执行分批游戏脚本验收；自由模型仍有漏约和编造细节的问题，详见 [项目现状](docs/status.md) 与 [真实游戏报告](docs/test-results/2026-10-24-real-meetings-game.md)。
 
-## 运行
+## 已实现
 
-需要 Node.js 24；依赖版本由 `package-lock.json` 锁定。
+- 原版 NPC 台词之后选择“继续聊”，支持三个选项和自己输入中文。
+- 独立 NPC 记忆、中文检索、跨天保存、不保存回滚、后端恢复和旧档分叉。
+- 好感变化、原版送礼记忆、NPC 赠礼、寄信、头顶气泡和在场／后台传话。
+- 原版日程与节日事实、主动靠近、今天至后天的约定、改约、取消和赴约好感。
+- 农场作物及动物帮忙、陪下矿与救援、碰面后一起逛、NPC 主动邀约。
 
-```sh
+H 线硬件陪伴保留在 `hardware-companion`，尚未纳入 main。
+
+## 安装和启动
+
+需要 Node.js 24、星露谷物语 1.6 和 SMAPI 4；编译 Mod 需要 .NET 8 或更高版本 SDK。以下为 Windows PowerShell 示例，在仓库根目录运行：
+
+```powershell
 npm ci
-npm run demo
+if (-not (Test-Path -LiteralPath .env)) { Copy-Item .env.example .env }
+```
+
+在 `.env` 填写 `NPC_MODEL_ENDPOINT`、`NPC_MODEL_NAME` 和 `NPC_MODEL_API_KEY`。接口使用 OpenAI 兼容的 `/chat/completions` 路径；端点填写基础地址。默认推理强度 high；超时和最大输出留空分别用 60000 ms、4000 token，后者包含推理 token。配置见 [.env.example](.env.example)。
+
+先退出游戏，再编译并安装 Mod；将示例中的游戏目录换成实际安装目录：
+
+```powershell
+dotnet build mod/StardewAgentBridge -c Release '-p:GamePath=E:\games\steamapps\common\Stardew Valley'
+npm run bridge
+```
+
+构建工具将 Mod 复制到游戏 `Mods/StardewAgentBridge`。保持后端运行，用 SMAPI 启动游戏并读档；看完原版 NPC 台词后选择“继续聊”。Mod 默认连接 `ws://127.0.0.1:47711`，后端未就绪时保持原版对话。改端口时同时设置后端 `NPC_BRIDGE_PORT` 和 Mod `config.json` 的 `BackendUrl`。
+
+聊天会把角色卡、相关对话／记忆和游戏状态发送给你配置的模型服务。密钥保存在忽略的 `.env`；本地记忆与恢复数据在 `.runtime/game/`。更新代码时保留这份目录，备份游戏存档时一并备份对应的记忆数据。原理和恢复边界见 [存档记忆接入](docs/game-memory.md)。
+
+## 无游戏、无密钥验证
+
+```powershell
 npm test
 npm run typecheck
 npm run build
+npm run demo
 npm run demo:built
+npm audit
+node tools/check-repository.ts
 ```
 
-示例在操作系统临时目录创建数据库，退出时清理。测试不访问游戏文件，不联网，不使用模型密钥。`demo:built` 需要先执行 `build`，用于验证编译后的 JavaScript 与数据库 Worker。
+离线测试不联网、不调用真实模型、不操作游戏存档；demo 使用临时数据库并在退出时清理。`demo:built` 需要先构建。`node:sqlite` 在 Node 24 上会显示实验性提示。
 
-## 数据流
+有游戏和模型配置时，可运行 [完整约定验收入口](tools/test-game-real-meetings.ps1)：`-Section edges` 执行固定反例，`-Section live` 使用收费的真实模型。脚本使用独立存档副本、Mod 和数据库，并比较原档 SHA256；执行前先退出正在运行的游戏。真实游戏最近七项中 4 项完整通过，另 3 项失败仍保留，不能把技术断言通过当作内容全部正确。
 
-```text
-多个 NpcAgent 句柄
-    ├─ record → 当天 DayTxn → JSONL 追加 + sync → 确认接收
-    └─ context / recall
-            ↓
-      一个 StoreService / DB Worker
-            ├─ SQLite：提交树、状态、原始事件和记忆
-            ├─ Jieba：中文分词与查询规范化
-            └─ FTS5 召回 → 分支/知情范围过滤 → 本地排序
-```
+## 文档和资料
 
-记忆、对话、计划和情绪都属于当前存档分支。角色卡仍保存在 `data/npcs/`，本阶段不负责加载或修改角色卡。
+- [项目现状与文档索引](docs/status.md)：当前功能、分支、已知问题、测试证据。
+- [记忆内核 API](docs/memory-kernel.md)：原 README 中的接口、保存回滚和恢复说明。
+- [游戏桥接](docs/game-bridge.md)：Mod 原版界面、消息协议、配置和手测记录。
+- [全仓审查报告](docs/test-results/2026-10-24-repository-audit.md)：本轮修复、验证及合并清理记录。
+- [角色卡模板](data/npcs/_template.md) 与 [参考资料说明](reference/README.md)：角色事实来源、Wiki 署名和许可。示例台词按原版语气新写。
 
-## 最小使用方式
-
-```ts
-import { createRuntime } from './src/index.ts';
-
-const runtime = await createRuntime({
-  databasePath: '.runtime/memory.sqlite',
-  journalDirectory: '.runtime/scratch',
-});
-
-try {
-  const save = await runtime.ctx.saves.load({
-    lineageId: '当前游戏的稳定身份',
-    loadNonce: '本次读档的随机身份',
-    day: 1,
-  });
-  const abigail = save.agent('abigail');
-  await abigail.record({
-    seq: 1,
-    gameTime: 1 * 1440 + 600,
-    log: { player: '明天一起去海边吧？', npc: '好呀。' },
-    memories: [{ text: '玩家邀请我明天去海边', topics: ['海边'], importance: 4 }],
-    state: {
-      mood: '期待',
-      plans: [{ dueDay: 2, intent: '与玩家去海边', status: 'pending' }],
-    },
-  });
-  const context = await abigail.context({ query: '海边', nowGameTime: 2100 });
-  console.log(context);
-
-  // 将这个 ID 随游戏存档记录。真正收到“游戏保存成功”后才能 confirm。
-  await save.prepare('本次游戏存档的唯一提交ID');
-  await save.confirm('本次游戏存档的唯一提交ID');
-  await save.startDay(2);
-} finally {
-  await runtime.close();
-}
-```
-
-`record` 的 `state` 是**整对象快照**，会替换该 NPC 上一份状态，不是深度合并补丁。更新一个字段时先读取现有状态再构造新快照。`memories` 是追加数据，`log` 是原始对话或观察。跨 NPC 事件用 `save.record({ seq, gameTime, changes: [...] })` 一次记录，提交时一起保留或回滚。
-
-`seq` 在同一次游戏读档中递增，多个 NPC 共用序列；新读档可以从 1 开始。同一个序号补发相同内容不会重复写入，不同内容会报错。`gameTime` 和 `nowGameTime` 都是包含游戏日的绝对游戏分钟，不是现实时间，也不是原版 HHMM 整数。
-
-## 保存、回滚与恢复
-
-- 每个“存档谱系 × NPC”是一个逻辑 Session。它由当前提交的祖先路径，加上当天工作区组成，不会为每位 NPC 单独创建数据库。
-- `prepare` 立即禁止新写入、取消当天信号，等待已接收事件完成后，使用一个短 SQL 事务写入所有 NPC 的待确认提交。
-- `confirm` 只能用于游戏保存确实成功的情况。它推进 `head`、卸载当天 Agent 句柄并删除当天临时日志。随后 `startDay` 创建新的工作区和句柄。
-- `returnToTitle(lineageId)` 丢弃当天内容。重新加载旧 `commitId` 时，只能读取它及其祖先；从旧档继续保存会生成新分支。
-- `runtime.close()` 保留当天 JSONL，适用于后端停机。重新启动后，仅当 `lineageId`、`loadNonce`、基础提交点、游戏日全部一致时恢复。换一个 `loadNonce` 不会继承上次未保存的内容。
-- 同一运行中以相同身份重新 `load`，会保留已有工作区；不以重连当成重新读档。
-- 存档明确引用一个 `prepared` 提交时，说明游戏已保存了这个指针，加载过程会确认它。这覆盖“游戏保存成功，但后端没收到成功通知”的窗口。
-- 新建或首次接入的存档不提供 `commitId`，从创世提交开始。已有存档也缺少指针时仍从创世开始，**不猜测最新历史**；显式指向缺失或别的谱系的提交则报错。
-
-游戏文件与 SQLite 不是同一事务。M1 内核提供应用层协议和可恢复数据；游戏端提交指针、生命周期补发与断线握手在 M3b 桥接层实现，见 [存档记忆接入](docs/game-memory.md)；当前真机验收状态见 [项目现状](docs/status.md)。
-
-JSONL 每次事件落盘后才确认；异常中断留下的最后半行可以丢弃并截断，完整行损坏会报错。过期 nonce 的文件不会用于恢复。同一个存档用新的 nonce 读档成功后，`SaveManager` 删除这个存档其他 nonce 的 JSONL（`DayJournal.prune`），后端中途重启过也一样；不再读的存档会各留一份。只删文件名符合日志格式的文件。
-
-## 检索与知情范围
-
-默认记忆为 `private`，只供所属 NPC 的单独调用使用；`normal` 可用于该 NPC 参与的共享场景。其他 NPC 不会直接继承它：转述必须作为事件写进接收者的分区。
-
-`context({ sharedScene: true, ... })` 只返回 `normal` 记忆，状态与当天原始记录为空。M1 的状态是自由 JSON，无法可靠判断其中是否含秘密，所以不把整个状态对象放进共享上下文。
-
-SQL 先限制提交祖先路径、NPC、可见性、主题和退场标记，再应用候选上限。非空查询经 Jieba 分词、转成受控 FTS 表达式，以 BM25 召回最多 200 条；当天记忆使用同样的分词规则。最后结合词项匹配、重要度和游戏内新近程度排序。空查询取近期候选。返回值默认最多 8 条、正文合计最多 4000 个 Unicode 字符，**字符预算不是精确模型 token 预算**。
-
-到期约定、当前计划直接保存在 `state` 中，调用方应直接检查，不依赖历史相似度检索。`retireMemoryIds` 让旧记忆在当前分支退场，不删除原文；读回退场之前的提交，仍能召回它。
-
-## 夜间整合接口
-
-`consolidateCommit` 给调用方传入的整理函数提供某个**已保存提交**的日志、状态和历史记忆。每次模型调用只有一个 NPC 的私密输入，当天没有日志的 NPC 跳过。每个 NPC 最多提供 1000 条历史记忆；不会把正在进行的新一天混进输入。
-
-```ts
-import { consolidateCommit } from './src/index.ts';
-
-await consolidateCommit(runtime.ctx.store, {
-  lineageId: '当前游戏的稳定身份',
-  commitId: '已经保存的提交ID',
-  npcIds: ['abigail', 'sebastian'],
-}, async (input, signal) => {
-  signal.throwIfAborted();
-  // 后续在这里调用真实模型；现在可返回确定性的假摘要和计划。
-  return [];
-});
-```
-
-一次 `consolidateCommit` 是该提交的完整整合批次，各 NPC 的输出最终一起提交。输出只追加到来源提交，原始事件不改写；同一提交完成后不再重新调用模型，也不能换一份结果覆盖。`demo.ts` 使用假模型演示这条路径。用真实模型的整理器和存档后的自动调度在 Agent 层，见 [夜间整合](docs/nightly-consolidation.md)；还没有每周/每季摘要。
-
-## 实现与学习入口
-
-- [学习指南](docs/learning-memory.md)：7 个单元、官方资料、练习与验收目标。
-- [设计草案](docs/design.md)：完整系统方向及后续里程碑。
-- [运行时入口](src/index.ts)、[数据类型](src/types.ts)。
-- [存储与 SQL](src/services/store/database.ts)、[Worker](src/services/store/worker.ts)、[中文分词](src/services/store/tokenizer.ts)。
-- [当天工作区](src/save/day.ts)、[提交协调](src/save/ledger.ts)、[恢复日志](src/save/journal.ts)。
-- [NPC 句柄](src/agent/npc.ts)、[排序](src/agent/memory.ts)、[整合接口](src/agent/consolidation.ts)。
-- [行为测试](tests/memory.test.ts)：含真正 SIGKILL 后端子进程、重新读档分叉、跨 NPC 回滚和中文短词检索。
-
-代码保持严格类型检查。TypeScript 使用 ESNext/Bundler 解析以兼容 Cordis rc.11 发布包的无扩展名类型导出；本项目的相对导入显式使用 `.ts`，构建时重写成 `.js`，产物直接由 Node 运行。数据库版本目前为 1；遇到更高版本会拒绝打开，没有自动迁移实现。
+仓库不分发游戏导出文本、游戏程序集、存档、数据库或本地模型调用记录。`reference/wiki/` 保留来源页面、revision 和原许可说明；`reference/game/` 仅用于本地核对，已忽略。测试报告中的 `.runtime/` 路径是本地证据位置，公开仓库保留报告和复现脚本。

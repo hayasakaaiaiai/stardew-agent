@@ -1,6 +1,6 @@
 # M2b 第八步：NPC 之间传话
 
-> 状态：Windows 组合验收通过（2026-10-21），两处修复在 `codex/news-windows-tests`，未合入 `main`。上游 `m2b-npc-news / dc6d1d2` 建在 `m2b-friendship-by-hearts` 上。对应 `design.md` §7.5：“如果这个 NPC 自己决定转述，就以‘A 告诉了 B’的形式进入 B 的记忆，并带上来源”。
+> 状态：Windows 组合验收通过（2026-10-21），两处修复在 `codex/news-windows-tests`，已合入 `main`。上游 `m2b-npc-news / dc6d1d2` 建在 `m2b-friendship-by-hearts` 上。对应 `design.md` §7.5：“如果这个 NPC 自己决定转述，就以‘A 告诉了 B’的形式进入 B 的记忆，并带上来源”。 当前分支归档与未解决问题以 [项目现状](status.md) 为准（2026-10-24）；下文旧分支名和“待验收”保留为阶段记录。
 
 ## 1. 效果
 

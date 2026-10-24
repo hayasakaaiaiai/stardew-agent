@@ -1,6 +1,6 @@
 # 赴约和爽约影响好感
 
-> 状态：用户 2026-10-22 说“继续做下一步 不用问我 做好了推送”，按推荐自行决定（§2）。已实现（§5）；Windows 限定脚本及修复见 §8。用户随后确认配偶规则“按文档”：结婚配偶和科罗布斯室友赴约均不加、不扣；本次修复及补验记录补在 §8，原清单见 §6。分支 `m2c-meeting-friendship`，建在 `m2c-call-off` 上，目录 `/Users/a11/Documents/ChatGPT/stardew-agent-gifts`。这是 `npc-meetings.md` §9 推迟的“赴约或爽约影响好感”，也覆盖 `npc-farm-help.md` §8、`npc-mine-companion.md` §8 里的“帮忙/陪同影响好感”。
+> 状态：用户 2026-10-22 说“继续做下一步 不用问我 做好了推送”，按推荐自行决定（§2）。已实现（§5）；Windows 限定脚本及修复见 §8。用户随后确认配偶规则“按文档”：结婚配偶和科罗布斯室友赴约均不加、不扣；本次修复及补验记录补在 §8，原清单见 §6。分支 `m2c-meeting-friendship`，建在 `m2c-call-off` 上，目录 `/Users/a11/Documents/ChatGPT/stardew-agent-gifts`。这是 `npc-meetings.md` §9 推迟的“赴约或爽约影响好感”，也覆盖 `npc-farm-help.md` §8、`npc-mine-companion.md` §8 里的“帮忙/陪同影响好感”。 当前分支归档与未解决问题以 [项目现状](status.md) 为准（2026-10-24）；下文旧分支名和“待验收”保留为阶段记录。
 
 ## 1. 为什么做
 

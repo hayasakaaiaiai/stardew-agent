@@ -13,7 +13,7 @@
 
 1. 先读 `wiki/zh/<Npc>.md` 的开头、人际关系、心事件，建立对这个角色的整体印象。
    - 中文 wiki 是英文 wiki 的翻译，偶尔会落后几个版本；对不上的时候以 `wiki/en/` 为准。
-2. 再翻 `game/<Npc>.md` 的日常台词和事件台词，体会这个角色怎么说话。“示例台词”可以直接从这里挑。
+2. 再翻 `game/<Npc>.md` 的日常台词和事件台词，体会这个角色怎么说话。“示例台词”按原版语气重新创作，不直接摘抄游戏原文。
 3. 写“不能说的内容”时，对照 wiki 的心事件部分，以及 `game/` 里事件台词标注的条件。
 
 ## `game/` 里的标记
@@ -75,4 +75,4 @@ node tools/reference/extract_game.mjs <临时目录>/xnb-patched \
   reference/game
 ```
 
-`Data/Characters`、`Data/Objects` 这类带结构的数据，xnb@1.3.0 的类型定义跟不上 1.6.15，解不开，所以没有导出。它们的内容（生日、家人、物品）wiki 上都有。物品名到 ID 的对应，以后由 SMAPI Mod 在游戏里直接查询。
+`Data/Characters`、`Data/Objects` 这类带结构的数据，xnb@1.3.0 的类型定义跟不上 1.6.15，解不开，所以没有导出。它们的内容（生日、家人、物品）wiki 上都有。物品名到 ID 的对应已由 SMAPI Mod 在游戏里直接查询，123 个可送物品完成过游戏内识别核对，见 `docs/npc-mail.md`。

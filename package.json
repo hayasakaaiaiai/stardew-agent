@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "A lightweight Cordis runtime for concurrently active Stardew Valley NPCs.",
+  "description": "星露谷物语 NPC 的对话、存档记忆和游戏行动后端。",
   "engines": {
     "node": ">=24"
   },
@@ -22,8 +22,8 @@
     "ws": "8.22.0"
   },
   "devDependencies": {
-    "@types/node": "^24.0.0",
+    "@types/node": "24.19.2",
     "@types/ws": "8.18.2",
-    "typescript": "~5.9.3"
+    "typescript": "5.9.3"
   }
 }

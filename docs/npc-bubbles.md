@@ -1,6 +1,6 @@
 # M2b 第二步：头顶气泡和表情
 
-> 状态：已实现，Windows 脚本验收及三处修复完成（2026-10-20）。上游分支 `m2b-bubbles`；Windows 验收分支 `codex/bubbles-windows-tests`，目录 `E:\stardew-agent`。未合入 `main`。对应 `design.md` §8 的 `bubble`、`emote`，结果见 [Windows 报告](test-results/2026-10-20-bubbles-windows.md)。
+> 状态：已实现，Windows 脚本验收及三处修复完成（2026-10-20）。上游分支 `m2b-bubbles`；Windows 验收分支 `codex/bubbles-windows-tests`，目录 `E:\stardew-agent`。已合入 `main`。对应 `design.md` §8 的 `bubble`、`emote`，结果见 [Windows 报告](test-results/2026-10-20-bubbles-windows.md)。 当前分支归档与未解决问题以 [项目现状](status.md) 为准（2026-10-24）；下文旧分支名和“待验收”保留为阶段记录。
 
 ## 1. 效果
 

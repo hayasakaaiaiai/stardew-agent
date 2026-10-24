@@ -66,13 +66,20 @@ export function modelConfigFromEnv(env: NodeJS.ProcessEnv = process.env): ModelC
   };
   const thinking = (env.NPC_MODEL_THINKING?.trim() || 'high') as Thinking;
   if (!THINKING.has(thinking)) throw new Error(`NPC_MODEL_THINKING must be one of ${[...THINKING].join(', ')}`);
+  const positiveInteger = (key: string, fallback: number) => {
+    const raw = env[key]?.trim();
+    if (!raw) return fallback;
+    const value = Number(raw);
+    if (!Number.isSafeInteger(value) || value <= 0) throw new Error(`${key} must be a positive integer`);
+    return value;
+  };
   return {
     endpoint: require('NPC_MODEL_ENDPOINT').replace(/\/+$/, ''),
     model: require('NPC_MODEL_NAME'),
     apiKey: require('NPC_MODEL_API_KEY'),
     thinking,
-    timeoutMs: Number(env.NPC_MODEL_TIMEOUT_MS ?? 60_000),
-    maxTokens: Number(env.NPC_MODEL_MAX_TOKENS ?? 4000),
+    timeoutMs: positiveInteger('NPC_MODEL_TIMEOUT_MS', 60_000),
+    maxTokens: positiveInteger('NPC_MODEL_MAX_TOKENS', 4000),
   };
 }
 

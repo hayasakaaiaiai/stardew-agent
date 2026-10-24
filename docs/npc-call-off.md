@@ -1,6 +1,6 @@
 # 改口和送别：约好了也能取消，在一起时能让 NPC 先回去
 
-> 状态：用户 2026-10-22 说“继续做下一步 不用问我 做好了推送”，按推荐自行决定（§2）。已实现（§6），等 Windows 验收（§7）。分支 `m2c-call-off`，建在 `m2c-same-day-meetings` 上，目录 `/Users/a11/Documents/ChatGPT/stardew-agent-gifts`。这是 `npc-same-day-meetings.md` §8 和 `npc-meetings.md` §9 推迟的“之后的对话里改口取消”，顺带补了同一处的“迟到时的记忆”。
+> 状态：用户 2026-10-22 说“继续做下一步 不用问我 做好了推送”，按推荐自行决定（§2）。已实现（§6），Windows 验收与覆盖边界见本文后续记录（§7）。分支 `m2c-call-off`，建在 `m2c-same-day-meetings` 上，目录 `/Users/a11/Documents/ChatGPT/stardew-agent-gifts`。这是 `npc-same-day-meetings.md` §8 和 `npc-meetings.md` §9 推迟的“之后的对话里改口取消”，顺带补了同一处的“迟到时的记忆”。 当前分支归档与未解决问题以 [项目现状](status.md) 为准（2026-10-24）；下文旧分支名和“待验收”保留为阶段记录。
 
 ## 1. 为什么做
 

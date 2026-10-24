@@ -1,6 +1,6 @@
 # 关系好的 NPC 陪玩家下矿洞
 
-> 状态：用户 2026-10-21 选定心数门槛、打不打怪、晕倒怎么办、陪多久、怎么约和范围（§2 前六行）；2026-10-21 晚说“继续做 不用想我提问 做好了推送”，其余按推荐自己定。已实现（§6），2026-10-22 合并了 Windows 的 `codex/farm-help-windows-tests` 并复测（§5.4），Windows 限定脚本验收与修复见 §9。分支 `m2c-mine-companion`，建在 `m2c-farm-help` 上，目录 `/Users/a11/Documents/ChatGPT/stardew-agent-gifts`。这是 `status.md` §7 第 11 条路线的第 ④ 步，也是最后一步。
+> 状态：用户 2026-10-21 选定心数门槛、打不打怪、晕倒怎么办、陪多久、怎么约和范围（§2 前六行）；2026-10-21 晚说“继续做 不用想我提问 做好了推送”，其余按推荐自己定。已实现（§6），2026-10-22 合并了 Windows 的 `codex/farm-help-windows-tests` 并复测（§5.4），Windows 限定脚本验收与修复见 §9。分支 `m2c-mine-companion`，建在 `m2c-farm-help` 上，目录 `/Users/a11/Documents/ChatGPT/stardew-agent-gifts`。这是 `status-history-2026-10-24.md` §7 第 11 条路线的第 ④ 步，也是最后一步。 当前分支归档与未解决问题以 [项目现状](status.md) 为准（2026-10-24）；下文旧分支名和“待验收”保留为阶段记录。
 
 ## 1. 做什么
 

@@ -1,6 +1,6 @@
 # M2b 第七步：关系好的 NPC 当面送东西
 
-> 状态：已实现，Windows 统一脚本验收通过（2026-10-20），测试在 `codex/new-parts-windows-tests`，未合入 `main`。上游分支 `m2b-in-person-gifts` 建在 `m1-scratch-cleanup` 上，目录 `/Users/a11/Documents/ChatGPT/stardew-agent-gifts`。对应 `design.md` §8 的 `gift.give`。
+> 状态：已实现，Windows 统一脚本验收通过（2026-10-20），测试在 `codex/new-parts-windows-tests`，已合入 `main`。上游分支 `m2b-in-person-gifts` 建在 `m1-scratch-cleanup` 上，目录 `/Users/a11/Documents/ChatGPT/stardew-agent-gifts`。对应 `design.md` §8 的 `gift.give`。 当前分支归档与未解决问题以 [项目现状](status.md) 为准（2026-10-24）；下文旧分支名和“待验收”保留为阶段记录。
 
 ## 1. 效果
 

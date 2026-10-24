@@ -1,6 +1,6 @@
 # 自主行动第一步：玩家不在场时 NPC 也传话
 
-> 状态：已实现，等 Windows 游戏内验收（2026-10-20）。分支 `m2c-offscreen-news`，建在 `m2b-npc-news` 上，目录 `/Users/a11/Documents/ChatGPT/stardew-agent-gifts`。对应 `design.md` §7 的“按时间自主行动，彼此互动”和 §7.5 的转述规则。
+> 状态：已实现，等 Windows 游戏内验收（2026-10-20）。分支 `m2c-offscreen-news`，建在 `m2b-npc-news` 上，目录 `/Users/a11/Documents/ChatGPT/stardew-agent-gifts`。对应 `design.md` §7 的“按时间自主行动，彼此互动”和 §7.5 的转述规则。 当前分支归档与未解决问题以 [项目现状](status.md) 为准（2026-10-24）；下文旧分支名和“待验收”保留为阶段记录。
 
 ## 1. 效果
 

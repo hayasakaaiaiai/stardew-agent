@@ -1,5 +1,6 @@
 /** WebSocket service for the SMAPI mod, with save-scoped M1 memory (docs/game-memory.md). */
 import type { AddressInfo } from 'node:net';
+import type { IncomingMessage } from 'node:http';
 import { type WebSocket, WebSocketServer } from 'ws';
 import { BACKSTAGE_PER_DAY, BACKSTAGE_TOPIC, type BackstagePerson, backstageHour, backstagePrompt, parseBackstage, pickBackstage } from '../agent/backstage.ts';
 import { AMBIENT_CALLS_PER_DAY, type AmbientLine, type AmbientPerson, ambientPrompt, parseAmbient } from '../agent/ambient.ts';
@@ -100,7 +101,11 @@ export class BridgeServer {
 
   static async start(options: BridgeOptions): Promise<BridgeServer> {
     const memory = await GameMemory.open(options.memoryDirectory, options.log, options.consolidator, options.nightlyRetryDelayMs);
-    const server = new WebSocketServer({ port: options.port, host: options.host ?? '127.0.0.1', maxPayload: 256 * 1024 });
+    const server = new WebSocketServer({
+      port: options.port, host: options.host ?? '127.0.0.1', maxPayload: 256 * 1024,
+      // The native Mod sends no Origin; a web page must never drive the local save or paid model calls.
+      verifyClient: ({ req }: { req: IncomingMessage }) => req.headers.origin === undefined,
+    });
     try {
       await new Promise<void>((resolve, reject) => { server.once('listening', resolve); server.once('error', reject); });
       return new BridgeServer(options, server, memory);

@@ -1,6 +1,6 @@
 # 自主行动第二步：同一张地图上的小动作
 
-> 状态：用户 2026-10-21 确认设计；Windows 固定数据组合和真实模型新场景通过，完整真实组合仍有 10 秒超时失败，见 §10。上游分支 `m2c-ambient-lines` 建在 `less-fabrication` 上，目录 `/Users/a11/Documents/ChatGPT/stardew-agent-gifts`；Windows 修复和验收在 `codex/ambient-windows-tests`。对应 `design.md` §7.2 的 T1（和玩家在同一张地图的 NPC 合并调用）和 §8 的 `bubble`、`emote`。
+> 状态：用户 2026-10-21 确认设计；Windows 固定数据组合和真实模型新场景通过，完整真实组合仍有 10 秒超时失败，见 §10。上游分支 `m2c-ambient-lines` 建在 `less-fabrication` 上，目录 `/Users/a11/Documents/ChatGPT/stardew-agent-gifts`；Windows 修复和验收在 `codex/ambient-windows-tests`。对应 `design.md` §7.2 的 T1（和玩家在同一张地图的 NPC 合并调用）和 §8 的 `bubble`、`emote`。 当前分支归档与未解决问题以 [项目现状](status.md) 为准（2026-10-24）；下文旧分支名和“待验收”保留为阶段记录。
 
 ## 1. 效果
 

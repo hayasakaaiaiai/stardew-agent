@@ -1,6 +1,6 @@
 # 约到后天：约定最多到后天，更远的 NPC 婉拒
 
-> 状态：用户 2026-10-22 说“继续做下一步 不用问我 做好了推送”；做的过程中用户定了范围：“约定只支持今天和接下来 2 天以内吧 如果约定超过这个时间 npc 会拒绝”。其余按推荐自行决定（§2）。已实现（§6）；Windows 限定脚本验收及修复见 §9，原清单见 §7。分支 `m2c-later-meetings`，建在 `m2c-meeting-friendship` 上，目录 `/Users/a11/Documents/ChatGPT/stardew-agent-gifts`。这是 `npc-meetings.md` §9 推迟的“后天及以后的约定”，按用户的范围只做到后天。
+> 状态：用户 2026-10-22 说“继续做下一步 不用问我 做好了推送”；做的过程中用户定了范围：“约定只支持今天和接下来 2 天以内吧 如果约定超过这个时间 npc 会拒绝”。其余按推荐自行决定（§2）。已实现（§6）；Windows 限定脚本验收及修复见 §9，原清单见 §7。分支 `m2c-later-meetings`，建在 `m2c-meeting-friendship` 上，目录 `/Users/a11/Documents/ChatGPT/stardew-agent-gifts`。这是 `npc-meetings.md` §9 推迟的“后天及以后的约定”，按用户的范围只做到后天。 当前分支归档与未解决问题以 [项目现状](status.md) 为准（2026-10-24）；下文旧分支名和“待验收”保留为阶段记录。
 
 ## 1. 为什么做
 

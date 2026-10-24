@@ -1,6 +1,6 @@
 # M2b 第四步：NPC 之间碰面聊天（旁听）
 
-> 状态：已实现，Windows 组合脚本验收通过（2026-10-20）；修复及证据在 `codex/social-windows-tests`，未合入 `main`。上游分支 `m2b-npc-chat` 建在 `main` / `db94a12` 上（复用气泡的显示），目录 `/Users/a11/Documents/ChatGPT/stardew-agent-chat`。对应 `design.md` §7 的场景调用、§8 的 `bubble`（“让玩家能旁听 NPC 之间说的话”）。
+> 状态：已实现，Windows 组合脚本验收通过（2026-10-20）；修复及证据在 `codex/social-windows-tests`，已合入 `main`。上游分支 `m2b-npc-chat` 建在 `main` / `db94a12` 上（复用气泡的显示），目录 `/Users/a11/Documents/ChatGPT/stardew-agent-chat`。对应 `design.md` §7 的场景调用、§8 的 `bubble`（“让玩家能旁听 NPC 之间说的话”）。 当前分支归档与未解决问题以 [项目现状](status.md) 为准（2026-10-24）；下文旧分支名和“待验收”保留为阶段记录。
 
 ## 1. 效果
 

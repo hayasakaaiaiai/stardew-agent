@@ -1,6 +1,6 @@
 # 游戏对话桥接（M3a / M3b）
 
-> 更新于 2026-10-20。M3a/M3b 已实现。Windows 上阿比盖尔三轮对话，以及跨天保留、不保存回滚、后端重启、旧档分叉的真机组合验收都已通过；拼音输入法、原版台词保留、取消还要按 §7 手测。M3b 的协议、恢复与边界见 [game-memory.md](game-memory.md)。
+> 更新于 2026-10-24。M3a / M3b 已实现并合入 main；Windows 阿比盖尔三轮、跨天、回滚、重启和旧档分叉已验收，中文输入、原版台词保留和 Esc 取消由用户在 10 月 20 日手测确认。本轮补上原生桥接的 Origin 校验；协议与恢复见 [game-memory.md](game-memory.md)。
 
 ## 1. 已确认的决定
 
@@ -188,3 +188,20 @@ powershell -NoProfile -File .\tools\test-abigail.ps1
 依赖为本机 Node 24+、已执行 `npm ci`、配置好的 `.env`、可编译 Mod 的 .NET SDK，以及已安装 SMAPI 的游戏。测试存档不存在时会停止。
 
 结果写入 `.runtime/abigail-test-result.json`，脚本日志为 `.runtime/abigail-test-launcher.log`；Mod 目录也保存一份本次请求的结果。2026-10-19 已完成一次真机自动回归，三轮回复均成功，详细数字和覆盖边界见 [测试报告](test-results/2026-10-19-abigail.md)。自动流程直接进入 AI 对话，原版每日台词到“继续聊”的入口仍按 §7 手动验证。
+
+## 9. 当前接口补充与配置（2026-10-24）
+
+§3 的初版消息表之外，当前还包括以下消息，完整字段以 `src/bridge/protocol.ts` 和 `SaveSync.cs` 为准：
+
+| 方向 | 消息 | 用途 |
+|---|---|---|
+| Mod → 后端 | `ambient.request` | 同图小动作与打招呼；返回 `ambient.lines` |
+| Mod → 后端 | `meet.ended` | 实际赴约、碰面、取消、同行、农活和下矿结果；可靠消息，等 ack |
+| 后端 → Mod | `day.approach` | 今日主动靠近资格 |
+| 后端 → Mod | `day.meetings` | 今日约定及当天新约、改约、取消；Mod 按实际行动执行 |
+
+后端只监听本机地址。自 2026-10-24 起，携带 `Origin` 的 WebSocket 握手被拒绝；C# 原生客户端不发送该头，照常连接。不提供网页客户端或远程访问入口。
+
+Mod 的当前配置还包括 `ShowBubbles`、`SendLetters`、`NpcChat`、`ChatChangesFriendship`、`InPersonGifts`、`OffscreenNews`、`BackstageScenes`、`AmbientLines`、`FestivalMemories`、`NpcApproach`、`NpcMeetings`、`NpcMineCompanion`、`MeetingsChangeFriendship`、`MeetingsGoTogether`、`NpcInvites`；字段和默认值以 `ModConfig.cs` 为准。`NpcMeetings` 等动作开关及其依赖见相应设计文档。`ReplyTimeoutSeconds` 当前默认 20 秒，后台请求的预算和超时另见调度器文档。
+
+10 月 20 日用户已经确认 Windows 拼音输入、原版台词保留和 Esc 取消正常；§7 保留为复测清单，其他平台不由该记录推定通过。本轮全仓审查采用不部署构建，正常安装 DLL 与后端版本以实际部署为准。
