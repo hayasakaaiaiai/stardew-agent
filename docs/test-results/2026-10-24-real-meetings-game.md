@@ -67,7 +67,7 @@ NPC 关系、日期、初始位置和原日程是受控夹具。对话经原版�
 
 ### 自动检查与画面
 
-Node **299/299**、C# 流程 **54/54**、类型检查和后端构建通过；Mod Release **0 警告、0 错误**。这些结果和游戏中的真实内容失败分别记录。正常安装 DLL 收尾仍为 `9C9D9EFEF9CF72529FDE5345DB7717A7675D8EEDADADD6D6DFFCBAD6389B128D`，常驻后端未重载；仅本地提交，不推送、未合入 main。
+Node **299/299**、C# 流程 **54/54**、类型检查和后端构建通过；Mod Release **0 警告、0 错误**。这些结果和游戏中的真实内容失败分别记录。正常安装 DLL 收尾仍为 `9C9D9EFEF9CF72529FDE5345DB7717A7675D8EEDADADD6D6DFFCBAD6389B128D`，常驻后端未重载。用户随后授权推送，修复 `bd88dec` 和脚本 `4526ad0` 已推送到 `codex/real-meetings-windows-tests`，未合入 main。推送后执行 `git fetch origin --prune`，相较推送前的远端跟踪快照，仅新增本轮测试分支；没有其他新分支或提交，`main / df8273c` 与 `m2c-real-meetings / f6d725f` 未变。
 
 最终批保留 6 张原生截图，已查看博物馆与改约海滩的实际碰面画面：
 

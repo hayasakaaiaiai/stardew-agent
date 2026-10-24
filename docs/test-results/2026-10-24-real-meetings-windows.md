@@ -99,4 +99,4 @@ node tools/test-meetings-real.ts --compare <本次输出目录>
 
 新修的冲突和否定原话由固定回复的完整后端测试覆盖。自由模型未产生相同冲突时，普通游戏流程通过也不能算这些边界在游戏里都测到了。全 NPC、自然日程长时运行、多人和全部剧情没有新增覆盖。
 
-本轮只作本地提交，不推送、不合入 main。
+本轮修复 `bd88dec` 随后按用户授权，与游戏脚本 `4526ad0` 一起推送到 `codex/real-meetings-windows-tests`，未合入 main。推送后 fetch 未发现其他新分支或新提交；游戏内的实际执行结果及三个未解决内容问题见 [游戏脚本报告](2026-10-24-real-meetings-game.md)。
