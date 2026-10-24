@@ -44,6 +44,10 @@ README 已改为完整项目说明，包含前置环境、模型配置、Mod 构
 
 在独立 SMAPI 进程重跑 `tools/test-game-real-meetings.ps1 -Section edges`：**41/41**，**98 秒**、**0 次真实模型调用**；原生 Mod 无 Origin 连接、读档和固定反例正常，原测试存档全部六文件 SHA256 一致。原始结果在本机 `.runtime/game-memory-20261024-225838/`。测试期间 `powercfg /requests` 的 DISPLAY 为无。正常安装的 Mod 与常驻后端没有部署。
 
-归并检查确认 H 线独有的 **8 个提交无一成为当前整合分支的祖先**，`src/companion` 不存在。清理前远端有 53 条分支，本地原有 23 条；最终合并、清理和可见性结果在实际操作后追加。初始 Git bundle 与 refs 快照一直保留，不进入公开仓库。
+归并检查确认 H 线独有的 **8 个提交无一成为当前整合分支的祖先**，`src/companion` 不存在。审查修复提交为 `d11d14d`，已快进到 main 并推送。清理前远端有 53 条分支，本地原有 23 条；已删除 **51 条远端历史分支、23 条本地历史分支**，本地与远端都只保留 `main`、`hardware-companion`。远端删除采用预期 SHA 租约和原子推送，每条删除前均证明是 main 祖先；H 线仍为 `6e92320`。初始 Git bundle 与 refs 快照一直保留在本机，不进入公开仓库。
+
+GitHub 可见性已设为 **PUBLIC**，默认分支仍为 main。无 Authorization 的 GitHub API 返回 `private=false`，匿名读取提交 `d11d14d` 的 README 与本地 Git blob 字节一致。仓库地址：[hayasakaaiaiai/stardew-agent](https://github.com/hayasakaaiaiai/stardew-agent)。
+
+另用禁用凭据的 Git 命令匿名浅克隆 main，执行 `npm ci` 后，在没有 `.env`、`reference/game/` 或本机运行数据的新目录里，**303/303**、类型检查、构建、构建后 demo 和仓库检查再次通过。该干净安装验证的是公开的 `d11d14d`；随后只补本文与状态页的发布确认，没有新增生产代码变化。
 
 已知的真实模型内容问题仍为：主动邀约只寒暄、取消后编造等候、花舞节夜间漏约；七项完整结果仍是 4/7，详见 [真实游戏报告](2026-10-24-real-meetings-game.md)。本轮公共发布没有重新生成收费模型样本。
