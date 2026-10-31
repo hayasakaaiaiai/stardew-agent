@@ -39,7 +39,7 @@ Windows 上要看一眼的：
 
 同日用户提出“继续聊的时候时间暂停”，选了“只停钟”，在 `chat-pause-time` 上实现。单人游戏里对话框和输入框开着时原版本来就停钟，漏掉的是等模型回复那几秒。现在等回复时打开原版的 `Game1.isTimePaused`，画面照常动；回复到了、取消、超时、断线、读档、回标题时恢复；只恢复自己停的；联机不停；开关 `PauseClockWhileWaiting` 默认开。token 增量 0，C# 流程检查加 1 项（要在 Windows 跑）。Windows 清单见 [game-bridge.md](game-bridge.md) §10。
 
-用户还要“更多头像表情”：现在的回复已经用原版头像，按模型给的 6 种表情（`$h` `$s` `$u` `$l` `$a` 和平静）切换。要用 6 张以外的头像，得先查清各 NPC 有几张、各是什么，再估算角色卡多出来的 token，交用户定。
+用户还要“更多头像表情”。查了原版头像图：34 位共 251 张，6 张以外的 72 张大多是剧情专用的；12 位有一张“吃惊、慌张”，另有 10 位不到 6 张（越界时原版画第 0 张）。用户选“加吃惊，只列每人有的”，在 `portrait-emotions` 上实现：有“吃惊”的每轮 +4 token，4 张的 −6，法师 −10，矮人 −12，其余不变，不加调用；列表外的表情由代码改成平静。真实模型 30 次：吃惊的话 9/9 用上，其他话 1/9，格斯 0 次越界，矮人 3 次越界都被改回。见 [portrait-emotions.md](portrait-emotions.md)。
 
 ## 3. 分支
 
@@ -49,6 +49,7 @@ Windows 上要看一眼的：
 | `hardware-companion` | H 线硬件陪伴，暂停；本轮保持原提交 `6e92320` |
 | `docs-readme` | 2026-10-31 建在 `main / 789b911` 上：README 列出全部功能和开关；游戏内提示、Mod 描述和命令行颜色美化。等用户确认后合入，见 §2 末尾 |
 | `chat-pause-time` | 建在 `docs-readme` 上：等回复时停住游戏时钟，见 `game-bridge.md` §10 |
+| `portrait-emotions` | 建在 `chat-pause-time` 上：头像加“吃惊”，只列每人有的表情，见 `portrait-emotions.md` |
 
 历史功能分支和验收分支已在内容核对、合并与验证完成后清理，提交历史保留在 main。本轮删除 51 条远端、23 条本地历史分支，两边都只剩上表两条。清理前的 refs 和完整 Git bundle 保存在本机 `.runtime/repository-publication-20261024/`；旧分支对应的设计、测试记录仍在仓库。
 
@@ -126,6 +127,7 @@ powershell -NoProfile -File tools/test-game-real-meetings.ps1 -Section live
 |---|---|
 | `README.md` | 全部功能（效果、开关、文档）、安装、Mod 配置开关、命令行工具、验证入口和已知限制 |
 | `docs/memory-kernel.md` | 记忆内核 API、保存回滚及失败读档恢复 |
+| `docs/portrait-emotions.md` | 头像表情：各 NPC 原版头像有几张、“吃惊”是第几张、只列每人有的、token 实测和真实模型小批 |
 | `docs/status-history-2026-10-24.md` | 全仓审查前的历史进度、分支、部署和验证快照 |
 | `docs/test-results/2026-10-24-repository-audit.md` | 全仓审查、三处修复、合并和公开前的验证 |
 | `docs/real-model-meetings.md` | 用真实模型跑约定线的测试计划和结果 |

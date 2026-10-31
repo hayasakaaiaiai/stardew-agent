@@ -14,6 +14,16 @@ internal static class VanillaDialogue
         ["happy"] = "$h", ["sad"] = "$s", ["special"] = "$u", ["blush"] = "$l", ["angry"] = "$a",
     };
 
+    /// <summary>
+    /// The startled frame some portrait sheets add after vanilla's six, the same index in their winter and beach sheets
+    /// (docs/portrait-emotions.md). src/agent/portraits.ts has the same list; a missing frame is drawn as frame 0.
+    /// </summary>
+    private static readonly Dictionary<string, int> Surprised = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Abigail"] = 7, ["Alex"] = 7, ["Demetrius"] = 6, ["Elliott"] = 8, ["Emily"] = 6, ["Haley"] = 8,
+        ["Harvey"] = 8, ["Leah"] = 6, ["Maru"] = 9, ["Penny"] = 12, ["Sam"] = 8, ["Shane"] = 10,
+    };
+
     /// <summary>Characters the dialogue parser treats as commands, e.g. "[184]" gives an item and "@" becomes the player's name.</summary>
     private static readonly Dictionary<char, char> Escapes = new()
     {
@@ -30,6 +40,8 @@ internal static class VanillaDialogue
         StringBuilder text = new(Escape(reply));
         if (Emotions.TryGetValue(emotion, out string? command))
             text.Append(command);
+        else if (emotion == "surprised" && Surprised.TryGetValue(npc.Name, out int frame))
+            text.Append('$').Append(frame);
         for (int i = 0; i < responses.Count; i++)
             text.Append($"#$r agent{i} 0 agent{i}#").Append(Escape(responses[i]));
 

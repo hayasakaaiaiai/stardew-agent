@@ -2,12 +2,13 @@ import type { ChatMessage, ChatModel, Completion, StreamHandlers, Usage } from '
 import type { Relation, RenderedCard, Roster } from '../services/roster/index.ts';
 import { sourceRemembered } from './turn-facts.ts';
 import { directScheduleReply, unknownRecentChat } from './dialogue-facts.ts';
+import { emotionRule, emotionsFor, VANILLA_EMOTIONS } from './portraits.ts';
 import type { ScheduleReplies } from './schedule.ts';
 
 /** One player ↔ NPC dialogue call (design §7.6, prototype in docs/dialogue-prototype.md). */
 
 export type Season = 'spring' | 'summer' | 'fall' | 'winter';
-export type Emotion = 'neutral' | 'happy' | 'sad' | 'blush' | 'angry' | 'special';
+export type Emotion = 'neutral' | 'happy' | 'sad' | 'blush' | 'angry' | 'special' | 'surprised';
 
 export interface WorldState {
   year: number;
@@ -93,14 +94,17 @@ export const OPENING_LINE = '（玩家走过来，想和你多聊几句）';
 /** A remembered item written as a bare string has no importance; this is what objects get for plans and promises. */
 const STRING_IMPORTANCE = 3;
 export const FALLBACK_OPTIONS = ['嗯。', '说说别的吧。', '我先走了。'];
-const EMOTIONS = new Set<Emotion>(['neutral', 'happy', 'sad', 'blush', 'angry', 'special']);
+const EMOTIONS = new Set<Emotion>(['neutral', 'happy', 'sad', 'blush', 'angry', 'special', 'surprised']);
 export const SEASONS: Record<Season, string> = { spring: '春季', summer: '夏季', fall: '秋季', winter: '冬季' };
 const WEEKDAYS = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
 export const RELATIONS: Record<Relation, string> = {
   stranger: '刚认识', friend: '朋友', dating: '正在约会', engaged: '已订婚', married: '已结婚', roommate: '室友',
 };
 
-/** Same for every NPC and every call, so it stays in the cached prefix. */
+/**
+ * Same for every NPC and every call, so it stays in the cached prefix. The emotion field comes right after it, listing
+ * only what this NPC's portrait can show (docs/portrait-emotions.md).
+ */
 export const RULES = `# 角色扮演规则
 
 你在《星露谷物语》里扮演一位居民，正在和玩家聊天。玩家是不久前搬来、继承了爷爷旧农场的农夫。下面依次给出你的角色卡、当前情况和今天的对话。
@@ -122,7 +126,6 @@ export const RULES = `# 角色扮演规则
 
 字段：
 - reply：你说的台词，只写台词。
-- emotion：说这句话时的表情，取 neutral、happy、sad、blush、angry、special 之一。
 - options：玩家下一句可以说的话，正好 3 条，用玩家的口吻，每条不超过 15 字，方向要不同，比如一条顺着聊、一条追问、一条告别或岔开。
 - remember：这轮里值得你长期记住的事，0–2 条，每条写成 {"text":"……","importance":1到5}，用你自己的视角写，比如“小林说她最喜欢下雨天”。玩家说出的喜好、计划、承诺、经历和心里话都要记；寒暄和你自己说的话不用记；没有就写 []。
 - mood：这句话让你对玩家好感的变化，-2 到 2：闲聊 0，合心意 1，很感动 2，冒犯 -1，很过分 -2；讨好感、空奉承算 0。
@@ -143,11 +146,14 @@ export interface PromptInput {
   memory: MemoryContext;
   history: Exchange[];
   playerLine: string;
+  /** The emotions the rule offers; vanilla's six when the caller does not say whose portrait it is. */
+  emotions?: readonly Emotion[];
 }
 
 /** Ordered from most to least stable for prefix caching (design §9.2). */
 export function buildMessages(input: PromptInput): ChatMessage[] {
-  const system = [RULES, input.card.stable, input.card.gated, situation(input), memoryBlock(input.memory)]
+  const rules = `${RULES}\n${emotionRule(input.emotions ?? VANILLA_EMOTIONS)}`;
+  const system = [rules, input.card.stable, input.card.gated, situation(input), memoryBlock(input.memory)]
     .filter(Boolean).join('\n\n');
   return [
     { role: 'system', content: system },
@@ -349,8 +355,10 @@ export async function runTurn(
   const replyView: MemoryContext['replyView'] = factReply ? (_reply, meta) => ({ reply: factReply,
     meta: { ...meta, emotion: 'neutral', options: ['最近怎么样？', '说说别的吧。', '我先走了。'], remember: [], mood: 0, give: false, end: false },
   }) : recalled.replyView;
+  const emotions = emotionsFor(input.npcId);
   const messages = buildMessages({
     npcName: card.name,
+    emotions,
     card: deps.roster.render(input.npcId, { ...input.standing, purpose: 'dialogue' }),
     world: input.world,
     standing: input.standing,
@@ -387,7 +395,9 @@ export async function runTurn(
   const parsed = parseOutput(attempts.at(-1)!.content, stream.text);
   const viewed = replyView?.(parsed.reply, parsed.meta) ?? parsed;
   const { reply } = viewed;
-  const meta = { ...viewed.meta, remember: sourceRemembered(input.playerLine, viewed.meta.remember, input.playerLine === OPENING_LINE) };
+  // A face the portrait sheet lacks would be drawn as frame 0 anyway; say so instead of asking again.
+  const emotion = emotions.includes(viewed.meta.emotion) ? viewed.meta.emotion : 'neutral';
+  const meta = { ...viewed.meta, emotion, remember: sourceRemembered(input.playerLine, viewed.meta.remember, input.playerLine === OPENING_LINE) };
   handlers.signal?.throwIfAborted();
   if (reply) await memory.record({ player: input.playerLine, npc: reply }, meta.remember);
   if (reply && replyView) {

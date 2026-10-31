@@ -26,7 +26,7 @@ const TRANSCRIPTS = join(ROOT, '.runtime/transcripts');
 const CHAT_DATA = join(ROOT, '.runtime/chat');
 const RELATIONS = new Set<Relation>(['stranger', 'friend', 'dating', 'engaged', 'married', 'roommate']);
 const EMOTION_LABEL: Record<DialogueMeta['emotion'], string> = {
-  neutral: '平静', happy: '开心', sad: '难过', blush: '害羞', angry: '生气', special: '特殊',
+  neutral: '平静', happy: '开心', sad: '难过', blush: '害羞', angry: '生气', special: '特殊', surprised: '吃惊',
 };
 // styleText only colors a terminal; piped output and NO_COLOR stay plain.
 const paint = {

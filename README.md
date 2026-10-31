@@ -12,7 +12,7 @@
 
 | 功能 | 游戏里是什么样 | 开关 | 文档 |
 |---|---|---|---|
-| 继续聊 | 原版台词说完后，问“要继续和阿比盖尔聊聊吗？”。选“继续聊”，就在原版对话框里接着聊：每轮 3 个选项、“自己说……”（原版输入框，能用输入法打中文）和“离开”。头像会跟着回复的表情变。等回复时 NPC 头上冒“……”，游戏时钟停住，按 Esc 可以取消；单人游戏里整段对话基本不花游戏时间。原版每天 +20 的好感和剧情台词都照旧 | `OfferContinueChat`、`ReplyTimeoutSeconds`、`PauseClockWhileWaiting` | [game-bridge](docs/game-bridge.md) §10 |
+| 继续聊 | 原版台词说完后，问“要继续和阿比盖尔聊聊吗？”。选“继续聊”，就在原版对话框里接着聊：每轮 3 个选项、“自己说……”（原版输入框，能用输入法打中文）和“离开”。头像会跟着回复的表情变，阿比盖尔、哈维这些头像图里有“吃惊”的 12 位还会露出吃惊的表情。等回复时 NPC 头上冒“……”，游戏时钟停住，按 Esc 可以取消；单人游戏里整段对话基本不花游戏时间。原版每天 +20 的好感和剧情台词都照旧 | `OfferContinueChat`、`ReplyTimeoutSeconds`、`PauseClockWhileWaiting` | [game-bridge](docs/game-bridge.md) §10、[portrait-emotions](docs/portrait-emotions.md) |
 | 34 张角色卡 | 每位 NPC 一张卡，按心数、关系（朋友、约会、订婚、结婚、室友）和看过的心事件决定说什么。没看过的事件当作没发生过 | — | [dialogue-prototype](docs/dialogue-prototype.md)、[legacy-cleanup](docs/legacy-cleanup.md) |
 | 镇上都知道你的家事 | 你和谁结了婚、订了婚、和谁住在一起、有几个孩子，镇上其他人也知道。比如娶了阿比盖尔以后，皮埃尔不会再说她整天闷在家里 | — | [world-public-facts](docs/world-public-facts.md) |
 | 知道自己今天的行程 | NPC 知道自己今天原版日程里接下来去哪，问“待会儿去哪”“晚上在哪能找到你”能答上来 | — | [npc-schedules](docs/npc-schedules.md) |
