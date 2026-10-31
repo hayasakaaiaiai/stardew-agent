@@ -234,6 +234,6 @@ internal sealed partial class ModEntry
         this.EndTalk(null);
         this.Monitor.Log("AI 记忆同步已停止：" + reason, LogLevel.Warn);
         if (Context.IsWorldReady)
-            Game1.addHUDMessage(new HUDMessage("AI 记忆同步失败，请查看 SMAPI 日志；原版游戏可继续。", HUDMessage.error_type));
+            Game1.addHUDMessage(new HUDMessage("聊天功能暂停了，原版游戏照常；原因见 SMAPI 窗口。", HUDMessage.error_type));
     }
 }

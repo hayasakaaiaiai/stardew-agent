@@ -247,7 +247,7 @@ WAL 不了解 NPC、游戏保存和 `loadNonce`。JSONL 也不能代替数据库
 
 ## 在本仓库中怎样开始读
 
-先读 `README.md`、`package.json`、`tsconfig.json` 和 `tsconfig.check.json`，理解当前范围、入口命令和语法限制，再读 `docs/design.md` 的 §3、§5、§6、§13、§14。设计文档包含后续阶段设想；M1 学习时以当前实现和测试为准。
+先读 `docs/memory-kernel.md`、`package.json`、`tsconfig.json` 和 `tsconfig.check.json`，理解当前范围、入口命令和语法限制，再读 `docs/design.md` 的 §3、§5、§6、§13、§14。设计文档包含后续阶段设想；M1 学习时以当前实现和测试为准。
 
 下列路径均相对于仓库根目录。可以按学习单元查对应文件，也可以从 `NpcAgent.record()` 一路跟到数据库。
 

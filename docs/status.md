@@ -23,12 +23,27 @@ NPC 已能按原版日程聊天、传话、寄信、主动靠近、约定赴约�
 
 本轮全仓审查另修模型配置空值和浏览器访问本机桥接的问题；最终 Node **303/303**、C# **54/54**、类型检查、构建、两个 demo 通过，Release 零警告／错误，依赖审计零漏洞。独立游戏固定反例重跑 **41/41**、98 秒、0 次真实调用，原档六文件哈希相同。依赖版本固定为锁文件中已有版本，没有新增依赖、prompt 或收费调用，详见 [审查报告](test-results/2026-10-24-repository-audit.md)。历史测试数字和部署记录单独保存在 [历史快照](status-history-2026-10-24.md)，不作为当前安装状态。
 
+2026-10-31 按用户“想一些需要美化的东西”“readme 需要有每一个可用的功能（不包括 h 线）”，在 `docs-readme` 上做了这些：
+- **README**：按六组列出全部功能，每项写游戏里是什么样、对应的开关和文档；加了 18 个 Mod 开关的中文说明和命令行工具表。
+- **游戏内提示**：约定取消、“今天去不了……”从红叉改成和“约好”一样的“！”。对话旁白（走神了、没有回应、连接断开）改用原版不带图标的 `HUDMessage.ForCornerTextbox`。玩家能看到的“AI”“后端”字样去掉了，只有同步失败还用红叉。时间写法核对过原版 `Game1.getTimeOfDayString`，中文本来就是 24 小时制、小时不补零，和 Mod 一致，所以没改。
+- **其他**：Mod 描述改成现在的功能；`npm run chat` 用 Node 自带的 `util.styleText` 在终端里上色，不加依赖，管道和 `NO_COLOR` 时输出不变。
+- **结果**：prompt 不变，token 增量 0。
+
+Windows 上要看一眼的：
+1. 改口取消后，HUD 是“！”图标，写着“和莉亚的约定取消了”。
+2. 当天约配偶去海滩：“今天去不了海滩了”是“！”图标。
+3. 把 `ReplyTimeoutSeconds` 临时改成 1 再继续聊：出现不带图标的文字框“（阿比盖尔好像走神了，没有回答。）”，字完整显示。
+4. 等回复时关掉后端：出现“（连接断开了，过一会儿再来找阿比盖尔聊吧。）”。
+5. SMAPI 启动时，Mod 后面显示新的描述。
+6. 按文字匹配 HUD 的 `game-call-off.ts`、`game-same-day-meetings.ts`、`game-meetings-more.ts` 照常通过（这次只改了图标，没改那几句的文字）。
+
 ## 3. 分支
 
 | 分支 | 用途 |
 |---|---|
 | `main` | 当前单人游戏实现、非 H 线功能及 Windows 修复、验收入口和本轮全仓审查修复 |
 | `hardware-companion` | H 线硬件陪伴，暂停；本轮保持原提交 `6e92320` |
+| `docs-readme` | 2026-10-31 建在 `main / 789b911` 上：README 列出全部功能和开关；游戏内提示、Mod 描述和命令行颜色美化。等用户确认后合入，见 §2 末尾 |
 
 历史功能分支和验收分支已在内容核对、合并与验证完成后清理，提交历史保留在 main。本轮删除 51 条远端、23 条本地历史分支，两边都只剩上表两条。清理前的 refs 和完整 Git bundle 保存在本机 `.runtime/repository-publication-20261024/`；旧分支对应的设计、测试记录仍在仓库。
 
@@ -104,7 +119,7 @@ powershell -NoProfile -File tools/test-game-real-meetings.ps1 -Section live
 
 | 文档 | 讲什么 |
 |---|---|
-| `README.md` | 安装、配置、功能、已知限制和验证入口 |
+| `README.md` | 全部功能（效果、开关、文档）、安装、Mod 配置开关、命令行工具、验证入口和已知限制 |
 | `docs/memory-kernel.md` | 记忆内核 API、保存回滚及失败读档恢复 |
 | `docs/status-history-2026-10-24.md` | 全仓审查前的历史进度、分支、部署和验证快照 |
 | `docs/test-results/2026-10-24-repository-audit.md` | 全仓审查、三处修复、合并和公开前的验证 |
@@ -135,7 +150,6 @@ powershell -NoProfile -File tools/test-game-real-meetings.ps1 -Section live
 | `AGENTS.md` | 给 AI 助手的协作约定（Claude Code 通过 `CLAUDE.md` 读取它） |
 | `docs/status.md` | 本文档：进度、分支、环境、遗留问题、下一步 |
 | `docs/design.md` | 整体设计：已确认的决策、架构、存档和回滚、协议、角色卡、里程碑 |
-| `README.md` | 记忆内核（M1）的用法和接口 |
 | `docs/learning-memory.md` | 记忆内核的学习指南 |
 | `docs/dialogue-prototype.md` | 角色卡加载、对话调用、命令行、探测题，以及接入记忆和好感度影响记忆 |
 | `docs/game-bridge.md` | M3a：Mod 和后端的协议、原版界面怎么复用、游戏内测试清单 |

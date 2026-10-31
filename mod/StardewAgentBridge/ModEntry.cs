@@ -137,7 +137,7 @@ internal sealed partial class ModEntry : Mod
         {
             this.memoryReady = false;
             if (this.talk is not null)
-                this.EndTalk("（后端已断开，重连后可以重新开口。）");
+                this.EndTalk($"（连接断开了，过一会儿再来找{this.talk.Npc.displayName}聊吧。）");
         }
         // Keep a title-return event until it is acknowledged, even though the world has already unloaded.
         if (this.initialSave is not null && (this.activeLoad || this.lifecycle.Count > 0)
@@ -229,7 +229,7 @@ internal sealed partial class ModEntry : Mod
     {
         if (!this.CanChat)
         {
-            Game1.addHUDMessage(new HUDMessage("AI 记忆正在同步，请稍后再聊。", HUDMessage.error_type));
+            Game1.addHUDMessage(HUDMessage.ForCornerTextbox("记忆还在整理，稍等一下再聊吧。"));
             return;
         }
         this.talk = new Talk(npc);
@@ -400,8 +400,9 @@ internal sealed partial class ModEntry : Mod
         t.Npc.faceTowardFarmerTimer = Math.Min(t.Npc.faceTowardFarmerTimer, 1);
         t.Npc.movementPause = Math.Min(t.Npc.movementPause, 1);
         this.Send("talk.close", new() { ["npc"] = t.Npc.Name });
+        // A line of narration, not an error: vanilla's text box without the red cross.
         if (notice is not null)
-            Game1.addHUDMessage(new HUDMessage(notice, HUDMessage.error_type));
+            Game1.addHUDMessage(HUDMessage.ForCornerTextbox(notice));
     }
 
     // ---- Backend ----

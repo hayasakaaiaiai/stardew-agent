@@ -2,7 +2,7 @@
   "Name": "Stardew Agent Bridge",
   "Author": "MMj",
   "Version": "0.1.0",
-  "Description": "原版台词说完后可以“继续聊”，回复由本机运行的 Agent 后端生成。",
+  "Description": "34 位 NPC 由本机 Agent 后端驱动：继续聊、记得聊过的事、写信传话、按约赴约、帮忙种地、陪下矿。",
   "UniqueID": "MMj.StardewAgentBridge",
   "EntryDll": "StardewAgentBridge.dll",
   "MinimumApiVersion": "4.0.0",

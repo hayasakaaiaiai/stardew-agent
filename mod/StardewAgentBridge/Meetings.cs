@@ -361,7 +361,7 @@ internal sealed partial class ModEntry
             this.Monitor.Log($"{m.Npc} 今天 {m.Time} 在{m.Place}的约定不去了：{why}", LogLevel.Info);
             // Just agreed face to face: say so rather than leave the player waiting (docs/npc-same-day-meetings.md).
             if (m.SameDay && npc is not null)
-                Game1.addHUDMessage(new HUDMessage($"{npc.displayName}今天去不了{m.Place}了", HUDMessage.error_type));
+                Game1.addHUDMessage(new HUDMessage($"{npc.displayName}今天去不了{m.Place}了", HUDMessage.newQuest_type));
             return;
         }
         m.Applied = true;
@@ -585,7 +585,7 @@ internal sealed partial class ModEntry
         {
             m.Reported = true;
             Game1.addHUDMessage(m.MovedTo is string to ? new HUDMessage($"和{npc.displayName}的约定改到{to}", HUDMessage.newQuest_type)
-                : new HUDMessage($"和{npc.displayName}的约定取消了", HUDMessage.error_type));
+                : new HUDMessage($"和{npc.displayName}的约定取消了", HUDMessage.newQuest_type));
         }
     }
 

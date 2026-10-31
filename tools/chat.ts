@@ -8,7 +8,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { createInterface } from 'node:readline/promises';
-import { parseArgs } from 'node:util';
+import { parseArgs, styleText } from 'node:util';
 import {
   type DialogueMeta, type Exchange, OPENING_LINE, runTurn, type Standing, type TurnResult, weekday, type WorldState,
 } from '../src/agent/dialogue.ts';
@@ -27,6 +27,14 @@ const CHAT_DATA = join(ROOT, '.runtime/chat');
 const RELATIONS = new Set<Relation>(['stranger', 'friend', 'dating', 'engaged', 'married', 'roommate']);
 const EMOTION_LABEL: Record<DialogueMeta['emotion'], string> = {
   neutral: '平静', happy: '开心', sad: '难过', blush: '害羞', angry: '生气', special: '特殊',
+};
+// styleText only colors a terminal; piped output and NO_COLOR stay plain.
+const paint = {
+  title: (text: string) => styleText('bold', text),
+  npc: (text: string) => styleText(['bold', 'cyan'], text),
+  you: (text: string) => styleText(['bold', 'green'], text),
+  dim: (text: string) => styleText('dim', text),
+  warn: (text: string) => styleText('yellow', text),
 };
 
 interface Scenario {
@@ -105,7 +113,7 @@ async function chat(npcId: string | undefined) {
   const name = () => roster.get(npcId).name;
 
   // With memory on, the save decides the date and today's conversation lives in the memory system.
-  const note = (line: string) => console.log(`（${line}）`);
+  const note = (line: string) => console.log(paint.dim(`（${line}）`));
   const save = values['no-memory'] ? undefined : await ChatSave.open({
     directory: CHAT_DATA, name: values.save!, fresh: values.fresh ?? false, startDay: absoluteDay(world), npcIds,
     consolidator: nightlyConsolidator({ roster, model: new ModelClient({ ...model.config, thinking: NIGHTLY_THINKING }), log: note }),
@@ -123,9 +131,9 @@ async function chat(npcId: string | undefined) {
     return next.done ? undefined : String(next.value);
   };
 
-  console.log(`${name()}（${npcId}）· ${describeDate(world)} · ${describeStanding(standing)}`);
-  console.log(save ? `记忆：存档“${values.save}”。/sleep 存档并进入下一天，/rollback 不存档退回上次存档。` : '记忆：关闭。');
-  console.log('输入数字选选项，直接打字就是自己说；/help 查看命令。\n');
+  console.log(paint.title(`${name()}（${npcId}）· ${describeDate(world)} · ${describeStanding(standing)}`));
+  console.log(paint.dim(save ? `记忆：存档“${values.save}”。/sleep 存档并进入下一天，/rollback 不存档退回上次存档。` : '记忆：关闭。'));
+  console.log(paint.dim('输入数字选选项，直接打字就是自己说；/help 查看命令。') + '\n');
 
   const say = async (playerLine: string) => {
     let started = false;
@@ -134,21 +142,21 @@ async function chat(npcId: string | undefined) {
     try {
       result = await runTurn({ roster, model, ...(memory ? { memory } : {}) }, { npcId, world, standing, history, playerLine }, {
       onReasoning: () => {
-        if (!thinking && !started) process.stdout.write('（思考中…）');
+        if (!thinking && !started) process.stdout.write(paint.dim('（思考中…）'));
         thinking = true;
       },
       onReply: (text) => {
-        if (!started) process.stdout.write(`${thinking ? '\r\x1b[K' : ''}${name()}：`);
+        if (!started) process.stdout.write(`${thinking ? '\r\x1b[K' : ''}${paint.npc(`${name()}：`)}`);
         started = true;
         process.stdout.write(text);
       },
       });
     } catch (error) {
       // A failed turn is not recorded, so the conversation can simply continue.
-      console.log(`\n  ⚠ 这一轮请求失败，没有记下来：${error instanceof Error ? error.message : String(error)}`);
+      console.log('\n' + paint.warn(`  ⚠ 这一轮请求失败，没有记下来：${error instanceof Error ? error.message : String(error)}`));
       return;
     }
-    if (!started) process.stdout.write(`${thinking ? '\r\x1b[K' : ''}${name()}：${result.reply}`);
+    if (!started) process.stdout.write(`${thinking ? '\r\x1b[K' : ''}${paint.npc(`${name()}：`)}${result.reply}`);
     process.stdout.write('\n');
     printMeta(result);
     history = [...history, { player: playerLine, npc: result.reply }];
@@ -159,9 +167,9 @@ async function chat(npcId: string | undefined) {
   const recovered = save?.todayCount(npcId) ?? 0;
   if (recovered && memory) {
     const today = (await memory.context('', standing)).today ?? [];
-    console.log(`（恢复了今天和${name()}的 ${recovered} 轮对话）`);
+    console.log(paint.dim(`（恢复了今天和${name()}的 ${recovered} 轮对话）`));
     const latest = today.at(-1);
-    if (latest) console.log(`${name()}：${latest.npc}`);
+    if (latest) console.log(`${paint.npc(`${name()}：`)}${latest.npc}`);
   } else {
     await say(OPENING_LINE);
   }
@@ -200,7 +208,7 @@ async function chat(npcId: string | undefined) {
           else await save.rollback();
           world = { ...world, time: scenario.world.time };
           syncDate();
-          console.log(command === 'sleep' ? `（存档完成，进入${describeDate(world)}）` : `（没有存档，回到上次存档：${describeDate(world)}）`);
+          console.log(paint.dim(command === 'sleep' ? `（存档完成，进入${describeDate(world)}）` : `（没有存档，回到上次存档：${describeDate(world)}）`));
           await say(OPENING_LINE);
         } else if (command === 'memories') {
           if (!memory) { console.log('记忆已关闭（--no-memory）'); continue; }
@@ -212,7 +220,7 @@ async function chat(npcId: string | undefined) {
         continue;
       }
       const choice = /^[1-3]$/.test(input) && last ? last.meta.options[Number(input) - 1] : undefined;
-      if (choice) console.log(`你：${choice}`);
+      if (choice) console.log(`${paint.you('你：')}${choice}`);
       await say(choice ?? input);
     }
   } finally {
@@ -240,7 +248,7 @@ async function probe(ids: readonly string[]) {
     const scenarioName = /^场景：\s*(\S+)/m.exec(text)?.[1] ?? values.scenario!;
     const scenario = await loadScenario(scenarioName);
     const turns: Turn[] = [];
-    console.log(`\n== ${roster.get(npcId).name}（${npcId}）· 场景 ${scenarioName}`);
+    console.log('\n' + paint.title(`== ${roster.get(npcId).name}（${npcId}）· 场景 ${scenarioName}`));
     for (const line of text.split('\n')) {
       const item = /^- (?:\[([^\]]*)\]\s*)?(.+?)(?:\s+\/\/\s*(.+))?$/.exec(line.trim());
       if (!item) continue;
@@ -252,11 +260,11 @@ async function probe(ids: readonly string[]) {
       try {
         result = await runTurn({ roster, model }, { npcId, world, standing, history: [], playerLine });
       } catch (error) {
-        console.log(`- ${playerLine}\n  ⚠ 请求失败：${error instanceof Error ? error.message : String(error)}`);
+        console.log(`- ${playerLine}\n` + paint.warn(`  ⚠ 请求失败：${error instanceof Error ? error.message : String(error)}`));
         continue;
       }
       turns.push({ playerLine, standing, world, ...(item[3] ? { expectation: item[3] } : {}), result });
-      console.log(`- ${playerLine}\n  ${result.reply}${result.metaOk ? '' : '  ⚠ 格式解析失败'}`);
+      console.log(`- ${playerLine}\n  ${result.reply}${result.metaOk ? '' : paint.warn('  ⚠ 格式解析失败')}`);
     }
     console.log(summarize(turns.map((t) => t.result)));
     console.log(`对话记录：${await saveTranscript(npcId, { ...scenario, description: `${scenarioName} · ${scenario.description}` }, turns)}`);
@@ -301,11 +309,11 @@ function describeStanding(standing: Standing): string {
 function printMeta(result: TurnResult) {
   const { meta, metaOk } = result;
   const options = meta.options.map((option, i) => `${i + 1}) ${option}`).join('  ');
-  console.log(`  [${EMOTION_LABEL[meta.emotion]}] ${options}${metaOk ? '' : '  ⚠ 格式解析失败'}`);
-  if (meta.remember.length) console.log(`  记住：${meta.remember.map((m) => `${m.text}（${m.importance}）`).join('；')}`);
-  if (meta.mood) console.log(`  好感变化：${meta.mood > 0 ? '+' : ''}${meta.mood}（游戏里每档 10 点，见 docs/npc-friendship.md）`);
-  if (meta.end) console.log('  （对方想结束对话）');
-  console.log(`  ${turnStats(result)}`);
+  console.log(`  ${paint.dim(`[${EMOTION_LABEL[meta.emotion]}]`)} ${options}${metaOk ? '' : paint.warn('  ⚠ 格式解析失败')}`);
+  if (meta.remember.length) console.log(paint.dim(`  记住：${meta.remember.map((m) => `${m.text}（${m.importance}）`).join('；')}`));
+  if (meta.mood) console.log(paint.dim(`  好感变化：${meta.mood > 0 ? '+' : ''}${meta.mood}（游戏里每档 10 点，见 docs/npc-friendship.md）`));
+  if (meta.end) console.log(paint.dim('  （对方想结束对话）'));
+  console.log(paint.dim(`  ${turnStats(result)}`));
 }
 
 function turnStats({ timing, usage, attempts }: TurnResult): string {
