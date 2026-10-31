@@ -93,7 +93,7 @@ Mod → 后端：
 | 环节 | 用的原版界面 | 说明 |
 |---|---|---|
 | “继续聊？” | 原版提问框（`createQuestionDialogue`） | 和原版问“要不要……”的样子一样 |
-| 等待回复 | NPC 头顶冒原版的“……”表情，玩家原地站着 | 原版没有“加载中”，用表情最自然 |
+| 等待回复 | NPC 头顶冒原版的“……”表情，玩家原地站着；游戏时钟停住（§10） | 原版没有“加载中”，用表情最自然 |
 | NPC 说话和选项 | 原版 NPC 对话框（`Dialogue` + `DialogueBox`） | 头像、名字、好感宝石、逐字打出、翻页都是原版的；选项用原版的 `$r` 写法和台词显示在同一个框里，跟原版 NPC 提问一模一样 |
 | 表情 | 原版表情标记 `$h` `$s` `$u` `$l` `$a` | 由模型给的 emotion 换算 |
 | 自己说 | 原版文字输入窗口（`TitleTextInputMenu`） | 原版改名、取名用的就是它；关掉脏话过滤，最多 60 字 |
@@ -205,3 +205,26 @@ powershell -NoProfile -File .\tools\test-abigail.ps1
 Mod 的当前配置还包括 `ShowBubbles`、`SendLetters`、`NpcChat`、`ChatChangesFriendship`、`InPersonGifts`、`OffscreenNews`、`BackstageScenes`、`AmbientLines`、`FestivalMemories`、`NpcApproach`、`NpcMeetings`、`NpcMineCompanion`、`MeetingsChangeFriendship`、`MeetingsGoTogether`、`NpcInvites`；字段和默认值以 `ModConfig.cs` 为准。`NpcMeetings` 等动作开关及其依赖见相应设计文档。`ReplyTimeoutSeconds` 当前默认 20 秒，后台请求的预算和超时另见调度器文档。
 
 10 月 20 日用户已经确认 Windows 拼音输入、原版台词保留和 Esc 取消正常；§7 保留为复测清单，其他平台不由该记录推定通过。本轮全仓审查采用不部署构建，正常安装 DLL 与后端版本以实际部署为准。
+
+## 10. 等回复时停钟（2026-10-31）
+
+用户提出“继续聊的时候时间暂停”。单人游戏里，原版只要有菜单开着就不走钟（`Game1.shouldTimePass`），所以对话框和“自己说”的输入框开着时，钟本来就是停的。剩下会走钟的只有等模型回复的那几秒：那时没有菜单，现实约 7 秒就是游戏里 10 分钟。命令行的对话记录里，首字中位数 1.6–2 秒，慢的 P95 到过 9.8 秒，超时上限是 20 秒。
+
+| 问题 | 决定 | 谁定的 |
+|---|---|---|
+| 怎么停 | 用原版的 `Game1.isTimePaused`，只停钟，画面、NPC 和动物照常动；不用 `Game1.paused`（会冻住整个世界，连“……”都不动） | 用户 |
+| 什么时候停 | 发出请求、NPC 头上冒“……”时停；回复到了、按 Esc 取消、超时、断线、对话出错、读档、回标题时恢复 | 自定 |
+| 别人的暂停 | 只恢复自己停的：如果钟已经被控制台的 `pausetime` 停住，就不碰它 | 自定 |
+| 联机 | 不停。联机时原版由房主的 `IsTimePaused` 控制，打开菜单也不停 | 自定 |
+| 开关 | `PauseClockWhileWaiting`，默认开 | 自定 |
+| 副作用 | 原版暂停时飞行物（弹弓、怪物的子弹）停在半空，恢复后接着飞；只有等回复的几秒 | 核对原版 |
+
+不改后端和 prompt，token 增量 0。C# 流程检查新增一项：停钟、恢复、不碰别人的暂停、关掉开关不停。
+
+Windows 上要看一眼的：
+
+1. 记下右上角时间，选“继续聊”，等回复的时候钟不动；回复出来、读完、再选一个选项。整段对话结束后，时间和开始时一样。菜单切换的一两帧还会走钟，聊十轮加起来也不到 1 秒现实时间，所以最多碰巧跨过一格 10 分钟。
+2. 等回复时按 Esc 取消，钟接着走。
+3. 把 `ReplyTimeoutSeconds` 改成 1，等到“走神了”，钟接着走。
+4. 控制台先输入 `debug pausetime` 停钟，再聊一轮：聊完钟仍然停着；再输入一次 `debug pausetime` 恢复。
+5. `PauseClockWhileWaiting` 改成 `false`：等回复时钟照走。

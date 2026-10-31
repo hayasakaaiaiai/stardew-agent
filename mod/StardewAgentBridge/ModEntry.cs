@@ -36,6 +36,8 @@ internal sealed partial class ModEntry : Mod
     private NPC? offerFor;
     private NPC? startFor;
     private Talk? talk;
+    /// <summary>Whether <see cref="Game1.isTimePaused"/> is our pause while a reply is on its way.</summary>
+    private bool clockPaused;
 
     /// <summary>Dialogues this mod created, so closing them never counts as a vanilla dialogue ending.</summary>
     private readonly ConditionalWeakTable<Dialogue, object> ownDialogues = new();
@@ -298,10 +300,29 @@ internal sealed partial class ModEntry : Mod
     {
         t.Waiting = true;
         t.WaitedTicks = 0;
+        this.PauseClock(true);
         Game1.player.Halt();
         Game1.player.CanMove = false;
         t.Npc.faceTowardFarmerForPeriod(this.config.ReplyTimeoutSeconds * 1000, 3, false, Game1.player);
         t.Npc.doEmote(Character.pauseEmote);
+    }
+
+    /// <summary>
+    /// Stops or restarts the clock with vanilla's own flag, which leaves the world moving. Only a pause this mod set is
+    /// released, so a <c>pausetime</c> from the console survives; in multiplayer the host's clock is not ours to stop.
+    /// </summary>
+    private void PauseClock(bool pause)
+    {
+        if (pause && !this.clockPaused && this.config.PauseClockWhileWaiting && !Context.IsMultiplayer && !Game1.isTimePaused)
+        {
+            Game1.isTimePaused = true;
+            this.clockPaused = true;
+        }
+        else if (!pause && this.clockPaused)
+        {
+            Game1.isTimePaused = false;
+            this.clockPaused = false;
+        }
     }
 
     private void TickTalk(Talk t)
@@ -332,6 +353,7 @@ internal sealed partial class ModEntry : Mod
             this.Invited(t.Npc);
         }
         t.Waiting = false;
+        this.PauseClock(false);
         t.Reply = reply;
         t.Emotion = emotion;
         t.Options = options;
@@ -394,6 +416,7 @@ internal sealed partial class ModEntry : Mod
         if (this.talk is not { } t)
             return;
         this.talk = null;
+        this.PauseClock(false);
         if (t.Waiting)
             Game1.player.CanMove = true;
         // Let vanilla expire our pause on its next update so it also releases freezeMotion.

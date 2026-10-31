@@ -837,5 +837,32 @@ Test("a trip is reported in the shape the backend accepts", () =>
         "The trip fields differ from src/bridge/protocol.ts (mine).");
 });
 
+Test("waiting for a reply stops the clock and releases only its own pause", () =>
+{
+    // Vanilla stops the clock for an open menu; the gap is the wait for the model (docs/game-bridge.md §4).
+    FieldInfo paused = gameAssembly.GetType("StardewValley.Game1", true)!.GetField("isTimePaused", BindingFlags.Static | BindingFlags.Public)!;
+    object mod = TestMod();
+    try
+    {
+        paused.SetValue(null, false);
+        Call(mod, "PauseClock", true);
+        Check((bool)paused.GetValue(null)!, "Waiting for a reply left the clock running.");
+        Call(mod, "PauseClock", false);
+        Check(!(bool)paused.GetValue(null)!, "The reply did not restart the clock.");
+        paused.SetValue(null, true); // pausetime from the console
+        Call(mod, "PauseClock", true);
+        Call(mod, "PauseClock", false);
+        Check((bool)paused.GetValue(null)!, "A conversation released a pause it did not set.");
+        paused.SetValue(null, false);
+        configType.GetProperty("PauseClockWhileWaiting")!.SetValue(Get(mod, "config"), false);
+        Call(mod, "PauseClock", true);
+        Check(!(bool)paused.GetValue(null)!, "The clock stopped with PauseClockWhileWaiting off.");
+    }
+    finally
+    {
+        paused.SetValue(null, false);
+    }
+});
+
 Console.WriteLine($"Mod flow checks: {checks - failures}/{checks} passed.");
 return failures == 0 ? 0 : 1;

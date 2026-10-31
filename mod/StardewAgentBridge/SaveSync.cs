@@ -68,7 +68,7 @@ internal sealed partial class ModEntry
         this.ResetGifts();
         this.ClearFriendshipToday();
         this.ClearPresentsToday();
-        this.talk = null; this.offerFor = null; this.startFor = null;
+        this.talk = null; this.offerFor = null; this.startFor = null; this.PauseClock(false);
         this.initialSave = null; this.lifecycle.Clear(); this.memoryReady = false; this.syncFailed = false;
         this.activeLoad = Context.IsMainPlayer;
         this.LoadLetters();
@@ -161,7 +161,7 @@ internal sealed partial class ModEntry
         this.ClearApproach();
         this.ClearMeetings();
         this.letters = new();
-        this.talk = null; this.offerFor = null; this.startFor = null;
+        this.talk = null; this.offerFor = null; this.startFor = null; this.PauseClock(false);
         this.activeLoad = false; this.memoryReady = false;
         if (this.initialSave is not null)
             this.Send("title.returned", new());

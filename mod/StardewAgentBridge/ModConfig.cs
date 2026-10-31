@@ -11,6 +11,12 @@ internal sealed class ModConfig
     /// <summary>How long to wait for the first word of a reply before giving up.</summary>
     public int ReplyTimeoutSeconds { get; set; } = 20;
 
+    /// <summary>
+    /// Whether the clock stops while the player waits for a reply. Vanilla already stops it while the dialogue box or
+    /// the text box is open in single player, so the whole conversation then takes no game time (docs/game-bridge.md §4).
+    /// </summary>
+    public bool PauseClockWhileWaiting { get; set; } = true;
+
     /// <summary>Whether NPCs mutter last night's lines over their heads when the player is near (docs/npc-bubbles.md).</summary>
     public bool ShowBubbles { get; set; } = true;
 
