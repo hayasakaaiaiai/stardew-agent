@@ -27,6 +27,7 @@ internal sealed class MemoryTestConfig
     public bool NewParts { get; set; }
     public bool AmbientOnly { get; set; }
     public bool World { get; set; }
+    public bool MinimizeWindow { get; set; }
 }
 
 internal sealed partial class ModEntry

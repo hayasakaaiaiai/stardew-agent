@@ -55,6 +55,19 @@ replay.Reset();
 Check(replay.Next(0) == (0, 0, true), "Empty saves still perform a final capability barrier.");
 replay.Sent(0, 20); replay.Acknowledge(20);
 Check(replay.Complete(20, 0), "An empty journal unlocks only after matching ready.");
+replay.Reset();
+replay.Sent(1, 30);
+Check(replay.UnsentStart == 1, "A save flush starts after the in-flight batch, not at its unacknowledged cursor.");
+replay.Sent(32, 31, afterPending: true);
+replay.Sent(2, 32, afterPending: true);
+Check(replay.UnsentStart == 35, "A save flush queues all remaining bounded batches before the save envelope.");
+Check(!replay.Acknowledge(30) && !replay.Acknowledge(31) && replay.Request == 32,
+    "Earlier ACKs cannot launch a trailing batch after save preparation.");
+Check(!replay.Complete(30, 35) && !replay.Complete(31, 35), "Earlier final-ready messages cannot release the save flush barrier.");
+Check(replay.Acknowledge(32) && replay.Complete(32, 35) && replay.Cursor == 35,
+    "The ordered final flush acknowledgement covers every prior life event.");
+Check(!replay.Complete(32, 36) && replay.Next(36) == (35, 1, true),
+    "An event appended after the flush keeps the barrier closed and starts at the exact unsent tail.");
 var wire = LifeEventWire.Encode(new[] { new LifeEvent { Id = "life-1", Npc = "leah", Day = 1, Kind = "goal.accepted", Goal = "leah-driftwood-v1" } });
 Check(wire[0].GetProperty("id").GetString() == "life-1" && wire[0].GetProperty("npc").GetString() == "leah", "Wire keys match the strict backend schema.");
 Check(!wire[0].TryGetProperty("item", out _) && !wire[0].TryGetProperty("friendship", out _) && !wire[0].TryGetProperty("activity", out _), "Absent optional values are omitted rather than sent as invalid nulls.");

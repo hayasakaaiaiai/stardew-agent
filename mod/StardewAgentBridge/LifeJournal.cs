@@ -32,6 +32,7 @@ internal sealed partial class ModEntry
     private bool lifeReady { get => this.lifeSync.Ready; set => this.lifeSync.Ready = value; }
     private bool lifeSupported;
     private bool lifeCorrupt;
+    private bool lifeSaving;
 
     // Existing activities can finish offline: their evidence is saved with the game and replayed later.
     private bool CanRecordLifeEvent => this.CanRecordLifeEvents(1);
@@ -75,7 +76,7 @@ internal sealed partial class ModEntry
     private void LoadLife()
     {
         this.ClearLifeActivities();
-        this.lifeReady = false; this.lifeCorrupt = false;
+        this.lifeReady = false; this.lifeCorrupt = false; this.lifeSaving = false;
         this.lifeSync.Reset();
         this.lifeSave = new();
         if (!this.activeLoad || !Game1.player.modData.TryGetValue(LifeSaveKey, out string? json))
@@ -146,7 +147,7 @@ internal sealed partial class ModEntry
 
     private void SendNextLifeBatch()
     {
-        if (!this.lifeSupported || this.lifeSync.Request != 0 || !this.memoryReady || this.syncFailed || !this.activeLoad || this.lifeCorrupt
+        if (this.lifeSaving || !this.lifeSupported || this.lifeSync.Request != 0 || !this.memoryReady || this.syncFailed || !this.activeLoad || this.lifeCorrupt
             || !this.bridge.IsConnected || this.bridge.Generation != this.announcedGeneration)
             return;
         var batch = this.lifeSync.Next(this.lifeEvents.Count);
@@ -156,6 +157,27 @@ internal sealed partial class ModEntry
             ["final"] = batch.Final,
         });
         this.lifeSync.Sent(batch.Count, request);
+    }
+
+    private void FlushLifeBeforeSaving()
+    {
+        if (!this.lifeSupported || this.syncFailed || !this.activeLoad || this.lifeCorrupt || this.initialSave is null)
+            return;
+        // Do not wait for ACKs here: Saving must follow every event already persisted in the game save.
+        // The reliable outbox also preserves this order when the backend is temporarily disconnected.
+        while (this.lifeSync.UnsentStart < this.lifeEvents.Count)
+        {
+            int start = this.lifeSync.UnsentStart;
+            int count = Math.Min(32, this.lifeEvents.Count - start);
+            int request = this.Send("life.sync", new()
+            {
+                ["events"] = LifeEventWire.Encode(this.lifeEvents.Skip(start).Take(count)),
+                ["final"] = start + count == this.lifeEvents.Count,
+            });
+            if (this.syncFailed)
+                return;
+            this.lifeSync.Sent(count, request, afterPending: true);
+        }
     }
 
     private void LifeAcknowledged(int request)
@@ -191,7 +213,7 @@ internal sealed partial class ModEntry
     private void ClearLife()
     {
         this.ClearLifeActivities();
-        this.lifeSave = new(); this.lifeReady = false; this.lifeCorrupt = false;
+        this.lifeSave = new(); this.lifeReady = false; this.lifeCorrupt = false; this.lifeSaving = false;
         this.lifeSync.Reset();
     }
 }

@@ -77,7 +77,7 @@ $taskConfig = [pscustomobject]@{
     Nightly=[bool]($Nightly -or $MorningPlans -or $NightlyRecovery); MorningPlans=[bool]($MorningPlans -or $NightlyRecovery)
     BubblesOnly=[bool]$BubblesOnly; MailOnly=[bool]$MailOnly; NightlyRecovery=[bool]$NightlyRecovery
     Social=[bool]$Social; Offline=[bool]$Offline; NewParts=[bool]$Social; AmbientOnly=[bool]$AmbientOnly
-    World=[bool]$World; Section=$Section
+    World=[bool]$World; Section=$Section; MinimizeWindow=[bool]($World -and $Section.StartsWith('life'))
 }
 $taskConfigPath = Join-Path $taskRun 'config.json'
 $taskConfig | ConvertTo-Json | Set-Content -LiteralPath $taskConfigPath -Encoding UTF8

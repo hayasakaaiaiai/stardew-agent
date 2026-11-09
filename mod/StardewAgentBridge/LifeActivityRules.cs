@@ -27,6 +27,16 @@ internal static class LifeActivityRules
         _ => false,
     };
 
+    internal static bool CompletedToday(IEnumerable<(string Npc, int Day, string Kind, string? Activity)> events,
+        string npc, int day, string activity)
+    {
+        // Story and ordinary sessions share the same successful-activity limit.
+        foreach (var entry in events)
+            if (entry.Npc == npc && entry.Day == day && entry.Kind == "activity.completed" && entry.Activity == activity)
+                return true;
+        return false;
+    }
+
     /// <summary>Only an observed ordinary ten-minute tick is eligible; time jumps never credit company.</summary>
     internal static int ClockStep(int previous, int current, bool together)
     {

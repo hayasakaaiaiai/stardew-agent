@@ -91,6 +91,39 @@ test('journal replay after backend restart does not duplicate trust or completed
   assert.match(h.fake.sent.at(-1)![0]!.content, /实际共同经历|浮木/);
 });
 
+test('a day-end goal cannot send its trailing completion after save preparation', { timeout: 15000 }, async t => {
+  const h = await harness(t), wire = await connect(await h.start());
+  await upload(wire, [accepted, delivered]);
+  wire.send(sync([{ id: 'life-3', npc: 'leah', day: 1, kind: 'activity.completed',
+    goal: accepted.goal!, activity: 'forest_walk', minutes: 30, count: 0 }]));
+  // This is the old native order: Saving overtook the completion waiting for the first batch's ACK.
+  wire.send({ type: 'save.saving', commit: { commitId: 'life-premature-save', parentId: null, dayEnded: 1 } });
+  wire.send(sync([{ ...finished, id: 'life-4' }]));
+  const error = await wire.until('sync.error');
+  assert.equal(error.type, 'sync.error');
+  assert.match(error.message, /生活记录等待当前存档准备就绪/);
+});
+
+test('flushing day-end life batches before saving preserves the complete goal on reload', { timeout: 15000 }, async t => {
+  const h = await harness(t), server = await h.start(), wire = await connect(server);
+  await upload(wire, [accepted, delivered]);
+  // A save flush sends both batches in wire order without waiting for either ACK.
+  wire.send(sync([{ id: 'life-3', npc: 'leah', day: 1, kind: 'activity.completed',
+    goal: accepted.goal!, activity: 'forest_walk', minutes: 30, count: 0 }]));
+  wire.send(sync([{ ...finished, id: 'life-4' }]));
+  const commit = await sleep(wire, 'life-flushed-save');
+  assert.equal(requiredState(h.directory, commit.commitId).life.goals[accepted.goal!].phase, 'completed');
+  assert.equal(countLife(h.directory, commit.commitId), 4);
+  assert.equal(wire.inbox.filter(message => message.type === 'sync.error').length, 0);
+  await wire.close();
+  const restored = await connect(server, initial('life-flushed-reload', 2, commit));
+  await upload(restored, [accepted, delivered,
+    { id: 'life-3', npc: 'leah', day: 1, kind: 'activity.completed', goal: accepted.goal!,
+      activity: 'forest_walk', minutes: 30, count: 0 }, { ...finished, id: 'life-4' }]);
+  const next = await sleep(restored, 'life-flushed-next', 2, commit.commitId);
+  assert.equal(countLife(h.directory, next.commitId), 0);
+});
+
 test('unsaved life state rolls back and sibling branches may reuse the rolled-back native serial', { timeout: 20000 }, async t => {
   const h = await harness(t), server = await h.start(); const wire = await connect(server);
   await upload(wire, [accepted]); const base = await sleep(wire, 'life-base');

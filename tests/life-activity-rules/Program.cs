@@ -18,6 +18,16 @@ Check("foraging needs both company and an actual pickup", !LifeActivityRules.Rea
 Check("cooking is completed by an actual dish, not elapsed time", !LifeActivityRules.Ready("cooking", 90, 0) && LifeActivityRules.Ready("cooking", 0, 1));
 Check("a dinner needs a real portion", !LifeActivityRules.Ready("home_dinner", 90, 0) && LifeActivityRules.Ready("home_dinner", 0, 1));
 Check("unknown activities cannot complete", !LifeActivityRules.Ready("teleport", 999, 999));
+var walked = (Npc: "leah", Day: 7, Kind: "activity.completed", Activity: (string?)"forest_walk");
+Check("ordinary and story walks share the same successful-activity limit",
+    LifeActivityRules.CompletedToday(new[] { walked }, "leah", 7, "forest_walk"));
+Check("a previous-day success does not block today's story attempt",
+    !LifeActivityRules.CompletedToday(new[] { walked }, "leah", 8, "forest_walk"));
+Check("another NPC or activity does not consume this successful-activity limit",
+    !LifeActivityRules.CompletedToday(new[] { walked }, "maru", 7, "forest_walk")
+    && !LifeActivityRules.CompletedToday(new[] { walked }, "leah", 7, "foraging"));
+Check("an unfinished or cancelled attempt can be retried",
+    !LifeActivityRules.CompletedToday(new[] { walked with { Kind = "activity.cancelled" } }, "leah", 7, "forest_walk"));
 Check("normal clock and hour boundary advance equally", LifeActivityRules.ClockStep(1310, 1320, true) == 10 && LifeActivityRules.ClockStep(1350, 1400, true) == 10);
 Check("pausing or splitting company credits no time", LifeActivityRules.ClockStep(1310, 1310, true) == 0 && LifeActivityRules.ClockStep(1310, 1320, false) == 0);
 Check("clock jumps and rollback do not invent company", LifeActivityRules.ClockStep(1310, 1400, true) == 0 && LifeActivityRules.ClockStep(1310, 1300, true) == 0);

@@ -135,6 +135,10 @@ internal sealed partial class ModEntry
         this.PersistLife();
         // Part of the day being saved, so it goes before save.saving.
         this.EndMeetings();
+        this.FlushLifeBeforeSaving();
+        if (this.syncFailed)
+            return;
+        this.lifeSaving = true;
         MemoryCommit pointer = new()
         {
             LineageId = this.lineageId, CommitId = Guid.NewGuid().ToString("N"),
@@ -155,6 +159,9 @@ internal sealed partial class ModEntry
             return;
         this.savedCommit = pointer; this.pendingCommit = null;
         this.Send("save.saved", new() { ["commitId"] = pointer.CommitId, ["date"] = GameState.Date() });
+        this.lifeSaving = false;
+        if (!this.lifeReady)
+            this.SendNextLifeBatch();
     }
 
     private void OnReturnedToTitle()

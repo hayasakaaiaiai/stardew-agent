@@ -72,6 +72,17 @@ internal sealed partial class ModEntry
 
     private static bool LifeSpouse(NPC npc) => GameState.Relation(npc) is "married" or "roommate";
 
+    private bool CompletedLifeActivityToday(NPC npc, string activity) => LifeActivityRules.CompletedToday(
+        this.lifeEvents.Select(entry => (entry.Npc, entry.Day, entry.Kind, entry.Activity)),
+        npc.Name.ToLowerInvariant(), AbsoluteDay(), activity);
+
+    private void ReleaseLifeApproach(NPC npc)
+    {
+        // Restore the old approach's actor flags before the new session captures its own original state.
+        if (this.approach is { } previous && previous.Npc == npc)
+            this.ReleaseApproach(previous, restore: false);
+    }
+
     /// <summary>The ordinary conversation's extra native menu; callbacks recheck location and load identity.</summary>
     private void ShowLifeActivities(NPC npc)
     {
@@ -192,8 +203,7 @@ internal sealed partial class ModEntry
                 ? "已经有其他约定，先完成或取消那一项吧。"
             : this.meetings.Values.Count(m => !m.Surprise) + this.LifeActivityStartsToday >= MeetsPerDay
                 ? "今天的共同活动和约定已经够多了，明天再去吧。"
-            : this.lifeEvents.Count(e => e.Day == AbsoluteDay() && e.Npc == npc.Name.ToLowerInvariant()
-                && e.Kind == "activity.completed" && e.Activity == activity) > 0 && goal is null ? "今天已经一起做过这件事，明天再来吧。"
+            : this.CompletedLifeActivityToday(npc, activity) ? "今天已经一起做过这件事，明天再来吧。"
             : null;
         if (why is null && activity == "cooking")
         {
@@ -211,6 +221,7 @@ internal sealed partial class ModEntry
             return false;
         // An old failed return route must never warp this actor during a newly accepted activity.
         this.lifeActivityReturns.RemoveAll(returning => returning.Npc == npc);
+        this.ReleaseLifeApproach(npc);
         Meeting movement = new(npc.Name, Game1.timeOfDay, "森林河边", sameDay: true)
         {
             Origin = new ScheduleStop(npc.currentLocation.NameOrUniqueName, npc.TilePoint, npc.FacingDirection, null, null),
@@ -392,8 +403,7 @@ internal sealed partial class ModEntry
             return;
         if (!Game1.player.cookingRecipes.Pairs.Any() || this.meetings.Values.Count(m => !m.Surprise) + this.LifeActivityStartsToday >= MeetsPerDay
             || !LifeActivityRules.StartTime(Game1.timeOfDay)
-            || this.lifeEvents.Any(entry => entry.Npc == previous.Npc.Name.ToLowerInvariant() && entry.Day == AbsoluteDay()
-                && entry.Kind == "activity.completed" && entry.Activity == "cooking"))
+            || this.CompletedLifeActivityToday(previous.Npc, "cooking"))
         {
             Game1.drawObjectDialogue("需要学会一道菜，在 9 点到 19 点间开始，并为今天尚未完成的做饭活动留出次数。");
             return;
@@ -536,7 +546,7 @@ internal sealed partial class ModEntry
             Game1.drawObjectDialogue("一起吃饭需要在 9 点到 19 点间开始，明天再准备吧。");
             return;
         }
-        if (this.lifeEvents.Any(e => e.Npc == npc.Name.ToLowerInvariant() && e.Day == AbsoluteDay() && e.Kind == "activity.completed" && e.Activity == "home_dinner"))
+        if (this.CompletedLifeActivityToday(npc, "home_dinner"))
         {
             Game1.drawObjectDialogue("今天已经一起吃过饭了，明天再准备一顿吧。");
             return;
@@ -555,8 +565,7 @@ internal sealed partial class ModEntry
             if (choice >= meals.Length || !this.config.LifeActivities || this.lifeActivity is not null || this.lifeContinuation is not null
                 || !LifeSpouse(npc) || !LifeNear(npc) || Game1.currentLocation is not FarmHouse || !this.CanRecordLifeEvent
                 || !LifeActivityRules.StartTime(Game1.timeOfDay)
-                || this.lifeEvents.Any(entry => entry.Npc == npc.Name.ToLowerInvariant() && entry.Day == AbsoluteDay()
-                    && entry.Kind == "activity.completed" && entry.Activity == "home_dinner"))
+                || this.CompletedLifeActivityToday(npc, "home_dinner"))
                 return;
             var meal = meals[choice];
             Item? item = Game1.player.Items[meal.Slot];

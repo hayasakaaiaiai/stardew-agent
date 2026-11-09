@@ -59,6 +59,7 @@ internal sealed class LifeSyncCursor
     internal int Request { get; private set; }
     internal int LastRequest { get; private set; }
     internal bool Ready { get; set; }
+    internal int UnsentStart => this.Request == 0 ? this.Cursor : this.BatchEnd;
 
     internal void Reset() { this.Cursor = 0; this.BatchEnd = 0; this.Request = 0; this.LastRequest = 0; this.Ready = false; }
     internal (int Start, int Count, bool Final) Next(int total)
@@ -67,10 +68,11 @@ internal sealed class LifeSyncCursor
         int count = Math.Min(32, total - this.Cursor);
         return (this.Cursor, count, this.Cursor + count == total);
     }
-    internal void Sent(int count, int request)
+    internal void Sent(int count, int request, bool afterPending = false)
     {
-        if (request < 1 || count < 0 || count > 32 || this.Request != 0) throw new ArgumentOutOfRangeException(nameof(request));
-        this.BatchEnd = this.Cursor + count; this.Request = request; this.LastRequest = request; this.Ready = false;
+        if (request < 1 || count < 0 || count > 32 || this.Request != 0 && !afterPending) throw new ArgumentOutOfRangeException(nameof(request));
+        // Save-time batches are queued in wire order. Their last ACK covers all earlier batches.
+        this.BatchEnd = this.UnsentStart + count; this.Request = request; this.LastRequest = request; this.Ready = false;
     }
     internal bool Acknowledge(int request)
     {

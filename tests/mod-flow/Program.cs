@@ -38,6 +38,12 @@ void Check(bool condition, string message)
 
 object? Get(object target, string name) => target.GetType().GetField(name, Fields)!.GetValue(target);
 void Set(object target, string name, object? value) => target.GetType().GetField(name, Fields)!.SetValue(target, value);
+void InitializeLifeFixture(object mod)
+{
+    // Uninitialized fixtures skip field initializers that a real ModEntry always runs.
+    foreach (string field in new[] { "lifeSave", "lifeSync", "lifeActivityReturns" })
+        Set(mod, field, Activator.CreateInstance(modType.GetField(field, Fields)!.FieldType, nonPublic: true)!);
+}
 object Changed(object input) => Activator.CreateInstance(changedType, Fields, binder: null, args: new object?[] { input, null }, culture: null)!;
 void Call(object target, string method, params object?[] values)
 {
@@ -68,6 +74,7 @@ Exception? TryPending(object mod, object talk)
 {
     // These checks exercise the compiled mod's event/state handlers without starting a game or touching saves.
     object mod = RuntimeHelpers.GetUninitializedObject(modType);
+    InitializeLifeFixture(mod);
     object talk = RuntimeHelpers.GetUninitializedObject(talkType);
     Set(mod, "talk", talk);
     return (mod, talk);
@@ -194,6 +201,7 @@ Test("the lifecycle queue refuses overflow without losing accepted events", () =
 Test("stale load acknowledgements cannot remove the current load's pending event", () =>
 {
     object mod = RuntimeHelpers.GetUninitializedObject(modType);
+    InitializeLifeFixture(mod);
     object outbox = NewOutbox();
     Set(mod, "initialSave", new Dictionary<string, object?>()); Set(mod, "lineageId", "farm"); Set(mod, "loadNonce", "current");
     Set(mod, "lifecycle", outbox);
@@ -204,6 +212,44 @@ Test("stale load acknowledgements cannot remove the current load's pending event
     using JsonDocument current = JsonDocument.Parse("{\"type\":\"ack\",\"lineageId\":\"farm\",\"loadNonce\":\"current\",\"seq\":4}");
     Invoke(mod, "HandleSync", "ack", current.RootElement);
     Check(Count(outbox) == 0, "The correct acknowledgement was ignored.");
+});
+
+Test("saving flushes the unsent native life journal before its save envelope while offline", () =>
+{
+    object mod = RuntimeHelpers.GetUninitializedObject(modType);
+    InitializeLifeFixture(mod);
+    Set(mod, "initialSave", new Dictionary<string, object?>()); Set(mod, "lineageId", "farm"); Set(mod, "loadNonce", "current");
+    Set(mod, "activeLoad", true); Set(mod, "lifeSupported", true); Set(mod, "lifecycle", NewOutbox());
+    Set(mod, "bridge", Activator.CreateInstance(modType.GetField("bridge", Fields)!.FieldType, new Uri("ws://127.0.0.1:9"), null, "test")!);
+    object saved = Get(mod, "lifeSave")!;
+    var journal = (System.Collections.IList)saved.GetType().GetProperty("Events")!.GetValue(saved)!;
+    Type eventType = modAssembly.GetType("StardewAgentBridge.LifeEvent")!;
+    for (int i = 1; i <= 35; i++)
+    {
+        object entry = Activator.CreateInstance(eventType)!;
+        eventType.GetProperty("Id")!.SetValue(entry, "life-" + i);
+        eventType.GetProperty("Npc")!.SetValue(entry, "leah");
+        eventType.GetProperty("Day")!.SetValue(entry, 1);
+        eventType.GetProperty("Kind")!.SetValue(entry, "activity.cancelled");
+        eventType.GetProperty("Activity")!.SetValue(entry, "forest_walk");
+        journal.Add(entry);
+    }
+    int first = (int)Invoke(mod, "Send", "life.sync", new Dictionary<string, object?> { ["events"] = new[] { journal[0] }, ["final"] = false })!;
+    object cursor = Get(mod, "lifeSync")!;
+    Invoke(cursor, "Sent", 1, first, false);
+    Invoke(mod, "FlushLifeBeforeSaving");
+    Set(mod, "lifeSaving", true);
+    Invoke(mod, "Send", "save.saving", new Dictionary<string, object?>());
+    JsonElement[] pending = Pending(Get(mod, "lifecycle")!);
+    Check(pending.Length == 4 && pending[3].GetProperty("type").GetString() == "save.saving",
+        "The save envelope overtook a trailing life batch.");
+    Check(pending[1].GetProperty("events").GetArrayLength() == 32 && pending[2].GetProperty("events").GetArrayLength() == 2
+        && pending[1].GetProperty("events")[0].GetProperty("id").GetString() == "life-2"
+        && pending[2].GetProperty("events")[1].GetProperty("id").GetString() == "life-35"
+        && pending[2].GetProperty("final").GetBoolean(), "The native flush duplicated, skipped, or unbounded a batch.");
+    Invoke(mod, "LifeAcknowledged", first);
+    Invoke(mod, "SendNextLifeBatch");
+    Check(Count(Get(mod, "lifecycle")!) == 4, "An earlier ACK or replay crossed the active save barrier.");
 });
 
 Test("late replies with the wrong nonce or request sequence never enter game UI logic", () =>
@@ -227,6 +273,7 @@ Type configType = modAssembly.GetType("StardewAgentBridge.ModConfig", throwOnErr
 object TestMod()
 {
     object mod = RuntimeHelpers.GetUninitializedObject(modType);
+    InitializeLifeFixture(mod);
     Set(mod, "config", Activator.CreateInstance(configType, nonPublic: true)!);
     return mod;
 }
@@ -355,6 +402,8 @@ Test("malformed letter rows are ignored before native game work", () =>
 {
     object mod = BubbleMod();
     Set(mod, "activeLoad", true);
+    // Day zero would match the empty life's mail budget and skip the malformed rows.
+    Set(mod, "currentDay", 1);
     using JsonDocument packet = JsonDocument.Parse(JsonSerializer.Serialize(new { lineageId = "farm", loadNonce = "current",
         letters = new object?[] { null, 7, "bad", new { key = 7 }, new { key = "bad", text = 7 }, new { key = "bad", text = "空" } } }));
     Invoke(mod, "HandleLetters", "day.letters", packet.RootElement);
@@ -508,6 +557,39 @@ Test("walking over holds the NPC until released, so its schedule only queues mea
     Check(!Update(), "A held NPC was handed back with its path done.");
     Set(controller, "Hold", false);
     Check(Update(), "A released NPC was not handed back once its path was done.");
+});
+Test("a life activity takes over a returning approach without moving its NPC or retaining stale control", () =>
+{
+    object mod = BubbleMod();
+    Type npcType = gameAssembly.GetType("StardewValley.NPC")!;
+    Type approachType = modType.GetNestedType("Approach", BindingFlags.NonPublic)!;
+    Type controllerType = modType.GetNestedType("ApproachController", BindingFlags.NonPublic)!;
+    object npc = RuntimeHelpers.GetUninitializedObject(npcType);
+    object previous = RuntimeHelpers.GetUninitializedObject(approachType);
+    object controller = RuntimeHelpers.GetUninitializedObject(controllerType);
+    Set(previous, "<Npc>k__BackingField", npc);
+    Set(previous, "<Destroys>k__BackingField", true);
+    Set(previous, "Phase", Enum.Parse(modType.GetNestedType("ApproachPhase", BindingFlags.NonPublic)!, "Returning"));
+    Set(previous, "Controller", controller);
+    Set(npc, "temporaryController", controller);
+    PropertyInfo destroys = npcType.GetProperty("willDestroyObjectsUnderfoot", Fields)!;
+    FieldInfo destroyFlag = destroys.DeclaringType!.GetFields(Fields)
+        .Single(field => field.Name.Contains("destroy", StringComparison.OrdinalIgnoreCase));
+    destroyFlag.SetValue(npc, Activator.CreateInstance(destroyFlag.FieldType));
+    destroys.SetValue(npc, false);
+    Set(mod, "approach", previous);
+    // No world or NPC position is initialized: handoff must release ownership without routing or teleporting.
+    Invoke(mod, "ReleaseLifeApproach", npc);
+    Check(Get(mod, "approach") is null && Get(npc, "temporaryController") is null,
+        "The previous approach can still restore the actor on the next update.");
+    Check((bool)destroys.GetValue(npc)!,
+        "The new activity would capture the approach's temporary flags as the original state.");
+
+    object other = RuntimeHelpers.GetUninitializedObject(npcType);
+    Set(mod, "approach", previous); Set(npc, "temporaryController", controller);
+    Invoke(mod, "ReleaseLifeApproach", other);
+    Check(ReferenceEquals(Get(mod, "approach"), previous) && ReferenceEquals(Get(npc, "temporaryController"), controller),
+        "Starting with another NPC released an unrelated approach.");
 });
 Test("today's appointments come from the current load only, skip bad rows, and keep the ones already in a schedule", () =>
 {

@@ -44,6 +44,7 @@ internal sealed partial class ModEntry
         this.config.FestivalMemories = true;
         this.townTestRunning = true;
         Game1.options.pauseWhenOutOfFocus = false;
+        this.MinimizeRequestedTestWindow();
         if (!this.worldTestHoursHook)
         {
             this.Helper.Events.GameLoop.TimeChanged += (_, e) => { if (this.memoryTest?.World == true) this.worldTestHours.Add(e.NewTime); };
@@ -70,6 +71,7 @@ internal sealed partial class ModEntry
             outing = ready ? this.OutingTestSnapshot() : null,
             invites = ready ? this.InvitesTestSnapshot() : null,
             more = ready ? this.MoreTestSnapshot() : null,
+            life = ready ? this.LifeTestSnapshot() : null,
             date = ready ? GameState.Date() : null, weather = ready ? GameState.Weather() : null,
             location = ready ? Game1.currentLocation?.NameOrUniqueName : null,
             player = ready ? new { x = Game1.player.TilePoint.X, y = Game1.player.TilePoint.Y, facing = Game1.player.FacingDirection } : null,
@@ -235,7 +237,7 @@ internal sealed partial class ModEntry
                             && Game1.activeClickableMenu is null) this.WorldComplete();
                         break;
                     case "capture": break;
-                    default: this.TickActionTestPending(); break;
+                    default: this.TickLifeTestPending(); this.TickActionTestPending(); break;
                 }
                 return;
             }
@@ -369,7 +371,7 @@ internal sealed partial class ModEntry
                     if (!this.ActionCommand(this.worldTestOperation, args) && !this.FarmTestCommand(this.worldTestOperation, args)
                         && !this.MineTestCommand(this.worldTestOperation, args) && !this.AnimalTestCommand(this.worldTestOperation, args)
                         && !this.OutingTestCommand(this.worldTestOperation, args) && !this.InvitesTestCommand(this.worldTestOperation, args)
-                        && !this.MoreTestCommand(this.worldTestOperation, args))
+                        && !this.MoreTestCommand(this.worldTestOperation, args) && !this.LifeTestCommand(this.worldTestOperation, args))
                         throw new InvalidOperationException("未知世界测试命令：" + this.worldTestOperation);
                     break;
             }

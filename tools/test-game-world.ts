@@ -29,10 +29,11 @@ import { runInvites, type InvitesState } from './game-invites.ts';
 import { runMeetingsMore, type MoreState } from './game-meetings-more.ts';
 import { runLaterMeetings } from './game-later-meetings.ts';
 import { runRealMeetings } from './game-real-meetings.ts';
+import { runLife, type LifeState } from './game-life.ts';
 
 interface Config { RequestId: string; UniqueId: string; SaveFolder: string; SaveDirectory: string; RunDirectory: string; GamePath: string; BackendUrl: string; World: boolean; Offline: boolean; Section: string }
 interface Npc { id: string; name: string; location: string; x: number; y: number; speed: number; ignoreScheduleToday: boolean; controller: boolean; temporary: boolean; queued: number; destroys: boolean; schedule: ScheduleStop[] | null }
-export interface State { ready: boolean; canChat: boolean; eventUp?: boolean; displaySleepAllowed?: boolean | null; time: number; nonce: string; generation: number; location: string; weather: string; npcs: Npc[] | null; actions?: ActionState; farm?: FarmState; mine?: MineState; player?: { x: number; y: number; facing: number } | null;
+export interface State { life?: LifeState; ready: boolean; canChat: boolean; eventUp?: boolean; displaySleepAllowed?: boolean | null; time: number; nonce: string; generation: number; location: string; weather: string; npcs: Npc[] | null; actions?: ActionState; farm?: FarmState; mine?: MineState; player?: { x: number; y: number; facing: number } | null;
   festival: { id: string; isFestival: boolean; actors: string[]; schedules: Record<string, unknown>; dance: string | null; soup: number | null; grangeScore: number; giver: string | null } | null;
   native: Record<string, unknown> | null; outing?: OutingState; invites?: InvitesState; more?: MoreState; reply: { npc: string; text: string } | null; minigame: string | null }
 interface Command { id: number; operation: string; completed: boolean; success: boolean; error?: string; state: State }
@@ -43,8 +44,9 @@ const ROOT = resolve(import.meta.dirname, '..');
 const configPath = resolve(process.argv[2]!);
 const config = JSON.parse((await readFile(configPath, 'utf8')).replace(/^\uFEFF/, '')) as Config;
 assert.equal(config.World, true); assert.equal(config.SaveFolder, `MemoryTest_${config.UniqueId}`); assert.notEqual(config.UniqueId, '436774213');
-assert.ok(['all', 'schedules', 'backstage', 'festivals', 'content', 'fair-return', 'actions', 'actions-edge', 'actions-timing', 'actions-checks', 'actions-places', 'actions-incoming', 'farm-help', 'farm-chores', 'farm-visits', 'farm-save', 'mine', 'mine-core', 'mine-rescue', 'mine-edges', 'mine-worlds', 'mine-dungeons', 'mine-save', 'same-day', 'same-day-core', 'same-day-edges', 'call-off', 'call-off-arrival', 'call-off-arrival-save', 'farm-animals', 'meeting-warp-places', 'meeting-warp', 'meeting-warp-edges', 'meeting-spouses', 'meeting-friendship', 'later-meetings', 'friendship-boundaries', 'outing', 'outing-core', 'outing-activities', 'outing-edges', 'outing-save', 'invites', 'invites-core', 'invites-edges', 'invites-changes', 'meetings-more', 'more-dialogue', 'more-festivals', 'more-leading', 'more-visits', 'more-mining', 'more-moods', 'real-meetings', 'real-meetings-live', 'real-meetings-edges'].includes(config.Section), 'Unknown native world test section.');
+assert.ok(['all', 'schedules', 'backstage', 'festivals', 'content', 'fair-return', 'actions', 'actions-edge', 'actions-timing', 'actions-checks', 'actions-places', 'actions-incoming', 'farm-help', 'farm-chores', 'farm-visits', 'farm-save', 'mine', 'mine-core', 'mine-rescue', 'mine-edges', 'mine-worlds', 'mine-dungeons', 'mine-save', 'same-day', 'same-day-core', 'same-day-edges', 'call-off', 'call-off-arrival', 'call-off-arrival-save', 'farm-animals', 'meeting-warp-places', 'meeting-warp', 'meeting-warp-edges', 'meeting-spouses', 'meeting-friendship', 'later-meetings', 'friendship-boundaries', 'outing', 'outing-core', 'outing-activities', 'outing-edges', 'outing-save', 'invites', 'invites-core', 'invites-edges', 'invites-changes', 'meetings-more', 'more-dialogue', 'more-festivals', 'more-leading', 'more-visits', 'more-mining', 'more-moods', 'real-meetings', 'real-meetings-live', 'real-meetings-edges', 'life', 'life-goals', 'life-activities', 'life-family', 'life-social', 'life-save', 'life-edges'].includes(config.Section), 'Unknown native world test section.');
 const realMeetings = config.Section.startsWith('real-meetings');
+if (config.Section.startsWith('life')) assert.equal(config.Offline, true, 'Native life acceptance uses a fixed model.');
 if (realMeetings && config.Section !== 'real-meetings-edges') assert.equal(config.Offline, false, 'The seven live meeting scenarios require the real model.');
 assert.equal(resolve(config.SaveDirectory), resolve(process.env.APPDATA!, 'StardewValley/Saves', config.SaveFolder));
 assert.ok(resolve(config.RunDirectory).startsWith(resolve(ROOT, '.runtime') + '\\'));
@@ -57,6 +59,8 @@ for (const file of ['tools/test-game-world.ts', 'tools/game-actions.ts', 'tools/
   'mod/StardewAgentBridge/WorldTest.cs', 'mod/StardewAgentBridge/MemoryTest.cs', 'mod/StardewAgentBridge/Festivals.cs'])
   await copyFile(join(ROOT, file), join(directory, 'sources', file.split('/').at(-1)!));
 if (realMeetings) for (const file of ['tools/game-real-meetings.ts', 'tools/test-game-real-meetings.ps1'])
+  await copyFile(join(ROOT, file), join(directory, 'sources', file.split('/').at(-1)!));
+if (config.Section.startsWith('life')) for (const file of ['tools/game-life.ts', 'tools/game-life-relationships.ts', 'tools/game-life-entry.ts', 'tools/game-life-fixture.ts', 'tools/test-game-life.ps1', 'mod/StardewAgentBridge/LifeTest.cs', 'mod/StardewAgentBridge/LifeActivities.cs', 'mod/StardewAgentBridge/LifeGoals.cs', 'mod/StardewAgentBridge/LifeJournal.cs', 'src/agent/life.ts'])
   await copyFile(join(ROOT, file), join(directory, 'sources', file.split('/').at(-1)!));
 const json = async (file: string, value: unknown) => {
   await writeFile(file + '.tmp', JSON.stringify(value, null, 2));
@@ -134,13 +138,16 @@ const options = { roster, model: gateway.lane('dialogue', model('dialogue')), sc
   backstageModel: gateway.lane('background', model('background')), gateway,
   consolidator: nightlyConsolidator({ roster, model: gateway.lane('nightly', model('nightly')), log }), memoryDirectory: join(directory, 'memory'), port: 0, log };
 let server = await BridgeServer.start(options);
+let upstreamPort = server.port;
+let backendOnline = true;
 const packets: { direction: 'mod' | 'backend'; packet: Record<string, unknown>; injected?: string }[] = [];
 const relay = new WebSocketServer({ host: '127.0.0.1', port: 0 }); await once(relay, 'listening');
 const upstreams = new Set<WebSocket>();
 let dropNextHourAck = false;
 let hourAckToDrop: { seq: number; nonce: string } | undefined;
 relay.on('connection', client => {
-  const upstream = new WebSocket(`ws://127.0.0.1:${server.port}`); upstreams.add(upstream);
+  if (!backendOnline) { client.close(1013, 'Acceptance backend is deliberately offline'); return; }
+  const upstream = new WebSocket(`ws://127.0.0.1:${upstreamPort}`); upstreams.add(upstream);
   const waiting: string[] = [];
   const forward = (raw: string) => { if (upstream.readyState === WebSocket.OPEN) upstream.send(raw); else waiting.push(raw); };
   upstream.on('open', () => { for (const raw of waiting) upstream.send(raw); });
@@ -396,7 +403,7 @@ async function festival(key: string, operation: string, args: Record<string, unk
     await rpc('sleep'); await rpc('title'); await rpc('load');
     await say('Abigail', '花舞节那天我们一起跳舞了吗？', 'festival-saved-dance');
     check('festival-real-save-reload-recall', /（昨天）花舞节上农场主邀请我跳舞/.test(latestDialogue().messages[0]!.content)); await close();
-    await server.close(); server = await BridgeServer.start(options); await rpc('wait', { ticks: 120 });
+    await server.close(); server = await BridgeServer.start(options); upstreamPort = server.port; backendOnline = true; await rpc('wait', { ticks: 120 });
     await say('Abigail', '花舞节那天和谁跳舞了？', 'festival-backend-restart');
     check('festival-saved-backend-restart-recall', /花舞节上农场主邀请我跳舞/.test(latestDialogue().messages[0]!.content)); await close();
   }
@@ -446,16 +453,28 @@ async function fairReturn() {
 try {
   await wait(() => last?.worldCommand?.completed === true && last.worldCommand.state.ready, 'initial native load');
   check('native-test-allows-display-sleep', last?.worldCommand?.state.displaySleepAllowed === true);
+  if (config.Section.startsWith('life')) {
+    const windowState = await rpc('life-observe', { ticks: 30, clock: false });
+    check('life-test-window-is-minimized', windowState.life?.windowMinimized === true, windowState.life);
+  }
   if (['all', 'schedules', 'content'].includes(config.Section)) await schedules();
   if (['all', 'backstage', 'content'].includes(config.Section)) await backstage();
   if (config.Section === 'all' || config.Section === 'festivals') await festivals();
   if (config.Section === 'fair-return') await fairReturn();
+  if (config.Section.startsWith('life')) await runLife({ rpc, chapter, check, say, close, latestSystem: () => latestDialogue().messages[0]!.content,
+    packets: modPackets, wireCount: () => packets.length,
+    memoryLifeRows: () => counts().filter(row => typeof row.topics === 'string' && (JSON.parse(row.topics) as string[]).some(topic => /^life:life-\d+$/.test(topic))).map(row => JSON.stringify(row)).sort(),
+    setReply: (text: string) => { actionTodayReply = text; },
+    disconnect: async () => { backendOnline = false; await server.close(); await rpc('life-observe', { ticks: 90 }); },
+    reconnect: async () => { server = await BridgeServer.start(options); upstreamPort = server.port; backendOnline = true; await rpc('wait', { ticks: 180 }); },
+    evidence: async (label: string, data: unknown) => { await appendFile(join(directory, 'life-scenes.jsonl'), JSON.stringify({ label, data }) + '\n'); },
+  }, config.Section);
   if (realMeetings) await runRealMeetings({ rpc, chapter, check, contentCheck, say, close, packets: modPackets, wireCount: () => packets.length,
     latestSystem: () => latestDialogue().messages[0]!.content, seedNight, meetingEntries,
     setReply: (text: string) => { actionTodayReply = text; }, setMood: (mood: number) => { actionTodayMood = mood; },
     fixedModel: (enabled: boolean) => { fixedMeetingModel = enabled; },
     dayMeetings: (from = 0) => packets.slice(from).filter(row => row.direction === 'backend' && row.packet.type === 'day.meetings').map(row => row.packet),
-    restart: async () => { await server.close(); server = await BridgeServer.start(options); await rpc('wait', { ticks: 120 }); },
+    restart: async () => { await server.close(); server = await BridgeServer.start(options); upstreamPort = server.port; backendOnline = true; await rpc('wait', { ticks: 120 }); },
     logMark: () => logs.length,
     settleNightly: async (from: number) => {
       const deadline = Date.now() + 150000;
@@ -505,7 +524,7 @@ try {
     setReply: (text: string) => { actionTodayReply = text; },
     setMood: (mood: number) => { actionTodayMood = mood; },
     dayMeetings: (from = 0) => packets.slice(from).filter(row => row.direction === 'backend' && row.packet.type === 'day.meetings').map(row => row.packet),
-    restart: async () => { await server.close(); server = await BridgeServer.start(options); await rpc('wait', { ticks: 120 }); } };
+    restart: async () => { await server.close(); server = await BridgeServer.start(options); upstreamPort = server.port; backendOnline = true; await rpc('wait', { ticks: 120 }); } };
     if (config.Section === 'meetings-more' || config.Section.startsWith('more-')) await runMeetingsMore(host, config.Section);
     else if (config.Section.startsWith('invites')) await runInvites(host, config.Section);
     else if (config.Section.startsWith('outing')) await runOuting(host, config.Section);
