@@ -16,10 +16,11 @@
 - 森林散步、一起采集、陪钓鱼、一起做饭、配偶散步、家庭晚餐。
 - 12 位原版恋爱角色的双向约会：共同选地点、时间与相处方式，真实同行完成后选择回忆重点、回看和重访；每人有独立邀请及地点建议。
 - 小镇调查和长期目标：格斯的真实包裹调查／归还、潘妮的观察题、艾利欧特的短文。两条项目可独立推进，实地观察和明确建议会影响可阅读的成品。
+- 七位 NPC 的三章节长期目标：至少六个实际工作日，16 个观察章节、5 个真实材料章节；分章选择影响完整稿页，最终合成可以反复阅读的作品。
 
 生活功能本轮已完成代码与离线检查，尚未运行游戏验收；详见 [完整 spec](docs/npc-life-spec.md)、[验证报告](docs/test-results/2026-11-09-npc-life.md) 和 [全量游戏测试清单](docs/npc-life-game-checklist.md)。
 
-本分支 `codex/npc-town-life` 在已推送的生活／恋爱功能上增加小镇调查与长期目标，已完成代码和离线检查，尚未运行游戏验收；见 [小镇故事 spec](docs/npc-town-stories-spec.md)、[验证报告](docs/test-results/2026-11-09-npc-town-stories.md) 和 [游戏清单](docs/npc-town-stories-game-checklist.md)。此前恋爱规则与验收范围见 [恋爱 spec](docs/npc-romance-spec.md) 和 [恋爱游戏清单](docs/npc-romance-game-checklist.md)。
+本分支 `codex/npc-long-goals` 已完成七位角色长期目标的代码与离线检查，尚未运行游戏验收；见 [长期目标 spec](docs/npc-long-goals-spec.md)、[验证报告](docs/test-results/2026-11-09-npc-long-goals.md) 和 [扩展游戏清单](docs/npc-long-goals-game-checklist.md)。上一版 `codex/npc-town-life / b281ed1` 已推送交给 Windows 验收，见 [小镇故事 spec](docs/npc-town-stories-spec.md)、[验证报告](docs/test-results/2026-11-09-npc-town-stories.md) 和 [游戏清单](docs/npc-town-stories-game-checklist.md)。此前恋爱规则与验收范围见 [恋爱 spec](docs/npc-romance-spec.md) 和 [恋爱游戏清单](docs/npc-romance-game-checklist.md)。
 
 H 线硬件陪伴保留在 `hardware-companion`，尚未纳入 main。
 
@@ -51,6 +52,8 @@ npm run bridge
 
 小镇故事默认开关为 `TownStories`，调查键 `StoryInvestigationKey` 默认 F8。与格斯、潘妮或艾利欧特交谈后选“镇上的事”开始，艾米丽和皮埃尔提供各自掌握的证词。按 F8 实地搜索或记录观察，回到主人公身边明确汇报或给建议；背包里的故事包裹需要当面归还。两条长期目标在不同工作日、原版空闲地点各完成 30 分钟有效工作后产生成品，不参与也会推进。完整安装保留 `assets/town-stories.json`，后端和 Mod 同时更新；关闭开关仍保留现有进度、成品及包裹归还入口。
 
+长线扩展默认开关为 `LongGoals`，在潘妮、艾利欧特、莉亚、玛鲁、罗宾、威利或莱纳斯的“长期打算”中开始。潘妮和艾利欧特须先完成各自前作，次日再开启续篇。F8 同时列出当前章节观察；材料章节在本人面前明确交齐并消耗，独立于送礼。每章两轮不同日的实际工作各 30 分钟，最快六个工作日完成三章；不提供贡献仍会推进。每章有两种可选方向和默认稿页，完成后可回看章节及最终合册。安装保留 `assets/long-goals.json`，后端和 Mod 一起更新；含长线记录的存档需要本版 Mod 和支持长线的后端。
+
 ## 无游戏、无密钥验证
 
 ```powershell
@@ -65,6 +68,7 @@ dotnet run --project tests/life-flow
 dotnet run --project tests/life-activity-rules
 dotnet run --project tests/romance-rules
 dotnet run --project tests/town-story-rules
+dotnet run --project tests/long-goal-rules
 ```
 
 离线测试不联网、不调用真实模型、不操作游戏存档；demo 使用临时数据库并在退出时清理。`demo:built` 需要先构建。`node:sqlite` 在 Node 24 上会显示实验性提示。

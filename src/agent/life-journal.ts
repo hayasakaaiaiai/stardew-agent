@@ -1,9 +1,10 @@
 import { lifeChanges, LIFE_KINDS, lifeSerial, parseLifeEvents, type LifeEvent } from './life.ts';
 import { romanceChanges, ROMANCE_KINDS, parseRomanceEvents, type RomanceEvent } from './romance.ts';
 import { storyChanges, STORY_KINDS, parseStoryEvents, type StoryEvent } from './town-stories.ts';
+import { longGoalChanges, LONG_GOAL_KINDS, parseLongGoalEvents, type LongGoalEvent } from './long-goals.ts';
 import type { Json, NpcChange, NpcState } from '../types.ts';
 
-export type LifeJournalEvent = LifeEvent | RomanceEvent | StoryEvent;
+export type LifeJournalEvent = LifeEvent | RomanceEvent | StoryEvent | LongGoalEvent;
 
 /** All domains use the same durable native serial, so validate order before splitting a batch. */
 export function parseLifeJournal(value: unknown): LifeJournalEvent[] {
@@ -18,6 +19,7 @@ export function parseLifeJournal(value: unknown): LifeJournalEvent[] {
     if ((LIFE_KINDS as readonly unknown[]).includes(raw.kind)) return parseLifeEvents([raw])[0]!;
     if ((ROMANCE_KINDS as readonly unknown[]).includes(raw.kind)) return parseRomanceEvents([raw])[0]!;
     if ((STORY_KINDS as readonly unknown[]).includes(raw.kind)) return parseStoryEvents([raw])[0]!;
+    if ((LONG_GOAL_KINDS as readonly unknown[]).includes(raw.kind)) return parseLongGoalEvents([raw])[0]!;
     throw new Error('INVALID_LIFE_EVENT: unknown kind');
   });
 }
@@ -28,10 +30,16 @@ export function lifeJournalChanges(events: readonly LifeJournalEvent[], prior: R
   const ordinary = batch.filter((event): event is LifeEvent => (LIFE_KINDS as readonly string[]).includes(event.kind));
   const romance = batch.filter((event): event is RomanceEvent => event.kind.startsWith('romance.'));
   const stories = batch.filter((event): event is StoryEvent => event.kind.startsWith('story.'));
+  const longGoals = batch.filter((event): event is LongGoalEvent => event.kind.startsWith('longgoal.'));
+  const storyProjection = storyChanges(stories, prior);
+  // A continuation may follow its prerequisite in this same replay batch. The goal validates source order and day.
+  const withStories: Record<string, NpcState> = { ...prior };
+  for (const change of storyProjection) withStories[change.npcId] = { ...prior[change.npcId], story: change.state!.story! };
   const groups = [
     ['life', lifeChanges(ordinary, prior)],
     ['romance', romanceChanges(romance, prior)],
-    ['story', storyChanges(stories, prior)],
+    ['story', storyProjection],
+    ['longGoal', longGoalChanges(longGoals, withStories)],
   ] as const;
   const merged = new Map<string, NpcChange>();
   for (const [namespace, changes] of groups) for (const change of changes) {

@@ -27,6 +27,7 @@ internal sealed partial class ModEntry
         public Dictionary<string, RomanceState> Romance { get; set; } = new();
         public int RomanceInvitationDay { get; set; }
         public Dictionary<string, TownStoryState> Stories { get; set; } = new();
+        public Dictionary<string, LongGoalState> LongGoals { get; set; } = new();
     }
 
     private LifeSave lifeSave = new();
@@ -79,6 +80,8 @@ internal sealed partial class ModEntry
     {
         this.ClearLifeActivities();
         this.ClearStoryIntervals();
+        this.ClearLongGoalIntervals();
+        this.goalsUpgradeNotified = false;
         this.storiesUpgradeNotified = false;
         this.romanceUpgradeNotified = false;
         this.lifeReady = false; this.lifeCorrupt = false;
@@ -89,14 +92,15 @@ internal sealed partial class ModEntry
         try
         {
             LifeSave saved = JsonSerializer.Deserialize<LifeSave>(json, LifeJson) ?? throw new InvalidOperationException("生活记录为空。");
-            if (saved.Version != 1 || saved.Serial < 0 || saved.Serial > 9007199254740991L || saved.Events is null
-                || saved.Goals is null || saved.Letters is null || saved.Romance is null || saved.Stories is null || saved.Events.Count > LifeEventLimit
+            if (saved.Version is not (1 or 2) || saved.Serial < 0 || saved.Serial > 9007199254740991L || saved.Events is null
+                || saved.Goals is null || saved.Letters is null || saved.Romance is null || saved.Stories is null || saved.LongGoals is null || saved.Events.Count > LifeEventLimit
                 || saved.Events.Any(e => e is null || e.Day < 1 || e.Day > AbsoluteDay())
                 || !LifeGoalRules.OrderedEventIds(saved.Events.Select(e => e.Id), saved.Serial))
                 throw new InvalidOperationException("生活记录版本或内容无效；原始记录保留。");
             this.lifeSave = saved;
             this.ValidateRomanceSave();
             this.ValidateStorySave();
+            this.ValidateLongGoalSave();
             // A loaded game starts at morning; no unfinished actor controller survives the save boundary.
             foreach (LifeGoal goal in saved.Goals.Values)
                 if (goal.Stage == "walking") { goal.Stage = "ready"; goal.Attempt = null; }
@@ -132,15 +136,18 @@ internal sealed partial class ModEntry
             return false;
         }
         long serial = this.lifeSave.Serial;
+        int version = this.lifeSave.Version;
         entry.Id = "life-" + (serial + 1);
         entry.Day = this.currentDay;
         this.lifeSave.Serial = serial + 1;
+        this.lifeSave.Version = LongGoalRules.VersionAfterEvent(version, entry.Kind);
         this.lifeEvents.Add(entry);
         try { this.PersistLife(); }
         catch (Exception ex)
         {
             this.lifeEvents.RemoveAt(this.lifeEvents.Count - 1);
             this.lifeSave.Serial = serial;
+            this.lifeSave.Version = version;
             this.Monitor.Log("生活记录保存失败：" + ex.Message, LogLevel.Error);
             return false;
         }
@@ -168,6 +175,11 @@ internal sealed partial class ModEntry
         if (!this.StoriesCompatible)
         {
             this.ReportStoryCompatibility();
+            return;
+        }
+        if (!this.LongGoalsCompatible)
+        {
+            this.ReportLongGoalCompatibility();
             return;
         }
         var batch = this.lifeSync.Next(this.lifeEvents.Count);
@@ -199,6 +211,10 @@ internal sealed partial class ModEntry
                 && storiesCapability.TryGetInt32(out int storiesVersion) && storiesVersion == 1;
             this.storiesUpgradeNotified = false;
             this.ReportStoryCompatibility();
+            this.goalsSupported = message.TryGetProperty("goalsProtocol", out JsonElement goalsCapability)
+                && goalsCapability.TryGetInt32(out int goalsVersion) && goalsVersion == 1;
+            this.goalsUpgradeNotified = false;
+            this.ReportLongGoalCompatibility();
             if (!this.lifeSupported)
             {
                 this.Monitor.Log("当前后端不支持生活功能，请同时更新后端和 Mod。普通聊天仍可使用。", LogLevel.Warn);
@@ -221,6 +237,7 @@ internal sealed partial class ModEntry
     {
         this.ClearLifeActivities();
         this.ClearStoryIntervals();
+        this.ClearLongGoalIntervals();
         this.lifeSave = new(); this.lifeReady = false; this.lifeCorrupt = false;
         this.lifeSync.Reset();
     }

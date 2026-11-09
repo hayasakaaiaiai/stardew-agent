@@ -17,6 +17,7 @@ import { lifeContext } from '../agent/life.ts';
 import { journalFreshEvents, lifeJournalChanges } from '../agent/life-journal.ts';
 import { romanceContext, ROMANCE_NPCS } from '../agent/romance.ts';
 import { storyContext, storyNpcIds, STORY_NPCS } from '../agent/town-stories.ts';
+import { longGoalContext, LONG_GOAL_NPCS } from '../agent/long-goals.ts';
 import { callOffIn, changeIn, LATER_TOPIC, laterCallOffNote, laterIn, type LaterMeeting, laterMeetings, laterMovedNote, laterNote, type Meeting, meetingFor,
   meetingMemory, MEET_PLACES, movedLabel, movedNote,
   MEETS_PER_DAY, declinedIn, invitedIn, MOOD_TOPIC, moodLine, openedAtMeeting, stoodUpTopics, todayAgreement, todayMeeting,
@@ -26,7 +27,7 @@ import { Nightly } from '../agent/nightly.ts';
 import { withMorningPlan } from '../agent/morning.ts';
 import { createRuntime, type SaveScope } from '../index.ts';
 import type { Gift } from '../services/roster/index.ts';
-import { type ConsolidationInput, type Json, type MemoryDraft, type NpcState, SOCIAL_NPCS } from '../types.ts';
+import { type ConsolidationInput, type DayEntry, type Json, type MemoryDraft, type NpcState, SOCIAL_NPCS } from '../types.ts';
 import { canonical, digest, requireValue } from '../validation.ts';
 import { absoluteDay, gameMinutes, type Envelope, type GameDate, type LoadedSave, type ModMessage, type SavePointer, type TalkReply } from './protocol.ts';
 
@@ -179,6 +180,8 @@ export class GameSave {
   /** Immutable life projections live in day logs, independently of asynchronous nightly NPC state. */
   private lifeHistoryHead = '';
   private readonly lifeHistory = new Map<string, Promise<Json | undefined>>();
+  private lifeJournalHead: string | null = null;
+  private lifeJournalSignatures = new Map<string, string>();
 
   constructor(runtime: Runtime, path: string, state: Checkpoint, confirmed: (commitId: string) => void = () => {}) {
     this.runtime = runtime; this.path = path; this.state = state; this.confirmed = confirmed;
@@ -210,7 +213,7 @@ export class GameSave {
     this.scope = await this.runtime.ctx.saves.load({ lineageId: this.initial.lineageId, loadNonce: this.loadNonce, day, commitId: head });
   }
 
-  private async journalState(npcId: string, namespace: 'lifeState' | 'romanceState' | 'storyState'): Promise<Json | undefined> {
+  private async journalState(npcId: string, namespace: 'lifeState' | 'romanceState' | 'storyState' | 'longGoalState'): Promise<Json | undefined> {
     const current = this.dayEntries(npcId).findLast(entry =>
       entry.changes.some(change => change.npcId === npcId && change.log?.[namespace] !== undefined));
     if (current) return current.changes.find(change => change.npcId === npcId)!.log![namespace];
@@ -236,6 +239,41 @@ export class GameSave {
       void found.catch(() => { if (this.lifeHistory.get(key) === found) this.lifeHistory.delete(key); });
     }
     return found;
+  }
+
+  /** Native serials are global across domains and NPCs, including saved history on this exact branch. */
+  private async journalEventSignatures(): Promise<Map<string, string>> {
+    const add = (entries: readonly DayEntry[], index: Map<string, string>) => {
+      for (const entry of entries) for (const change of entry.changes)
+        for (const key of ['lifeEvents', 'romanceEvents', 'storyEvents', 'longGoalEvents']) {
+          const events = change.log?.[key];
+          if (!Array.isArray(events)) continue;
+          for (const event of events) {
+            requireValue(event !== null && typeof event === 'object' && !Array.isArray(event) && typeof event.id === 'string',
+              'BAD_LIFE_JOURNAL', '保存的生活事件格式无效');
+            const signature = canonical(event), previous = index.get(event.id);
+            requireValue(previous === undefined || previous === signature, 'LIFE_EVENT_CONFLICT', '保存记录重复使用生活事件序号');
+            index.set(event.id, signature);
+          }
+        }
+    };
+    if (this.lifeJournalHead !== this.state.head) {
+      const pending: DayEntry[][] = [];
+      let commitId: string | null = this.state.head;
+      while (commitId !== null && commitId !== this.lifeJournalHead) {
+        const input: ConsolidationInput = await this.runtime.ctx.store.call('consolidationInput', {
+          lineageId: this.initial.lineageId, commitId, npcIds: [...SOCIAL_NPCS],
+        });
+        pending.push(input.npcs.flatMap(npc => npc.logs));
+        commitId = input.commit.parentId;
+      }
+      const index = commitId !== null ? new Map(this.lifeJournalSignatures) : new Map<string, string>();
+      for (const entries of pending.reverse()) add(entries, index);
+      this.lifeJournalHead = this.state.head; this.lifeJournalSignatures = index;
+    }
+    const current = new Map(this.lifeJournalSignatures);
+    for (const npc of SOCIAL_NPCS) add(this.dayEntries(npc), current);
+    return current;
   }
 
   async restore(): Promise<void> {
@@ -509,16 +547,18 @@ export class GameSave {
         context: async (query, current) => {
           signal.throwIfAborted(); standing = current;
           const context = await reader.context(query, current);
-          const [projection, romantic, stories] = await Promise.all([
+          const [projection, romantic, stories, longGoals] = await Promise.all([
             this.journalState(npcId, 'lifeState'),
             (ROMANCE_NPCS as readonly string[]).includes(npcId) ? this.journalState(npcId, 'romanceState') : undefined,
             STORY_NPCS.includes(npcId) ? this.journalState(npcId, 'storyState') : undefined,
+            LONG_GOAL_NPCS.includes(npcId) ? this.journalState(npcId, 'longGoalState') : undefined,
           ]);
           signal.throwIfAborted();
           const life = lifeContext(projection === undefined ? {} : { life: projection }, this.day);
           const romance = romanceContext(romantic === undefined ? {} : { romance: romantic }, this.day, current.relation);
           const story = storyContext(stories === undefined ? {} : { story: stories }, this.day);
-          return life || romance || story ? { ...context, summary: [context.summary, life, romance, story].filter(Boolean).join('\n') } : context;
+          const longGoal = longGoalContext(longGoals === undefined ? {} : { longGoal: longGoals }, this.day);
+          return life || romance || story || longGoal ? { ...context, summary: [context.summary, life, romance, story, longGoal].filter(Boolean).join('\n') } : context;
         },
         record: async (exchange, remembered) => { signal.throwIfAborted(); staged = { exchange, remembered }; },
       }, { now: () => gameMinutes(date), read, skip: inviting }), { gifts, now: () => gameMinutes(date), read: async () => {
@@ -565,15 +605,22 @@ export class GameSave {
       if (this.check(message)) return;
       requireValue(this.state.phase === 'open', 'DAY_CLOSED', '生活记录等待当前存档准备就绪');
       requireValue(message.events.every(event => event.day <= this.day), 'FUTURE_LIFE_EVENT', '不能记录未来日期的生活事件');
+      if (message.events.length) {
+        const recorded = await this.journalEventSignatures();
+        for (const event of message.events) requireValue(!recorded.has(event.id) || recorded.get(event.id) === canonical(event),
+          'LIFE_EVENT_CONFLICT', '同一生活事件序号不能更换内容、角色或用途');
+      }
       const prior: Record<string, NpcState> = {};
       const ids = [...new Set(message.events.flatMap(event => 'storyId' in event ? storyNpcIds(event)
         : [event.npc, ...('other' in event && event.other ? [event.other] : [])]))];
       for (const id of ids) {
-        const [life, romance, story] = await Promise.all([
+        const [life, romance, story, longGoal] = await Promise.all([
           this.journalState(id, 'lifeState'), this.journalState(id, 'romanceState'),
           STORY_NPCS.includes(id) ? this.journalState(id, 'storyState') : undefined,
+          LONG_GOAL_NPCS.includes(id) ? this.journalState(id, 'longGoalState') : undefined,
         ]);
-        prior[id] = { ...(life === undefined ? {} : { life }), ...(romance === undefined ? {} : { romance }), ...(story === undefined ? {} : { story }) };
+        prior[id] = { ...(life === undefined ? {} : { life }), ...(romance === undefined ? {} : { romance }),
+          ...(story === undefined ? {} : { story }), ...(longGoal === undefined ? {} : { longGoal }) };
       }
       const changes = lifeJournalChanges(message.events, prior);
       for (const change of changes) {
@@ -594,6 +641,7 @@ export class GameSave {
             ...(state?.life === undefined ? {} : { lifeState: state.life }),
             ...(state?.romance === undefined ? {} : { romanceState: state.romance }),
             ...(state?.story === undefined ? {} : { storyState: state.story }),
+            ...(state?.longGoal === undefined ? {} : { longGoalState: state.longGoal }),
             ...(i === 0 ? { bridgeReceipt: JSON.parse(canonical(receipt)) } : {}) },
         })) });
       this.addReceipt(receipt);

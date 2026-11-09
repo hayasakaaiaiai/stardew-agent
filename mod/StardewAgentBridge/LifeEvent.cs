@@ -33,6 +33,11 @@ internal sealed class LifeEvent
     [JsonPropertyName("choiceId")] public string? ChoiceId { get; set; }
     [JsonPropertyName("step")] public int? Step { get; set; }
     [JsonPropertyName("outcome")] public string? Outcome { get; set; }
+    [JsonPropertyName("longGoalId")] public string? LongGoalId { get; set; }
+    [JsonPropertyName("chapterId")] public int? ChapterId { get; set; }
+    [JsonPropertyName("contributionId")] public string? ContributionId { get; set; }
+    [JsonPropertyName("itemId")] public string? ItemId { get; set; }
+    [JsonPropertyName("dependencySourceId")] public string? DependencySourceId { get; set; }
 }
 
 internal static class LifeEventWire

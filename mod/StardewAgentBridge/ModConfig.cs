@@ -2,6 +2,8 @@ namespace StardewAgentBridge;
 
 internal sealed class ModConfig
 {
+    /// <summary>Three-chapter personal projects with optional evidence and actual work.</summary>
+    public bool LongGoals { get; set; } = true;
     /// <summary>Investigations and persistent projects grounded in observed game actions.</summary>
     public bool TownStories { get; set; } = true;
     /// <summary>Opens native choices for nearby investigation and field observations.</summary>

@@ -438,22 +438,17 @@ internal sealed partial class ModEntry
     private static string StoryClueText(TownStoryClue clue) => (clue.Witness switch
         { "emily" => "艾米丽的证词：", "pierre" => "皮埃尔的证词：", _ => "现场发现：" }) + clue.Text;
 
-    private bool TryOpenStoryFieldMenu()
+    private void AddStoryFieldOptions(List<(string Label, Action Action)> options)
     {
-        if (!this.StoryMenusReady || !this.config.TownStories || Game1.activeClickableMenu is not null || this.talk is not null) return false;
-        List<(string Label, Action Action)> options = new();
+        if (!this.StoryMenusReady || !this.config.TownStories) return;
         foreach (TownStoryTemplate story in this.townStories.Values)
         {
             if (!this.lifeSave.Stories.TryGetValue(story.Id, out TownStoryState? state) || state.Outcome is not null) continue;
             if (story.Kind == "investigation" && !state.Clues.ContainsKey("parcel"))
-                options.Add(($"调查：{story.Site!.Label}", () => this.SearchStoryParcel(story, state)));
+                options.Add(($"调查：{story.Site!.Label}", () => { if (this.StoryMenusReady) this.SearchStoryParcel(story, state); }));
             if (story.Kind == "project" && state.ObservationId is null)
-                options.Add(($"记录观察：{story.Title}", () => this.RecordStoryObservation(story, state)));
+                options.Add(($"记录观察：{story.Title}", () => { if (this.StoryMenusReady) this.RecordStoryObservation(story, state); }));
         }
-        if (options.Count == 0) { this.LifeNotice("目前没有需要现场调查或观察的故事。"); return true; }
-        options.Add(("暂时不调查", () => { }));
-        this.StoryQuestion(null, "想调查哪件事？请实际到线索地点，观察需要在同一地点正常度过一会儿。", options);
-        return true;
     }
 
     private void SearchStoryParcel(TownStoryTemplate story, TownStoryState state)
