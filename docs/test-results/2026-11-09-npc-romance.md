@@ -88,4 +88,4 @@ git diff --check
 
 使用 [全量游戏清单](../npc-romance-game-checklist.md) 验证所有 12 人菜单与语气、双向邀请、实际跟随及计时、准备方式在真实聊天中的表现、共同回忆／重访、关系变化、关闭功能、离线结束、保存回滚与旧生活功能。所有游戏项均为待用户执行。
 
-`codex/npc-shared-goals` 远端仍为 `d7b11a3`，`main` 为 `789b911`；本轮新分支不自动推送、不合入 main。更新 Windows 时同时更新后端与含 assets 的完整 Mod，不删除 `.runtime/game/`。
+用户随后要求推送，恋爱功能提交 `abd6479` 已推送至 `codex/npc-romance`。推送前核对 `main` 仍为 `789b911`，没有新主线需要变基；此前生活分支 `codex/npc-shared-goals` 保持 `d7b11a3`。未合入 main。更新 Windows 时同时更新后端与含 assets 的完整 Mod，不删除 `.runtime/game/`。
