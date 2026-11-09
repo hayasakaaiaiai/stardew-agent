@@ -1,0 +1,83 @@
+{
+  "date": "2026-11-09",
+  "baseCommit": "789b911",
+  "tokenizer": "gpt-tokenizer@3.4.0",
+  "encoding": "o200k_base",
+  "scope": "设计候选文本，调用现有 buildMessages；只数消息正文，不含API封装、输出或推理。无真实模型调用，不代表语义验证。",
+  "baselineMessageBodyTokens": 1892,
+  "inactiveAddedTokens": 0,
+  "fixture": {
+    "npc": "leah",
+    "hearts": 8,
+    "relation": "friend",
+    "seenEvents": [],
+    "season": "summer",
+    "day": 4,
+    "time": "14:00",
+    "history": [],
+    "memories": [],
+    "playerLine": "最近怎么样？"
+  },
+  "results": [
+    {
+      "phase": "offered",
+      "text": "## 共同目标的当前事实\n浮木委托尚未接取；需要3块浮木，不限期。想请农场主帮忙，尚未得到答应。\n进度以游戏记录为准，口头声称不算完成；只说已记录的经历，不编造作品完成。",
+      "snippetTokens": 68,
+      "totalMessageBodyTokens": 1951,
+      "addedMessageBodyTokens": 59,
+      "addedWithImpression": 68
+    },
+    {
+      "phase": "collecting",
+      "text": "## 共同目标的当前事实\n浮木委托已接取；交付0/3，不限期。心情：期待，因为农场主答应帮忙。\n进度以游戏记录为准，口头声称不算完成；只说已记录的经历，不编造作品完成。",
+      "snippetTokens": 66,
+      "totalMessageBodyTokens": 1949,
+      "addedMessageBodyTokens": 57,
+      "addedWithImpression": 66
+    },
+    {
+      "phase": "ready",
+      "text": "## 共同目标的当前事实\n浮木已交3/3；尚未约好森林同行。心情：感谢，想邀请一起去森林找灵感。\n进度以游戏记录为准，口头声称不算完成；只说已记录的经历，不编造作品完成。",
+      "snippetTokens": 65,
+      "totalMessageBodyTokens": 1948,
+      "addedMessageBodyTokens": 56,
+      "addedWithImpression": 65
+    },
+    {
+      "phase": "scheduled",
+      "text": "## 共同目标的当前事实\n浮木已交3/3；约好今天现在去森林河边，尚未碰面。心情：期待一起散步。\n进度以游戏记录为准，口头声称不算完成；只说已记录的经历，不编造作品完成。",
+      "snippetTokens": 66,
+      "totalMessageBodyTokens": 1949,
+      "addedMessageBodyTokens": 57,
+      "addedWithImpression": 66
+    },
+    {
+      "phase": "walking",
+      "text": "## 共同目标的当前事实\n浮木已交3/3；现在与农场主在森林同行，实际累计20分钟，目标30分钟。心情：放松。\n进度以游戏记录为准，口头声称不算完成；只说已记录的经历，不编造作品完成。",
+      "snippetTokens": 68,
+      "totalMessageBodyTokens": 1951,
+      "addedMessageBodyTokens": 59,
+      "addedWithImpression": 68
+    },
+    {
+      "phase": "completed",
+      "text": "## 共同目标的当前事实\n浮木已交3/3；与农场主实际在森林同行30分钟后结束，目标完成。心情：感谢，觉得对方可靠。\n进度以游戏记录为准，口头声称不算完成；只说已记录的经历，不编造作品完成。",
+      "snippetTokens": 70,
+      "totalMessageBodyTokens": 1953,
+      "addedMessageBodyTokens": 61,
+      "addedWithImpression": 70
+    },
+    {
+      "phase": "closed_materials",
+      "text": "## 共同目标的当前事实\n浮木已交3/3；农场主选择先到这里，森林同行没有完成。仍感谢材料，不把这次结束说成失约。\n进度以游戏记录为准，口头声称不算完成；只说已记录的经历，不编造作品完成。",
+      "snippetTokens": 70,
+      "totalMessageBodyTokens": 1953,
+      "addedMessageBodyTokens": 61,
+      "addedWithImpression": 70
+    }
+  ],
+  "withImpression": {
+    "text": "- 你对农场主的整体印象：相处自在，是愿意认真听我说话的朋友。",
+    "baselineMessageBodyTokens": 1909
+  }
+}
