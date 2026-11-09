@@ -72,3 +72,5 @@ node tools/measure-goal-results-prompt.ts /private/tmp/stardew-feature-cost.aBgM
 此前长期目标版本已按用户要求推送至 `codex/npc-long-goals / 80bdaf4`，可在 Windows 验收。本轮单独本地提交，尚未推送、不合入 main，H 线未改。
 
 本轮没有部署 DLL、启动游戏或调用真实模型；原版菜单排版、自然跟随／日程、真实钓鱼采集与不同分辨率下的游戏操作仍由用户验收。新增清单 **83 个编号／90 个结果格**全部留空。C# 规则检查和 Release 编译不等于真实游戏测试，也不复用历史 mod-flow 游戏程序集测试的通过数。
+
+用户随后明确授权推送，功能提交 `3b2c0ea` 交付 Windows 验收；发布前重新执行全仓测试与类型检查，后续扩展另开分支。

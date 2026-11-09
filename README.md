@@ -21,7 +21,7 @@
 
 生活功能本轮已完成代码与离线检查，尚未运行游戏验收；详见 [完整 spec](docs/npc-life-spec.md)、[验证报告](docs/test-results/2026-11-09-npc-life.md) 和 [全量游戏测试清单](docs/npc-life-game-checklist.md)。
 
-验收版 `codex/npc-long-goals / 80bdaf4` 已推送，完成七位角色长期目标的代码与离线检查，尚未运行游戏验收；见 [长期目标 spec](docs/npc-long-goals-spec.md)、[验证报告](docs/test-results/2026-11-09-npc-long-goals.md) 和 [扩展游戏清单](docs/npc-long-goals-game-checklist.md)。上一版 `codex/npc-town-life / b281ed1` 已推送交给 Windows 验收，见 [小镇故事 spec](docs/npc-town-stories-spec.md)、[验证报告](docs/test-results/2026-11-09-npc-town-stories.md) 和 [游戏清单](docs/npc-town-stories-game-checklist.md)。本分支 `codex/npc-project-practice` 已完成成果提醒、七种共同实践和次日回访的代码与离线检查，尚未推送或游戏验收，见 [实践 spec](docs/npc-project-practice-spec.md)、[验证报告](docs/test-results/2026-11-09-npc-project-practice.md) 和 [新游戏清单](docs/npc-project-practice-game-checklist.md)。此前恋爱规则与验收范围见 [恋爱 spec](docs/npc-romance-spec.md) 和 [恋爱游戏清单](docs/npc-romance-game-checklist.md)。
+验收版 `codex/npc-long-goals / 80bdaf4` 已推送，完成七位角色长期目标的代码与离线检查，尚未运行游戏验收；见 [长期目标 spec](docs/npc-long-goals-spec.md)、[验证报告](docs/test-results/2026-11-09-npc-long-goals.md) 和 [扩展游戏清单](docs/npc-long-goals-game-checklist.md)。上一版 `codex/npc-town-life / b281ed1` 已推送交给 Windows 验收，见 [小镇故事 spec](docs/npc-town-stories-spec.md)、[验证报告](docs/test-results/2026-11-09-npc-town-stories.md) 和 [游戏清单](docs/npc-town-stories-game-checklist.md)。本分支 `codex/npc-project-practice` 已完成成果提醒、七种共同实践和次日回访的代码与离线检查，现作为 Windows 验收分支（功能提交 `3b2c0ea`），尚未游戏验收，见 [实践 spec](docs/npc-project-practice-spec.md)、[验证报告](docs/test-results/2026-11-09-npc-project-practice.md) 和 [新游戏清单](docs/npc-project-practice-game-checklist.md)。此前恋爱规则与验收范围见 [恋爱 spec](docs/npc-romance-spec.md) 和 [恋爱游戏清单](docs/npc-romance-game-checklist.md)。
 
 H 线硬件陪伴保留在 `hardware-companion`，尚未纳入 main。
 
