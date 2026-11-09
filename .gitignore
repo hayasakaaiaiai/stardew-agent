@@ -18,3 +18,5 @@ tests/life-flow/bin/
 tests/life-flow/obj/
 tests/life-activity-rules/bin/
 tests/life-activity-rules/obj/
+tests/romance-rules/bin/
+tests/romance-rules/obj/

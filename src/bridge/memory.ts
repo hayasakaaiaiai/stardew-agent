@@ -13,7 +13,9 @@ import { giftItemName, giftMemory } from '../agent/gifts.ts';
 import { GIVEN_TOPIC, givenMemory, withInPersonGift } from '../agent/in-person-gifts.ts';
 import { type Gossip, gossipOf, heardMemory, heardToday, shareFor, spread, type Transfer } from '../agent/news.ts';
 import { type DeliveredLetter, type Letter, letterFor, letterKey } from '../agent/letters.ts';
-import { lifeChanges, lifeContext, type LifeEvent } from '../agent/life.ts';
+import { lifeContext } from '../agent/life.ts';
+import { journalFreshEvents, lifeJournalChanges } from '../agent/life-journal.ts';
+import { romanceContext, ROMANCE_NPCS } from '../agent/romance.ts';
 import { callOffIn, changeIn, LATER_TOPIC, laterCallOffNote, laterIn, type LaterMeeting, laterMeetings, laterMovedNote, laterNote, type Meeting, meetingFor,
   meetingMemory, MEET_PLACES, movedLabel, movedNote,
   MEETS_PER_DAY, declinedIn, invitedIn, MOOD_TOPIC, moodLine, openedAtMeeting, stoodUpTopics, todayAgreement, todayMeeting,
@@ -207,13 +209,14 @@ export class GameSave {
     this.scope = await this.runtime.ctx.saves.load({ lineageId: this.initial.lineageId, loadNonce: this.loadNonce, day, commitId: head });
   }
 
-  private async lifeState(npcId: string): Promise<Json | undefined> {
+  private async journalState(npcId: string, namespace: 'lifeState' | 'romanceState'): Promise<Json | undefined> {
     const current = this.dayEntries(npcId).findLast(entry =>
-      entry.changes.some(change => change.npcId === npcId && change.log?.lifeState !== undefined));
-    if (current) return current.changes.find(change => change.npcId === npcId)!.log!.lifeState;
+      entry.changes.some(change => change.npcId === npcId && change.log?.[namespace] !== undefined));
+    if (current) return current.changes.find(change => change.npcId === npcId)!.log![namespace];
     const head = this.state.head;
     if (this.lifeHistoryHead !== head) { this.lifeHistory.clear(); this.lifeHistoryHead = head; }
-    let found = this.lifeHistory.get(npcId);
+    const key = `${npcId}:${namespace}`;
+    let found = this.lifeHistory.get(key);
     if (!found) {
       found = (async () => {
         let commitId: string | null = head;
@@ -222,14 +225,14 @@ export class GameSave {
             lineageId: this.initial.lineageId, commitId, npcIds: [npcId],
           });
           const entry = input.npcs[0]?.logs.findLast(log => log.changes.some(change =>
-            change.npcId === npcId && change.log?.lifeState !== undefined));
-          if (entry) return entry.changes.find(change => change.npcId === npcId)!.log!.lifeState;
+            change.npcId === npcId && change.log?.[namespace] !== undefined));
+          if (entry) return entry.changes.find(change => change.npcId === npcId)!.log![namespace];
           commitId = input.commit.parentId;
         }
         return undefined;
       })();
-      this.lifeHistory.set(npcId, found);
-      void found.catch(() => { if (this.lifeHistory.get(npcId) === found) this.lifeHistory.delete(npcId); });
+      this.lifeHistory.set(key, found);
+      void found.catch(() => { if (this.lifeHistory.get(key) === found) this.lifeHistory.delete(key); });
     }
     return found;
   }
@@ -505,10 +508,14 @@ export class GameSave {
         context: async (query, current) => {
           signal.throwIfAborted(); standing = current;
           const context = await reader.context(query, current);
-          const projection = await this.lifeState(npcId);
+          const [projection, romantic] = await Promise.all([
+            this.journalState(npcId, 'lifeState'),
+            (ROMANCE_NPCS as readonly string[]).includes(npcId) ? this.journalState(npcId, 'romanceState') : undefined,
+          ]);
           signal.throwIfAborted();
           const life = lifeContext(projection === undefined ? {} : { life: projection }, this.day);
-          return life ? { ...context, summary: [context.summary, life].filter(Boolean).join('\n') } : context;
+          const romance = romanceContext(romantic === undefined ? {} : { romance: romantic }, this.day, current.relation);
+          return life || romance ? { ...context, summary: [context.summary, life, romance].filter(Boolean).join('\n') } : context;
         },
         record: async (exchange, remembered) => { signal.throwIfAborted(); staged = { exchange, remembered }; },
       }, { now: () => gameMinutes(date), read, skip: inviting }), { gifts, now: () => gameMinutes(date), read: async () => {
@@ -556,14 +563,14 @@ export class GameSave {
       requireValue(this.state.phase === 'open', 'DAY_CLOSED', '生活记录等待当前存档准备就绪');
       requireValue(message.events.every(event => event.day <= this.day), 'FUTURE_LIFE_EVENT', '不能记录未来日期的生活事件');
       const prior: Record<string, NpcState> = {};
-      const ids = [...new Set(message.events.flatMap(event => [event.npc, ...(event.other ? [event.other] : [])]))];
+      const ids = [...new Set(message.events.flatMap(event => [event.npc, ...('other' in event && event.other ? [event.other] : [])]))];
       for (const id of ids) {
-        const projection = await this.lifeState(id);
-        prior[id] = projection === undefined ? {} : { life: projection };
+        const [life, romance] = await Promise.all([this.journalState(id, 'lifeState'), this.journalState(id, 'romanceState')]);
+        prior[id] = { ...(life === undefined ? {} : { life }), ...(romance === undefined ? {} : { romance }) };
       }
-      const changes = lifeChanges(message.events, prior);
+      const changes = lifeJournalChanges(message.events, prior);
       for (const change of changes) {
-        const events = (change.log?.lifeEvents ?? []) as unknown as LifeEvent[];
+        const events = journalFreshEvents(change);
         let points = 0;
         let total = friendshipSoFar(this.dayEntries(change.npcId), change.npcId);
         for (const event of events.filter(event => event.day === this.day)) {
@@ -576,7 +583,9 @@ export class GameSave {
       const receipt: Receipt = { seq: message.seq, hash: digest(canonical(message)) };
       if (changes.length) await this.scope!.record({ seq: message.seq, gameTime: this.day * 1440,
         changes: changes.map(({ state, ...change }, i) => ({
-          ...change, log: { ...change.log, lifeState: state!.life!,
+          ...change, log: { ...change.log,
+            ...(state?.life === undefined ? {} : { lifeState: state.life }),
+            ...(state?.romance === undefined ? {} : { romanceState: state.romance }),
             ...(i === 0 ? { bridgeReceipt: JSON.parse(canonical(receipt)) } : {}) },
         })) });
       this.addReceipt(receipt);

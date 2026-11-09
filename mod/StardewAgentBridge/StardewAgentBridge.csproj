@@ -14,6 +14,7 @@
 
   <ItemGroup>
     <PackageReference Include="Pathoschild.Stardew.ModBuildConfig" Version="4.4.0" />
+    <Content Include="../../data/romance/profiles.json" Link="assets/romance-profiles.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

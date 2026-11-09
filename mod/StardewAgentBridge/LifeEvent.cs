@@ -18,6 +18,16 @@ internal sealed class LifeEvent
     [JsonPropertyName("other")] public string? Other { get; set; }
     [JsonPropertyName("sourceId")] public string? SourceId { get; set; }
     [JsonPropertyName("friendship")] public int? Friendship { get; set; }
+    [JsonPropertyName("dateId")] public string? DateId { get; set; }
+    [JsonPropertyName("venue")] public string? Venue { get; set; }
+    [JsonPropertyName("dateDay")] public int? DateDay { get; set; }
+    [JsonPropertyName("time")] public int? Time { get; set; }
+    [JsonPropertyName("preparation")] public string? Preparation { get; set; }
+    [JsonPropertyName("relation")] public string? Relation { get; set; }
+    [JsonPropertyName("initiator")] public string? Initiator { get; set; }
+    [JsonPropertyName("weather")] public string? Weather { get; set; }
+    [JsonPropertyName("reason")] public string? Reason { get; set; }
+    [JsonPropertyName("detail")] public string? Detail { get; set; }
 }
 
 internal static class LifeEventWire

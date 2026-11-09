@@ -354,7 +354,7 @@ export class BridgeServer {
       session.hello = false;
       requireValue(message.protocol === PROTOCOL_VERSION, 'PROTOCOL_MISMATCH', 'Mod 与后端协议不一致，请一同更新');
       session.hello = true;
-      send({ type: 'hello', protocol: PROTOCOL_VERSION, lifeProtocol: 1 });
+      send({ type: 'hello', protocol: PROTOCOL_VERSION, lifeProtocol: 1, romanceProtocol: 1 });
       return;
     }
     requireValue(session.hello, 'HANDSHAKE_REQUIRED', '请先完成协议握手');

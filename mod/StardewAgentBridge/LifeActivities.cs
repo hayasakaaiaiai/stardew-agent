@@ -19,6 +19,8 @@ internal sealed partial class ModEntry
         public Meeting Movement = null!;
         public string Activity = "";
         public string? Goal;
+        public string? RomanceDateId;
+        public string? RomanceVenue;
         public string Nonce = "";
         public int Day;
         public int LastTime;
@@ -101,8 +103,10 @@ internal sealed partial class ModEntry
                 progress += $"，{(active.Activity == "fishing" ? "钓到" : "采集到")} {active.Count} 个。需要至少 20 分钟和 1 个实际收获。";
             else
                 progress += "。散步需要至少 30 分钟。";
+            if (active.RomanceVenue is string venue)
+                progress = $"恋人约会：在{RomanceRules.Place(venue)}实际在一起 {active.Minutes} 分钟；需要 30 分钟。前往目的地的路程不计入。";
             List<string> choices = new() { "继续", LifeActivityRules.Ready(active.Activity, active.Minutes, active.Count) ? "结束这次活动" : "今天先回去" };
-            bool canCook = this.CanChat && this.config.LifeActivities && active.Activity != "cooking" && Game1.currentLocation is FarmHouse
+            bool canCook = this.CanChat && this.config.LifeActivities && active.Activity is not ("cooking" or "romantic_date") && Game1.currentLocation is FarmHouse
                 && Game1.currentLocation.GetFridge(true) is not null;
             if (canCook)
                 choices.Add("结束这次活动，接着一起做饭");
@@ -111,7 +115,7 @@ internal sealed partial class ModEntry
                 if (this.lifeActivity != active)
                     return;
                 if (choice == 1)
-                    this.FinishLifeActivity(allowComplete: true);
+                    this.FinishLifeActivity(allowComplete: true, cancelReason: "player");
                 else if (choice == 2 && canCook)
                     this.ContinueLifeWithCooking(active);
             }, allowExistingExit: true);
@@ -175,17 +179,19 @@ internal sealed partial class ModEntry
     private Action? lifeMenuAction;
 
     /// <summary>Starts company immediately where both characters actually stand; no teleport to the goal.</summary>
-    private bool TryStartLifeActivity(NPC npc, string activity, string? goal = null)
+    private bool TryStartLifeActivity(NPC npc, string activity, string? goal = null, string? romanceDateId = null, string? romanceVenue = null)
     {
         string? why = !this.lifeSupported || !this.CanChat || !this.CanRecordLifeEvents(goal is null ? 1 : 2) ? "等生活记录同步完成后再开始吧。"
-            : !this.config.LifeActivities && goal is null ? "生活活动开关尚未开启。"
+            : !this.config.LifeActivities && goal is null && romanceDateId is null ? "生活活动开关尚未开启。"
             : this.lifeActivity is not null ? "已经有一项活动正在进行。"
             : this.lifeContinuation is not null ? "正在等待上一项活动结束。"
             : !LifeActivityRules.Activities.Contains(activity) || activity == "home_dinner" ? "这个活动不能这样开始。"
+            : activity == "romantic_date" && (romanceDateId is null || romanceVenue is null || !RomanceRules.Venues.Contains(romanceVenue)
+                || !this.CanStartRomance(npc)) ? "恋爱关系或约会安排已经改变。"
             : !LifeNear(npc) ? "先走到对方身边吧。"
             : ColdShoulder(npc.Name) || Game1.eventUp || Game1.isFestival() ? "现在不方便一起活动。"
             : !this.config.NpcMeetings || !this.config.MeetingsGoTogether ? "请先启用赴约和一起逛。"
-            : GameState.Hearts(npc) < 8 && !LifeSpouse(npc) ? "再熟悉一些以后一起去吧。"
+            : GameState.Hearts(npc) < 8 && !LifeSpouse(npc) && romanceDateId is null ? "再熟悉一些以后一起去吧。"
             : activity == "spouse_walk" && !LifeSpouse(npc) ? "这项家庭活动需要配偶或室友。"
             : !LifeActivityRules.StartTime(Game1.timeOfDay) ? "现在太早或太晚了，明天再安排吧。"
             : this.meetings.TryGetValue(npc.Name, out Meeting? meeting) && !meeting.Reported && !meeting.Failed
@@ -227,6 +233,7 @@ internal sealed partial class ModEntry
         LifeActivitySession session = new()
         {
             Npc = npc, Movement = movement, Activity = activity, Goal = goal, Nonce = this.loadNonce,
+            RomanceDateId = romanceDateId, RomanceVenue = romanceVenue,
             Day = AbsoluteDay(), LastTime = Game1.timeOfDay, WholeInterval = false,
             CookedSeen = Game1.stats.ItemsCooked, OriginalSpeed = npc.speed, OriginalPasses = npc.farmerPassesThrough,
             RecipesSeen = Game1.player.recipesCooked.Pairs.ToDictionary(pair => pair.Key, pair => pair.Value),
@@ -266,7 +273,8 @@ internal sealed partial class ModEntry
 
     private bool LifeTimeEligible(LifeActivitySession session) => LifeNear(session.Npc) && !Game1.eventUp
         && !Game1.isFestival() && !Game1.isWarping && Game1.activeClickableMenu is null
-        && (session.Activity != "forest_walk" || Game1.currentLocation.Name == "Forest");
+        && (session.Activity != "forest_walk" || Game1.currentLocation.Name == "Forest")
+        && (session.RomanceDateId is null || RomanceRules.CountTime(session.RomanceVenue!, Game1.currentLocation.Name, true, this.Romantic(session.Npc)));
 
     private void LifeActivitiesTimeChanged()
     {
@@ -312,6 +320,11 @@ internal sealed partial class ModEntry
             return;
         }
         NPC npc = activity.Npc;
+        if (activity.RomanceDateId is not null && !this.Romantic(npc))
+        {
+            this.FinishLifeActivity(allowComplete: false, cancelReason: "relationship");
+            return;
+        }
         bool near = LifeNear(npc);
         activity.WholeInterval &= this.LifeTimeEligible(activity);
         this.WatchPlayer(activity.Movement, npc, near);
@@ -437,10 +450,15 @@ internal sealed partial class ModEntry
         this.ReleaseLifeActor(next.Previous);
     }
 
-    private void FinishLifeActivity(bool allowComplete, bool keepActor = false)
+    private void FinishLifeActivity(bool allowComplete, bool keepActor = false, string cancelReason = "interrupted")
     {
         if (this.lifeActivity is not { } activity)
             return;
+        if (activity.RomanceDateId is not null)
+        {
+            this.FinishRomanceDate(activity, allowComplete, cancelReason);
+            return;
+        }
         bool completed = allowComplete && LifeActivityRules.Ready(activity.Activity, activity.Minutes, activity.Count)
             && (activity.Activity != "cooking" || activity.Item is not null);
         if (!this.CanRecordLifeEvents(completed && activity.Goal is not null ? 2 : 1))
@@ -486,7 +504,7 @@ internal sealed partial class ModEntry
         npc.farmerPassesThrough = activity.OriginalPasses;
         npc.controller = null;
         npc.queuedSchedulePaths.Clear();
-        ScheduleStop target = activity.Movement.Spouse
+        ScheduleStop target = activity.Movement.Spouse && LifeSpouse(npc)
             ? new ScheduleStop(Utility.getHomeOfFarmer(Game1.player).NameOrUniqueName, Utility.getHomeOfFarmer(Game1.player).getKitchenStandingSpot(), 2, null, null)
             : OriginalStop(activity.Movement, Game1.timeOfDay);
         this.RouteTo(activity.Movement, npc, target, warpInSight: false);

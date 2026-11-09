@@ -8,7 +8,7 @@ internal static class LifeActivityRules
 {
     internal static readonly HashSet<string> Activities = new(StringComparer.Ordinal)
     {
-        "forest_walk", "foraging", "fishing", "cooking", "spouse_walk", "home_dinner",
+        "forest_walk", "foraging", "fishing", "cooking", "spouse_walk", "home_dinner", "romantic_date",
     };
 
     internal static bool SameSession(string nonce, int day, string currentNonce, int currentDay)
@@ -21,7 +21,7 @@ internal static class LifeActivityRules
 
     internal static bool Ready(string activity, int minutes, int count) => activity switch
     {
-        "forest_walk" or "spouse_walk" => minutes >= 30,
+        "forest_walk" or "spouse_walk" or "romantic_date" => minutes >= 30,
         "foraging" or "fishing" => minutes >= 20 && count >= 1,
         "cooking" or "home_dinner" => count >= 1,
         _ => false,
@@ -80,6 +80,6 @@ internal static class LifeActivityRules
     internal static string Label(string activity) => activity switch
     {
         "forest_walk" => "森林散步", "foraging" => "一起采集", "fishing" => "陪你钓鱼",
-        "cooking" => "一起做饭", "spouse_walk" => "一起出门走走", "home_dinner" => "一起吃饭", _ => "活动",
+        "cooking" => "一起做饭", "spouse_walk" => "一起出门走走", "home_dinner" => "一起吃饭", "romantic_date" => "恋人约会", _ => "活动",
     };
 }

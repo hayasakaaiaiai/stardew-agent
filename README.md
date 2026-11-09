@@ -14,8 +14,11 @@
 - 三条共同目标：莉亚的浮木、威利的鲶鱼、玛鲁的铜锭；明确交付、后续活动、感谢信及两种结局。
 - 真实相处事件带来的心情与信任、失约后的道歉和行动修复、原版好友之间有来源的当面分享。
 - 森林散步、一起采集、陪钓鱼、一起做饭、配偶散步、家庭晚餐。
+- 12 位原版恋爱角色的双向约会：共同选地点、时间与相处方式，真实同行完成后选择回忆重点、回看和重访；每人有独立邀请及地点建议。
 
 生活功能本轮已完成代码与离线检查，尚未运行游戏验收；详见 [完整 spec](docs/npc-life-spec.md)、[验证报告](docs/test-results/2026-11-09-npc-life.md) 和 [全量游戏测试清单](docs/npc-life-game-checklist.md)。
+
+本分支 `codex/npc-romance` 在生活功能上增加上述三项恋爱功能，尚未运行游戏验收。规则、成本与验证范围见 [恋爱 spec](docs/npc-romance-spec.md) 和 [恋爱游戏清单](docs/npc-romance-game-checklist.md)。
 
 H 线硬件陪伴保留在 `hardware-companion`，尚未纳入 main。
 
@@ -43,6 +46,8 @@ npm run bridge
 
 生活功能需要同时更新后端和 Mod，默认开关为 `SharedGoals`、`LifeActivities`、`LifeSocial`。原版台词后选择“浮木的事／材料与共同目标”或“一起做点事”；同步完成后才开放新动作。共同目标首接取需 8 心且非配偶；独立活动需 8 心或配偶／室友，部分活动还有地点、时段和角色条件，详见游戏清单。普通约定与生活活动共用每天 3 次启动额度，正常取消不算失约。
 
+恋爱功能默认开关为 `Romance`，实际出发还需要 `NpcMeetings` 和 `MeetingsGoTogether`。只有原版恋爱、订婚或结婚关系出现新约会入口；8 心朋友和室友不算恋人。原版台词后选“我们的约会与回忆”，或回应 NPC 的邀请；约定当天准时到对方身边选择出发，到选定地图后近距相处满 30 游戏分钟再结束。出发窗口为约定时刻至其后 60 分钟；未出发可改约、取消。完整安装 Mod 时须保留 `assets/romance-profiles.json`。
+
 ## 无游戏、无密钥验证
 
 ```powershell
@@ -55,6 +60,7 @@ npm audit
 node tools/check-repository.ts
 dotnet run --project tests/life-flow
 dotnet run --project tests/life-activity-rules
+dotnet run --project tests/romance-rules
 ```
 
 离线测试不联网、不调用真实模型、不操作游戏存档；demo 使用临时数据库并在退出时清理。`demo:built` 需要先构建。`node:sqlite` 在 Node 24 上会显示实验性提示。

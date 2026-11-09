@@ -2,6 +2,8 @@ namespace StardewAgentBridge;
 
 internal sealed class ModConfig
 {
+    /// <summary>Explicit dates and private shared memories for vanilla romantic relationships.</summary>
+    public bool Romance { get; set; } = true;
     /// <summary>Persistent character goals, explicit delivery, and follow-up activities.</summary>
     public bool SharedGoals { get; set; } = true;
     /// <summary>Explicit companion and household activities using native game menus.</summary>

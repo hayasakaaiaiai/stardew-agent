@@ -1,0 +1,650 @@
+{
+  "measuredOn": "2026-11-09",
+  "tokenizer": "gpt-tokenizer@3.4.0 / o200k_base",
+  "modelCalls": 0,
+  "method": "实际调用 romanceChanges、romanceContext 与 buildMessages，累计每条 message.content 的 o200k token。加载全部 34 张卡后，固定莉亚 8 心、无已看事件、旧印象、春 2 日 14:30 海滩；除历史关系用例外均为 dating。检索与对话历史为空，排除供应商消息封装、后续检索增长与输出；这是 DeepSeek 的近似成本，不是账单 token。",
+  "baselineMethod": "每例增量以相同当前关系、相同角色卡和场景、没有恋爱摘要的 prompt 为基线；friend 与 roommate 各自重渲染角色卡，避免把关系切换成本误归入恋爱摘要。",
+  "profilesComparisonMethod": "仅作成本对照：在同一实际摘要之后额外放入整份 12 人 profiles 紧凑 JSON，保留其引用字段。正式实现不常驻此资料；比较不把完整 profiles 当成能代替真实事件摘要的方案。",
+  "loadedCards": 34,
+  "loadedNpcIds": [
+    "abigail",
+    "alex",
+    "elliott",
+    "emily",
+    "haley",
+    "harvey",
+    "leah",
+    "maru",
+    "penny",
+    "sam",
+    "sebastian",
+    "shane",
+    "caroline",
+    "clint",
+    "demetrius",
+    "dwarf",
+    "evelyn",
+    "george",
+    "gus",
+    "jas",
+    "jodi",
+    "kent",
+    "krobus",
+    "leo",
+    "lewis",
+    "linus",
+    "marnie",
+    "pam",
+    "pierre",
+    "robin",
+    "sandy",
+    "vincent",
+    "willy",
+    "wizard"
+  ],
+  "sourceSha256": {
+    "src/agent/romance.ts": "d42209cafcb1aa5de2f690701b90779c1862ad688e2bc248dfb26b4a6f4470e2",
+    "src/agent/dialogue.ts": "1de7a5054e5f5e9d2f0f924f9e06734bda8199585f3ea3d8eb60e6eebf8aaf4e",
+    "data/npcs/leah.md": "52b2b3cf0d59013cfdfc3949b8e6c3e8ff3338ac803c56881402ca059a4bd607",
+    "data/romance/profiles.json": "2167400d95bbdb839047836a6e56671315a8edad3ee9d4cede67aaad46facbe0"
+  },
+  "baselineTokens": 1897,
+  "profileJsonTokens": 1745,
+  "samples": [
+    {
+      "name": "没有约会记录",
+      "day": 2,
+      "relation": "dating",
+      "events": [],
+      "cue": "",
+      "cueTokens": 0,
+      "baselineTokens": 1897,
+      "totalTokens": 1897,
+      "addedTokens": 0,
+      "residentProfilesComparison": {
+        "totalTokens": 3654,
+        "addedOverCurrentSummary": 1757
+      }
+    },
+    {
+      "name": "已确认计划",
+      "day": 2,
+      "relation": "dating",
+      "events": [
+        {
+          "id": "life-1",
+          "npc": "leah",
+          "day": 1,
+          "kind": "romance.planned",
+          "dateId": "date-1",
+          "dateDay": 2,
+          "time": 1700,
+          "venue": "Forest",
+          "preparation": "quiet",
+          "relation": "dating",
+          "initiator": "player"
+        }
+      ],
+      "cue": "## 两人的约定与回忆\n已商量第 2 天 17:00 在森林约会，准备安静陪伴；尚未出发。\n亲密程度按当前原版关系；不推断排他承诺、同居、婚期或未记录的往事。",
+      "cueTokens": 65,
+      "baselineTokens": 1897,
+      "totalTokens": 1962,
+      "addedTokens": 65,
+      "residentProfilesComparison": {
+        "totalTokens": 3719,
+        "addedOverCurrentSummary": 1757
+      }
+    },
+    {
+      "name": "已改约时间与地点",
+      "day": 2,
+      "relation": "dating",
+      "events": [
+        {
+          "id": "life-1",
+          "npc": "leah",
+          "day": 1,
+          "kind": "romance.planned",
+          "dateId": "date-1",
+          "dateDay": 2,
+          "time": 1700,
+          "venue": "Forest",
+          "preparation": "quiet",
+          "relation": "dating",
+          "initiator": "player"
+        },
+        {
+          "id": "life-2",
+          "npc": "leah",
+          "day": 1,
+          "kind": "romance.rescheduled",
+          "dateId": "date-1",
+          "dateDay": 2,
+          "time": 1400,
+          "venue": "Beach",
+          "preparation": "talk",
+          "relation": "dating",
+          "initiator": "player"
+        }
+      ],
+      "cue": "## 两人的约定与回忆\n已商量第 2 天 14:00 在海滩约会，准备留时间聊聊；尚未出发。\n亲密程度按当前原版关系；不推断排他承诺、同居、婚期或未记录的往事。",
+      "cueTokens": 67,
+      "baselineTokens": 1897,
+      "totalTokens": 1964,
+      "addedTokens": 67,
+      "residentProfilesComparison": {
+        "totalTokens": 3721,
+        "addedOverCurrentSummary": 1757
+      }
+    },
+    {
+      "name": "已出发未完成",
+      "day": 2,
+      "relation": "dating",
+      "events": [
+        {
+          "id": "life-1",
+          "npc": "leah",
+          "day": 1,
+          "kind": "romance.planned",
+          "dateId": "date-1",
+          "dateDay": 2,
+          "time": 1700,
+          "venue": "Forest",
+          "preparation": "quiet",
+          "relation": "dating",
+          "initiator": "player"
+        },
+        {
+          "id": "life-2",
+          "npc": "leah",
+          "day": 1,
+          "kind": "romance.rescheduled",
+          "dateId": "date-1",
+          "dateDay": 2,
+          "time": 1400,
+          "venue": "Beach",
+          "preparation": "talk",
+          "relation": "dating",
+          "initiator": "player"
+        },
+        {
+          "id": "life-3",
+          "npc": "leah",
+          "day": 2,
+          "kind": "romance.started",
+          "dateId": "date-1",
+          "time": 1400,
+          "venue": "Beach",
+          "relation": "dating"
+        }
+      ],
+      "cue": "## 两人的约定与回忆\n已一起出发去海滩约会，打算留时间聊聊；未记录在目的地相处满 30 分钟，不能说已完成。\n亲密程度按当前原版关系；不推断排他承诺、同居、婚期或未记录的往事。",
+      "cueTokens": 74,
+      "baselineTokens": 1897,
+      "totalTokens": 1971,
+      "addedTokens": 74,
+      "residentProfilesComparison": {
+        "totalTokens": 3728,
+        "addedOverCurrentSummary": 1757
+      }
+    },
+    {
+      "name": "实际完成约会",
+      "day": 2,
+      "relation": "dating",
+      "events": [
+        {
+          "id": "life-1",
+          "npc": "leah",
+          "day": 1,
+          "kind": "romance.planned",
+          "dateId": "date-1",
+          "dateDay": 2,
+          "time": 1700,
+          "venue": "Forest",
+          "preparation": "quiet",
+          "relation": "dating",
+          "initiator": "player"
+        },
+        {
+          "id": "life-2",
+          "npc": "leah",
+          "day": 1,
+          "kind": "romance.rescheduled",
+          "dateId": "date-1",
+          "dateDay": 2,
+          "time": 1400,
+          "venue": "Beach",
+          "preparation": "talk",
+          "relation": "dating",
+          "initiator": "player"
+        },
+        {
+          "id": "life-3",
+          "npc": "leah",
+          "day": 2,
+          "kind": "romance.started",
+          "dateId": "date-1",
+          "time": 1400,
+          "venue": "Beach",
+          "relation": "dating"
+        },
+        {
+          "id": "life-4",
+          "npc": "leah",
+          "day": 2,
+          "kind": "romance.completed",
+          "dateId": "date-1",
+          "venue": "Beach",
+          "relation": "dating",
+          "weather": "sunny",
+          "minutes": 30,
+          "friendship": 0
+        }
+      ],
+      "cue": "## 两人的约定与回忆\n最近实际约会：第 2 天，海滩，晴天，相处 30 分钟。\n已记录 1 次完成约会；最早可确认的是第 2 天，不猜交往起始日。\n亲密程度按当前原版关系；不推断排他承诺、同居、婚期或未记录的往事。",
+      "cueTokens": 87,
+      "baselineTokens": 1897,
+      "totalTokens": 1984,
+      "addedTokens": 87,
+      "residentProfilesComparison": {
+        "totalTokens": 3741,
+        "addedOverCurrentSummary": 1757
+      }
+    },
+    {
+      "name": "已选择共同回忆",
+      "day": 2,
+      "relation": "dating",
+      "events": [
+        {
+          "id": "life-1",
+          "npc": "leah",
+          "day": 1,
+          "kind": "romance.planned",
+          "dateId": "date-1",
+          "dateDay": 2,
+          "time": 1700,
+          "venue": "Forest",
+          "preparation": "quiet",
+          "relation": "dating",
+          "initiator": "player"
+        },
+        {
+          "id": "life-2",
+          "npc": "leah",
+          "day": 1,
+          "kind": "romance.rescheduled",
+          "dateId": "date-1",
+          "dateDay": 2,
+          "time": 1400,
+          "venue": "Beach",
+          "preparation": "talk",
+          "relation": "dating",
+          "initiator": "player"
+        },
+        {
+          "id": "life-3",
+          "npc": "leah",
+          "day": 2,
+          "kind": "romance.started",
+          "dateId": "date-1",
+          "time": 1400,
+          "venue": "Beach",
+          "relation": "dating"
+        },
+        {
+          "id": "life-4",
+          "npc": "leah",
+          "day": 2,
+          "kind": "romance.completed",
+          "dateId": "date-1",
+          "venue": "Beach",
+          "relation": "dating",
+          "weather": "sunny",
+          "minutes": 30,
+          "friendship": 0
+        },
+        {
+          "id": "life-5",
+          "npc": "leah",
+          "day": 2,
+          "kind": "romance.remembered",
+          "dateId": "date-1",
+          "sourceId": "life-4",
+          "detail": "company"
+        }
+      ],
+      "cue": "## 两人的约定与回忆\n最近实际约会：第 2 天，海滩，晴天，相处 30 分钟；共同选择记住一起留出的时间。\n已记录 1 次完成约会；最早可确认的是第 2 天，不猜交往起始日。\n亲密程度按当前原版关系；不推断排他承诺、同居、婚期或未记录的往事。",
+      "cueTokens": 96,
+      "baselineTokens": 1897,
+      "totalTokens": 1993,
+      "addedTokens": 96,
+      "residentProfilesComparison": {
+        "totalTokens": 3750,
+        "addedOverCurrentSummary": 1757
+      }
+    },
+    {
+      "name": "旧约会但当前是朋友",
+      "day": 2,
+      "relation": "friend",
+      "events": [
+        {
+          "id": "life-1",
+          "npc": "leah",
+          "day": 1,
+          "kind": "romance.planned",
+          "dateId": "date-1",
+          "dateDay": 2,
+          "time": 1700,
+          "venue": "Forest",
+          "preparation": "quiet",
+          "relation": "dating",
+          "initiator": "player"
+        },
+        {
+          "id": "life-2",
+          "npc": "leah",
+          "day": 1,
+          "kind": "romance.rescheduled",
+          "dateId": "date-1",
+          "dateDay": 2,
+          "time": 1400,
+          "venue": "Beach",
+          "preparation": "talk",
+          "relation": "dating",
+          "initiator": "player"
+        },
+        {
+          "id": "life-3",
+          "npc": "leah",
+          "day": 2,
+          "kind": "romance.started",
+          "dateId": "date-1",
+          "time": 1400,
+          "venue": "Beach",
+          "relation": "dating"
+        },
+        {
+          "id": "life-4",
+          "npc": "leah",
+          "day": 2,
+          "kind": "romance.completed",
+          "dateId": "date-1",
+          "venue": "Beach",
+          "relation": "dating",
+          "weather": "sunny",
+          "minutes": 30,
+          "friendship": 0
+        },
+        {
+          "id": "life-5",
+          "npc": "leah",
+          "day": 2,
+          "kind": "romance.remembered",
+          "dateId": "date-1",
+          "sourceId": "life-4",
+          "detail": "company"
+        }
+      ],
+      "cue": "## 共同往事\n第 2 天在海滩的约会只属于过去。当前关系按原版状态，不把旧回忆说成仍在恋爱，也不执行旧约会。",
+      "cueTokens": 45,
+      "baselineTokens": 1895,
+      "totalTokens": 1940,
+      "addedTokens": 45,
+      "residentProfilesComparison": {
+        "totalTokens": 3697,
+        "addedOverCurrentSummary": 1757
+      }
+    },
+    {
+      "name": "旧约会但当前是室友",
+      "day": 2,
+      "relation": "roommate",
+      "events": [
+        {
+          "id": "life-1",
+          "npc": "leah",
+          "day": 1,
+          "kind": "romance.planned",
+          "dateId": "date-1",
+          "dateDay": 2,
+          "time": 1700,
+          "venue": "Forest",
+          "preparation": "quiet",
+          "relation": "dating",
+          "initiator": "player"
+        },
+        {
+          "id": "life-2",
+          "npc": "leah",
+          "day": 1,
+          "kind": "romance.rescheduled",
+          "dateId": "date-1",
+          "dateDay": 2,
+          "time": 1400,
+          "venue": "Beach",
+          "preparation": "talk",
+          "relation": "dating",
+          "initiator": "player"
+        },
+        {
+          "id": "life-3",
+          "npc": "leah",
+          "day": 2,
+          "kind": "romance.started",
+          "dateId": "date-1",
+          "time": 1400,
+          "venue": "Beach",
+          "relation": "dating"
+        },
+        {
+          "id": "life-4",
+          "npc": "leah",
+          "day": 2,
+          "kind": "romance.completed",
+          "dateId": "date-1",
+          "venue": "Beach",
+          "relation": "dating",
+          "weather": "sunny",
+          "minutes": 30,
+          "friendship": 0
+        },
+        {
+          "id": "life-5",
+          "npc": "leah",
+          "day": 2,
+          "kind": "romance.remembered",
+          "dateId": "date-1",
+          "sourceId": "life-4",
+          "detail": "company"
+        }
+      ],
+      "cue": "## 共同往事\n第 2 天在海滩的约会只属于过去。当前关系按原版状态，不把旧回忆说成仍在恋爱，也不执行旧约会。",
+      "cueTokens": 45,
+      "baselineTokens": 1896,
+      "totalTokens": 1941,
+      "addedTokens": 45,
+      "residentProfilesComparison": {
+        "totalTokens": 3698,
+        "addedOverCurrentSummary": 1757
+      }
+    },
+    {
+      "name": "已确认重访计划",
+      "day": 2,
+      "relation": "dating",
+      "events": [
+        {
+          "id": "life-1",
+          "npc": "leah",
+          "day": 1,
+          "kind": "romance.planned",
+          "dateId": "date-1",
+          "dateDay": 2,
+          "time": 1700,
+          "venue": "Forest",
+          "preparation": "quiet",
+          "relation": "dating",
+          "initiator": "player"
+        },
+        {
+          "id": "life-2",
+          "npc": "leah",
+          "day": 1,
+          "kind": "romance.rescheduled",
+          "dateId": "date-1",
+          "dateDay": 2,
+          "time": 1400,
+          "venue": "Beach",
+          "preparation": "talk",
+          "relation": "dating",
+          "initiator": "player"
+        },
+        {
+          "id": "life-3",
+          "npc": "leah",
+          "day": 2,
+          "kind": "romance.started",
+          "dateId": "date-1",
+          "time": 1400,
+          "venue": "Beach",
+          "relation": "dating"
+        },
+        {
+          "id": "life-4",
+          "npc": "leah",
+          "day": 2,
+          "kind": "romance.completed",
+          "dateId": "date-1",
+          "venue": "Beach",
+          "relation": "dating",
+          "weather": "sunny",
+          "minutes": 30,
+          "friendship": 0
+        },
+        {
+          "id": "life-5",
+          "npc": "leah",
+          "day": 2,
+          "kind": "romance.remembered",
+          "dateId": "date-1",
+          "sourceId": "life-4",
+          "detail": "company"
+        },
+        {
+          "id": "life-6",
+          "npc": "leah",
+          "day": 2,
+          "kind": "romance.planned",
+          "dateId": "date-6",
+          "dateDay": 3,
+          "time": 1400,
+          "venue": "Beach",
+          "preparation": "quiet",
+          "relation": "dating",
+          "initiator": "npc",
+          "sourceId": "life-4"
+        }
+      ],
+      "cue": "## 两人的约定与回忆\n已商量第 3 天 14:00 在海滩约会，准备安静陪伴；尚未出发。\n最近实际约会：第 2 天，海滩，晴天，相处 30 分钟；共同选择记住一起留出的时间。\n已记录 1 次完成约会；最早可确认的是第 2 天，不猜交往起始日。\n亲密程度按当前原版关系；不推断排他承诺、同居、婚期或未记录的往事。",
+      "cueTokens": 125,
+      "baselineTokens": 1897,
+      "totalTokens": 2022,
+      "addedTokens": 125,
+      "residentProfilesComparison": {
+        "totalTokens": 3779,
+        "addedOverCurrentSummary": 1757
+      }
+    },
+    {
+      "name": "仅旧计划但当前是朋友",
+      "day": 2,
+      "relation": "friend",
+      "events": [
+        {
+          "id": "life-1",
+          "npc": "leah",
+          "day": 1,
+          "kind": "romance.planned",
+          "dateId": "date-1",
+          "dateDay": 2,
+          "time": 1700,
+          "venue": "Forest",
+          "preparation": "quiet",
+          "relation": "dating",
+          "initiator": "player"
+        }
+      ],
+      "cue": "## 过去的安排\n以前的约会安排只属于过去，没有已完成的约会记录。当前关系按原版状态，不把旧安排说成仍在交往，也不执行旧约会。",
+      "cueTokens": 45,
+      "baselineTokens": 1895,
+      "totalTokens": 1940,
+      "addedTokens": 45,
+      "residentProfilesComparison": {
+        "totalTokens": 3697,
+        "addedOverCurrentSummary": 1757
+      }
+    },
+    {
+      "name": "仅旧计划但当前是室友",
+      "day": 2,
+      "relation": "roommate",
+      "events": [
+        {
+          "id": "life-1",
+          "npc": "leah",
+          "day": 1,
+          "kind": "romance.planned",
+          "dateId": "date-1",
+          "dateDay": 2,
+          "time": 1700,
+          "venue": "Forest",
+          "preparation": "quiet",
+          "relation": "dating",
+          "initiator": "player"
+        }
+      ],
+      "cue": "## 过去的安排\n以前的约会安排只属于过去，没有已完成的约会记录。当前关系按原版状态，不把旧安排说成仍在交往，也不执行旧约会。",
+      "cueTokens": 45,
+      "baselineTokens": 1896,
+      "totalTokens": 1941,
+      "addedTokens": 45,
+      "residentProfilesComparison": {
+        "totalTokens": 3698,
+        "addedOverCurrentSummary": 1757
+      }
+    },
+    {
+      "name": "旧计划已过期未确认完成",
+      "day": 2,
+      "relation": "dating",
+      "events": [
+        {
+          "id": "life-1",
+          "npc": "leah",
+          "day": 1,
+          "kind": "romance.planned",
+          "dateId": "date-1",
+          "dateDay": 1,
+          "time": 1700,
+          "venue": "Forest",
+          "preparation": "quiet",
+          "relation": "dating",
+          "initiator": "player"
+        }
+      ],
+      "cue": "## 两人的约定与回忆\n第 1 天的旧约会安排已过期；这次未记录完成，不继续执行，也不推断失约或惩罚。\n亲密程度按当前原版关系；不推断排他承诺、同居、婚期或未记录的往事。",
+      "cueTokens": 70,
+      "baselineTokens": 1897,
+      "totalTokens": 1967,
+      "addedTokens": 70,
+      "residentProfilesComparison": {
+        "totalTokens": 3724,
+        "addedOverCurrentSummary": 1757
+      }
+    }
+  ]
+}

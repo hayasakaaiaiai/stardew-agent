@@ -7,7 +7,8 @@ import { FRIENDSHIP_DAY_MAX, FRIENDSHIP_DAY_MIN } from '../agent/friendship.ts';
 import { GIFT_TASTES, type GiftTaste } from '../agent/gifts.ts';
 import { MAX_STOPS, type ScheduleStop } from '../agent/schedule.ts';
 import type { DeliveredLetter } from '../agent/letters.ts';
-import { LIFE_GOAL_DETAILS, parseLifeEvents, type LifeEvent } from '../agent/life.ts';
+import { LIFE_GOAL_DETAILS } from '../agent/life.ts';
+import { parseLifeJournal, type LifeJournalEvent } from '../agent/life-journal.ts';
 import type { Helped, MineTrip, Outing } from '../agent/meetings.ts';
 import type { SceneLine } from '../agent/scene.ts';
 import type { Relation } from '../services/roster/index.ts';
@@ -16,7 +17,7 @@ export const PROTOCOL_VERSION = 3;
 
 export const LIFE_ACTIVITIES = {
   forest_walk: '森林散步', foraging: '一起采集', fishing: '陪钓鱼', cooking: '一起做饭',
-  spouse_walk: '配偶外出散步', home_dinner: '家庭晚餐',
+  spouse_walk: '配偶外出散步', home_dinner: '家庭晚餐', romantic_date: '恋人约会',
 } as const;
 export interface LifeActivitySnapshot {
   activity: keyof typeof LIFE_ACTIVITIES;
@@ -92,7 +93,7 @@ export type ModMessage =
   | ({ type: 'save.saving'; commit: SavePointer } & Envelope)
   | ({ type: 'save.saved'; commitId: string; date: GameDate } & Envelope)
   | ({ type: 'title.returned' } & Envelope)
-  | ({ type: 'life.sync'; events: LifeEvent[]; final: boolean } & Envelope)
+  | ({ type: 'life.sync'; events: LifeJournalEvent[]; final: boolean } & Envelope)
   | ({
     type: 'talk.open';
     /** The game's internal name, e.g. "Abigail". */
@@ -168,7 +169,7 @@ export interface AmbientNpc {
 }
 
 export type BackendMessage =
-  | { type: 'hello'; protocol: number; lifeProtocol?: 1 }
+  | { type: 'hello'; protocol: number; lifeProtocol?: 1; romanceProtocol?: 1 }
   | ({ type: 'save.ready'; day: number } & Envelope)
   | ({ type: 'life.ready'; day: number } & Envelope)
   | ({ type: 'ack' } & Envelope)
@@ -318,7 +319,7 @@ export function parseModMessage(raw: string): ModMessage {
     case 'life.sync':
       envelope();
       if (typeof data.final !== 'boolean') fail('final must be a boolean');
-      try { data.events = parseLifeEvents(data.events); }
+      try { data.events = parseLifeJournal(data.events); }
       catch (error) { fail(error instanceof Error ? error.message : String(error)); }
       break;
     case 'day.started':
@@ -356,6 +357,8 @@ export function parseModMessage(raw: string): ModMessage {
             || LIFE_GOAL_DETAILS[life.goal]!.npc !== (data.npc as string).toLowerCase()
             || LIFE_GOAL_DETAILS[life.goal]!.activity !== life.activity)))
           fail('lifeActivity is invalid');
+        if (life?.activity === 'romantic_date' && !['dating', 'engaged', 'married'].includes(data.relation as string))
+          fail('a romantic activity requires a current romantic relationship');
       }
       world(data.world);
       break;

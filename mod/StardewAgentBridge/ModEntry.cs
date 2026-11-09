@@ -66,6 +66,7 @@ internal sealed partial class ModEntry : Mod
     public override void Entry(IModHelper helper)
     {
         this.config = helper.ReadConfig<ModConfig>();
+        this.LoadRomanceProfiles();
         this.ConfigureMemoryTest();
         this.bridge = new BridgeClient(new Uri(this.config.BackendUrl), this.Monitor, this.ModManifest.Version.ToString());
 
@@ -159,7 +160,7 @@ internal sealed partial class ModEntry : Mod
         this.TickCompanions(e);
         this.TickOutings(e);
         this.TickLifeActivities(e);
-        if (e.IsMultipleOf(60)) this.DeliverLifeLetters();
+        if (e.IsMultipleOf(60)) { this.TickRomance(); this.DeliverLifeLetters(); }
         this.TickFestivalMeetings();
         this.TickGifts();
         this.TickTown();
@@ -225,11 +226,15 @@ internal sealed partial class ModEntry : Mod
         bool existingOnly = !this.CanChat;
         if (existingOnly && !this.HasLifeActivityExit(npc))
             return;
+        if (!existingOnly && this.TryOfferRomanceInvitation(npc))
+            return;
         List<Response> options = new();
         if (!existingOnly)
             options.Add(new Response("chat", "继续聊"));
         if (!existingOnly && this.lifeSupported && this.HasLifeGoalEntry(npc))
             options.Add(new Response("goal", npc.Name == "Leah" ? "浮木的事" : "材料与共同目标"));
+        if (!existingOnly && this.HasRomanceEntry(npc))
+            options.Add(new Response("romance", "我们的约会与回忆"));
         if (this.HasLifeActivityExit(npc) || !existingOnly && this.lifeSupported && (this.config.LifeActivities || this.config.LifeSocial))
             options.Add(new Response("life", existingOnly ? "结束当前活动" : "一起做点事"));
         options.Add(new Response("leave", "离开"));
@@ -241,6 +246,7 @@ internal sealed partial class ModEntry : Mod
                 if (nonce != this.loadNonce || !this.activeLoad) return;
                 if (answer == "chat") this.startFor = npc;
                 else if (answer == "goal") this.lifeMenuNext = () => this.ShowLifeGoal(npc);
+                else if (answer == "romance") this.lifeMenuNext = () => this.ShowRomance(npc);
                 else if (answer == "life") this.lifeMenuNext = () => this.ShowLifeActivities(npc);
             });
     }

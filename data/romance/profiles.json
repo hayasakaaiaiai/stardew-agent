@@ -1,0 +1,158 @@
+[
+  {
+    "id": "abigail",
+    "name": "阿比盖尔",
+    "opening": "嘿，想留一点时间给我们？去山里，或者在镇里走走，你挑一个。",
+    "invitation": "嘿，我想和你一起出去走走。山里和镇里都行，我们挑个时间？",
+    "closing": "嘿，今天这段时间挺值得记住的。下次还一起出来吧。",
+    "venues": [
+      { "map": "Mountain", "label": "去山间走走" },
+      { "map": "Town", "label": "在镇里慢慢逛" }
+    ],
+    "focus": "talk",
+    "references": ["data/npcs/abigail.md", "reference/wiki/zh/Abigail.md"]
+  },
+  {
+    "id": "alex",
+    "name": "亚历克斯",
+    "opening": "好啊！去海边走走怎么样？在镇里待一会儿也行，这次我不急着赶路。",
+    "invitation": "嘿，我想给我们留点时间。去海边，或者在镇里走走，你觉得呢？",
+    "closing": "和你这样待一会儿，感觉挺好。下次也把我叫上。",
+    "venues": [
+      { "map": "Beach", "label": "一起去海边散步" },
+      { "map": "Town", "label": "在镇里放慢脚步" }
+    ],
+    "focus": "talk",
+    "references": ["data/npcs/alex.md", "reference/wiki/zh/Alex.md"]
+  },
+  {
+    "id": "elliott",
+    "name": "艾利欧特",
+    "opening": "愿意。海边和林间都很好，只要能留些时间，和你慢慢走。",
+    "invitation": "我想留一段不匆忙的时光给我们。去听听海，或者走进林间，如何？",
+    "closing": "这段相处值得慢慢回味。我很高兴，今天身边的人是你。",
+    "venues": [
+      { "map": "Beach", "label": "沿海边慢慢走" },
+      { "map": "Forest", "label": "去林间看看风景" }
+    ],
+    "focus": "talk",
+    "references": ["data/npcs/elliott.md", "reference/wiki/zh/Elliott.md"]
+  },
+  {
+    "id": "emily",
+    "name": "艾米丽",
+    "opening": "好呀！我们可以在镇里散散步，也可以去林子里透透气。你想选哪一个？",
+    "invitation": "我想和你一起出去透透气。镇里或森林都可以，我们商量个时间吧！",
+    "closing": "能和你一起留出这段时间，我很开心。我们把它好好记住吧。",
+    "venues": [
+      { "map": "Town", "label": "在镇里一起散步" },
+      { "map": "Forest", "label": "去森林里透透气" }
+    ],
+    "focus": "talk",
+    "references": ["data/npcs/emily.md", "reference/wiki/zh/Emily.md"]
+  },
+  {
+    "id": "haley",
+    "name": "海莉",
+    "opening": "可以呀。海边有好多好看的风景，不过，在镇里慢慢走走也不错。和你一起。",
+    "invitation": "我想和你一起看看风景。去海边怎么样？你想在镇里走走也可以。",
+    "closing": "今天挺好的……我说的是，和你待在一起。别笑。",
+    "venues": [
+      { "map": "Beach", "label": "一起看看海边风景" },
+      { "map": "Town", "label": "在镇里慢慢走" }
+    ],
+    "focus": "talk",
+    "references": ["data/npcs/haley.md", "reference/wiki/zh/Haley.md"]
+  },
+  {
+    "id": "harvey",
+    "name": "哈维",
+    "opening": "呃……我很愿意。在镇里走走，或者去森林透透气，都很好。把时间安排好，我们就不用着急。",
+    "invitation": "那个……我想约你一起散散步。镇里或森林，你更想去哪边？我们找个方便的时间。",
+    "closing": "谢谢你陪我。我现在轻松多了，也很高兴我们认真留了这段时间。",
+    "venues": [
+      { "map": "Town", "label": "在镇里轻松散步" },
+      { "map": "Forest", "label": "去森林换个环境" }
+    ],
+    "focus": "talk",
+    "references": ["data/npcs/harvey.md", "reference/wiki/zh/Harvey.md", "reference/wiki/en/Harvey.md"]
+  },
+  {
+    "id": "leah",
+    "name": "莉亚",
+    "opening": "好啊。在林子里慢慢走，或者去海边看看，都很好。挑个你不忙的时候吧。",
+    "invitation": "我想和你一起出去看看风景。森林或海边都可以，等你有空，我们留一点时间给彼此。",
+    "closing": "这样慢慢待一会儿，真好。谢谢你把时间留给我们。",
+    "venues": [
+      { "map": "Forest", "label": "在林间慢慢走" },
+      { "map": "Beach", "label": "一起看看海边" }
+    ],
+    "focus": "quiet",
+    "references": ["data/npcs/leah.md", "reference/wiki/zh/Leah.md"]
+  },
+  {
+    "id": "maru",
+    "name": "玛鲁",
+    "opening": "好啊！去山里看看，还是在镇上边走边聊？这回我想多留点时间给你。",
+    "invitation": "嘿，我们找个时间一起走走吧？山里和镇上都可以，我也想听听你的想法。",
+    "closing": "有些事情不需要弄明白每个原理。像现在这样开心，就很好。",
+    "venues": [
+      { "map": "Mountain", "label": "一起去山间走走" },
+      { "map": "Town", "label": "在镇里边走边聊" }
+    ],
+    "focus": "talk",
+    "references": ["data/npcs/maru.md", "reference/wiki/zh/Maru.md"]
+  },
+  {
+    "id": "penny",
+    "name": "潘妮",
+    "opening": "嗯……我很愿意。镇里或森林都可以，我们找个不赶时间的时候吧。",
+    "invitation": "那个……你有空时，愿意和我一起散散步吗？在镇里，或者去森林，都很好。",
+    "closing": "谢谢你……这段时间，我会好好记着的。",
+    "venues": [
+      { "map": "Town", "label": "在镇里安静走走" },
+      { "map": "Forest", "label": "去森林留一段闲暇" }
+    ],
+    "focus": "quiet",
+    "references": ["data/npcs/penny.md", "reference/wiki/zh/Penny.md"]
+  },
+  {
+    "id": "sam",
+    "name": "山姆",
+    "opening": "嘿，这主意不错！去海边，或者进林子里逛逛？你来挑，我腾出时间。",
+    "invitation": "嘿，我们出去走走怎么样？海边和森林，你选一个，我想和你一起待会儿。",
+    "closing": "嘿，今天过得挺不错！下次轮到我找你，可别忘了。",
+    "venues": [
+      { "map": "Beach", "label": "去海边一起逛逛" },
+      { "map": "Forest", "label": "一起去林子里走走" }
+    ],
+    "focus": "talk",
+    "references": ["data/npcs/sam.md", "reference/wiki/zh/Sam.md"]
+  },
+  {
+    "id": "sebastian",
+    "name": "塞巴斯蒂安",
+    "opening": "……可以。山里和海边都行，找个安静的地方待一会儿吧。",
+    "invitation": "……我想和你出去待一会儿。山里，或者海边。你有空的时候就好。",
+    "closing": "……和你待着，挺自在的。这段时间我会记得。",
+    "venues": [
+      { "map": "Mountain", "label": "去山间安静待一会儿" },
+      { "map": "Beach", "label": "一起去海边走走" }
+    ],
+    "focus": "quiet",
+    "references": ["data/npcs/sebastian.md", "reference/wiki/zh/Sebastian.md"]
+  },
+  {
+    "id": "shane",
+    "name": "谢恩",
+    "opening": "行。去林子里，或者在镇里走走。别弄得太隆重，我们待一会儿就好。",
+    "invitation": "呃……要不要找个时间出去走走？森林或镇里都行，不用特意准备什么。",
+    "closing": "呃……今天挺好的。没有什么大道理，就是挺好。",
+    "venues": [
+      { "map": "Forest", "label": "在森林里慢慢走" },
+      { "map": "Town", "label": "去镇里走走透气" }
+    ],
+    "focus": "quiet",
+    "references": ["data/npcs/shane.md", "reference/wiki/zh/Shane.md"]
+  }
+]
