@@ -1,6 +1,6 @@
 # 三类生活功能 Windows 复核与独立游戏脚本
 
-日期：2026-11-09。验收基线：远端 `codex/npc-shared-goals / d7b11a3`（功能提交 `c68efe2`）。本地分支：`codex/npc-life-windows-tests`，工作树 `E:\stardew-agent-life-tests`。用户明确要求检查新推送、测试并写脚本进入游戏；此轮采用现有隔离验收机制，不替换正常安装、不合并 main、不推送。
+日期：2026-11-09。验收基线：远端 `codex/npc-shared-goals / d7b11a3`（功能提交 `c68efe2`）。验收分支：`codex/npc-life-windows-tests`，工作树 `E:\stardew-agent-life-tests`。用户明确要求检查新推送、测试并写脚本进入游戏；此轮采用现有隔离验收机制，不替换正常安装、不合并 main。验收完成后，用户明确授权推送；修复提交 `71e5385` 已推送到同名远端分支，远端完整 SHA 与本地一致。
 
 ## 1. 离线检查
 

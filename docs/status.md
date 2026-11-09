@@ -1,6 +1,6 @@
 # 项目现状
 
-> 更新于 2026-11-09（`codex/npc-life-windows-tests` Windows 验收分支）。已检查新推送 `d7b11a3`，修复三处问题并编写独立游戏脚本；离线检查及新增功能 416 项原生断言通过，范围与首次失败见 [Windows 报告](test-results/2026-11-09-npc-life-windows.md)。未部署正常安装、未推送、未合并 main。
+> 更新于 2026-11-09（`codex/npc-life-windows-tests` Windows 验收分支）。已检查新推送 `d7b11a3`，修复三处问题并编写独立游戏脚本；离线检查及新增功能 416 项原生断言通过，范围与首次失败见 [Windows 报告](test-results/2026-11-09-npc-life-windows.md)。修复提交 `71e5385` 已按用户授权推送；未部署正常安装、未合并 main。
 
 ## 1. 这个项目在做什么
 
@@ -34,7 +34,7 @@ Mac 开发记录见 [生活功能验证报告](test-results/2026-11-09-npc-life.
 |---|---|
 | `main` | 当前单人游戏实现、非 H 线功能及 Windows 修复、验收入口和本轮全仓审查修复 |
 | `codex/npc-shared-goals` | 从 `main / 789b911` 建立；三类生活功能与测试、spec 和用户全量游戏清单。目录 `/Users/a11/Documents/ChatGPT/stardew-agent-shared-goals`；用户已授权推送的 Windows 验收分支，未合并 main |
-| `codex/npc-life-windows-tests` | 从远端 `d7b11a3` 建立；目录 `E:\stardew-agent-life-tests`，保存顺序、日限和控制器修复及独立游戏验收，尚未推送／合并 |
+| `codex/npc-life-windows-tests` | 从远端 `d7b11a3` 建立；目录 `E:\stardew-agent-life-tests`，保存顺序、日限和控制器修复及独立游戏验收，`71e5385` 已推送，尚未合并 |
 | `hardware-companion` | H 线硬件陪伴，暂停；本轮保持原提交 `6e92320` |
 
 历史功能分支和验收分支在 2026-10-24 的内容核对、合并与验证后清理，提交历史保留在 main。该轮删除 51 条远端、23 条本地历史分支，当时两边只剩 main 和 hardware-companion；这不是本次本地分支清单。清理前的 refs 和完整 Git bundle 保存在本机 `.runtime/repository-publication-20261024/`；旧分支对应的设计、测试记录仍在仓库。
@@ -108,7 +108,7 @@ powershell -NoProfile -File tools/test-game-real-meetings.ps1 -Section live
 
 ## 7. 下一步
 
-0. **生活功能验收后的下一步**：在本 Windows 验收分支复查报告和未覆盖的 [清单](npc-life-game-checklist.md) 项目；自然体验、配置组合和自由模型内容继续单列验证。推送及合并 main 仍需用户另行授权。
+0. **生活功能验收后的下一步**：在本 Windows 验收分支复查报告和未覆盖的 [清单](npc-life-game-checklist.md) 项目；自然体验、配置组合和自由模型内容继续单列验证。验收分支已按用户授权推送，合并 main 仍需用户另行授权。
 1. 处理真实游戏留下的三处模型内容问题：主动邀约只寒暄、取消后编造等候、花舞节夜间漏约。保留原始失败；改变 prompt 或放宽接受词表前，继续按用户决定和实测 token 数评估。
 2. 暂不放宽含蓄答应的保守过滤；没有明确确认的约定可能漏记，通过 HUD 让玩家再确认。不得把固定回复通过写成自由模型通过。
 3. 持续观察自然日程、全角色剧情和自由内容。多人、全 NPC、随机矿层、节日完整自然流程没有新增全面覆盖。
