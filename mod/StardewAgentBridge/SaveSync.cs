@@ -53,7 +53,7 @@ internal sealed partial class ModEntry
     private bool memoryReady;
     private bool syncFailed;
 
-    private bool CanChat => this.activeLoad && this.RomanceCompatible && this.StoriesCompatible && this.LongGoalsCompatible && this.GoalResultsCompatible && (this.lifeReady || !this.lifeSupported) && this.memoryReady && !this.syncFailed && this.lifecycle.Count == 0
+    private bool CanChat => this.activeLoad && this.RomanceCompatible && this.StoriesCompatible && this.CasesCompatible && this.LongGoalsCompatible && this.GoalResultsCompatible && (this.lifeReady || !this.lifeSupported) && this.memoryReady && !this.syncFailed && this.lifecycle.Count == 0
         && this.bridge.IsConnected && this.bridge.Generation == this.announcedGeneration;
 
     private void OnSaveLoaded()
@@ -99,6 +99,7 @@ internal sealed partial class ModEntry
     private void OnDayStarted()
     {
         this.ClearStoryIntervals();
+        this.ClearCaseClocks();
         this.ClearLongGoalIntervals();
         this.ClearBubbles();
         this.ClearScenes();

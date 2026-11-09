@@ -18,10 +18,11 @@
 - 小镇调查和长期目标：格斯的真实包裹调查／归还、潘妮的观察题、艾利欧特的短文。两条项目可独立推进，实地观察和明确建议会影响可阅读的成品。
 - 七位 NPC 的三章节长期目标：至少六个实际工作日，16 个观察章节、5 个真实材料章节；分章选择影响完整稿页，最终合成可以反复阅读的作品。
 - 合册后的成果实践：安全近处提醒、七种实地路线或真实钓鱼／采集、明确完成的回执、次日回访与可重读批注。
+- 四条新调查：卡洛琳的路线起点、克林特的矿石标签、艾芙琳的跨日记录、玛妮的见面场景。每案两份当面证词、两项真实核验、个人笔记和两种完整结案。
 
 生活功能本轮已完成代码与离线检查，尚未运行游戏验收；详见 [完整 spec](docs/npc-life-spec.md)、[验证报告](docs/test-results/2026-11-09-npc-life.md) 和 [全量游戏测试清单](docs/npc-life-game-checklist.md)。
 
-验收版 `codex/npc-long-goals / 80bdaf4` 已推送，完成七位角色长期目标的代码与离线检查，尚未运行游戏验收；见 [长期目标 spec](docs/npc-long-goals-spec.md)、[验证报告](docs/test-results/2026-11-09-npc-long-goals.md) 和 [扩展游戏清单](docs/npc-long-goals-game-checklist.md)。上一版 `codex/npc-town-life / b281ed1` 已推送交给 Windows 验收，见 [小镇故事 spec](docs/npc-town-stories-spec.md)、[验证报告](docs/test-results/2026-11-09-npc-town-stories.md) 和 [游戏清单](docs/npc-town-stories-game-checklist.md)。本分支 `codex/npc-project-practice` 已完成成果提醒、七种共同实践和次日回访的代码与离线检查，现作为 Windows 验收分支（功能提交 `3b2c0ea`），尚未游戏验收，见 [实践 spec](docs/npc-project-practice-spec.md)、[验证报告](docs/test-results/2026-11-09-npc-project-practice.md) 和 [新游戏清单](docs/npc-project-practice-game-checklist.md)。此前恋爱规则与验收范围见 [恋爱 spec](docs/npc-romance-spec.md) 和 [恋爱游戏清单](docs/npc-romance-game-checklist.md)。
+成果实践验收版 `codex/npc-project-practice / a1389a4` 已按用户要求推送，包含此前生活、恋爱、小镇故事、七人长期目标和成果实践；Windows 按 [实践清单](docs/npc-project-practice-game-checklist.md) 验收，技术记录见 [实践报告](docs/test-results/2026-11-09-npc-project-practice.md)。本分支 `codex/npc-town-cases` 继续完成四条调查扩展，本地提交、尚未推送，见 [调查 spec](docs/npc-town-cases-spec.md)、[验证报告](docs/test-results/2026-11-09-npc-town-cases.md) 和 [四案游戏清单](docs/npc-town-cases-game-checklist.md)。新功能均未做真人游戏验收，未合并 main；此前各阶段证据与清单见 [项目现状](docs/status.md)。
 
 H 线硬件陪伴保留在 `hardware-companion`，尚未纳入 main。
 
@@ -55,7 +56,9 @@ npm run bridge
 
 长线扩展默认开关为 `LongGoals`，在潘妮、艾利欧特、莉亚、玛鲁、罗宾、威利或莱纳斯的“长期打算”中开始。潘妮和艾利欧特须先完成各自前作，次日再开启续篇。F8 同时列出当前章节观察；材料章节在本人面前明确交齐并消耗，独立于送礼。每章两轮不同日的实际工作各 30 分钟，最快六个工作日完成三章；不提供贡献仍会推进。每章有两种可选方向和默认稿页，完成后可回看章节及最终合册。安装保留 `assets/long-goals.json`，后端和 Mod 一起更新；含长线记录的存档需要本版 Mod 和支持长线的后端。
 
-成果实践默认开关 `ProjectPractice`。合册完成后，在本人“长期打算 → 成果实践与回访”选择计划；需要8心或配偶／室友，9–19点开始，与普通约定和活动共用每天3次额度。到指定场所真实同行，在角色身边交谈可记录位置、完成或取消；威利要求真实钓获，莱纳斯要求真实采集。全部记录点与时长满足后，必须明确选收尾才完成，次日可回访一次；取消可重试，成功完成不可重复。已有回执可分页重读并查看来源合册。完整安装保留 `assets/goal-results.json`，后端和Mod配套更新；首条实践或提醒记录使生活存档升级3，旧版会保留原记录并拒绝写入。
+成果实践默认开关 `ProjectPractice`。合册完成后，在本人“长期打算 → 成果实践与回访”选择计划；需要8心或配偶／室友，9–19点开始，与普通约定和活动共用每天3次额度。到指定场所真实同行，在角色身边交谈可记录位置、完成或取消；威利要求真实钓获，莱纳斯要求真实采集。全部记录点与时长满足后，必须明确选收尾才完成，次日可回访一次；取消可重试，成功完成不可重复。已有回执可分页重读并查看来源合册。完整安装保留 `assets/goal-results.json`，后端和Mod配套更新；首条实践或提醒记录使生活存档至少为3（已有4不降级），旧版会保留原记录并拒绝写入。
+
+调查扩展默认开关 `TownCases`，独立于 `TownStories`。与卡洛琳、克林特、艾芙琳或玛妮交谈后选“镇上的事”明确开案；两位证人分别当面询问，按 F8 在指定地点正常观察完整 10 游戏分钟后核验。矿石只查看真实背包、不消耗；艾芙琳复查须更后游戏日，相同天气也可；玛妮必须本人同图、清醒可见且在八格内。回看个人笔记不自动汇报，明确汇报或最终结案才让本人知道现场。无心数门槛、期限或奖励，不占同行次数。关闭开关保留阅读。安装需保留 `assets/town-cases.json`；首条调查记录升级生活存档至 4，须后端与 Mod 配套更新。
 
 ## 无游戏、无密钥验证
 
@@ -72,6 +75,8 @@ dotnet run --project tests/life-activity-rules
 dotnet run --project tests/romance-rules
 dotnet run --project tests/town-story-rules
 dotnet run --project tests/long-goal-rules
+dotnet run --project tests/goal-result-rules
+dotnet run --project tests/town-case-rules
 ```
 
 离线测试不联网、不调用真实模型、不操作游戏存档；demo 使用临时数据库并在退出时清理。`demo:built` 需要先构建。`node:sqlite` 在 Node 24 上会显示实验性提示。

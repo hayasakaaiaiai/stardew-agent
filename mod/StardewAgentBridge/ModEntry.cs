@@ -68,6 +68,7 @@ internal sealed partial class ModEntry : Mod
         this.config = helper.ReadConfig<ModConfig>();
         this.LoadRomanceProfiles();
         this.LoadTownStories();
+        this.LoadTownCases();
         this.LoadLongGoals();
         this.LoadGoalResults();
         this.ConfigureMemoryTest();
@@ -85,12 +86,12 @@ internal sealed partial class ModEntry : Mod
         helper.Events.GameLoop.Saving += (_, _) => this.OnSaving();
         helper.Events.GameLoop.Saved += (_, _) => this.OnSaved();
         helper.Events.GameLoop.ReturnedToTitle += (_, _) => this.OnReturnedToTitle();
-        helper.Events.GameLoop.TimeChanged += (_, _) => { this.OnTimeChanged(); this.LifeActivitiesTimeChanged(); this.StoryTimeChanged(); this.LongGoalsTimeChanged(); };
+        helper.Events.GameLoop.TimeChanged += (_, _) => { this.OnTimeChanged(); this.LifeActivitiesTimeChanged(); this.StoryTimeChanged(); this.LongGoalsTimeChanged(); this.TickCaseClocks(boundary: true); };
         // Dungeon levels are dropped overnight with whoever is in them (MineCompanion.cs).
         helper.Events.GameLoop.DayEnding += (_, _) => this.ReleaseCompanions();
         helper.Events.GameLoop.DayEnding += (_, _) => this.ReleaseOutings();
         helper.Events.GameLoop.UpdateTicking += (_, _) => this.RescueBeforeUpdate();
-        helper.Events.Player.Warped += (_, e) => { this.OnWarped(e); this.LifeActivitiesWarped(e); };
+        helper.Events.Player.Warped += (_, e) => { this.OnWarped(e); this.LifeActivitiesWarped(e); if (e.IsLocalPlayer) this.ClearCaseClocks(); };
         helper.Events.GameLoop.UpdateTicked += this.OnUpdateTicked;
         helper.Events.Display.MenuChanged += this.OnMenuChanged;
         helper.Events.Content.AssetRequested += this.OnAssetRequested;
@@ -167,6 +168,7 @@ internal sealed partial class ModEntry : Mod
         this.TickOutings(e);
         this.TickLifeActivities(e);
         this.TickStoryIntervals();
+        this.TickCaseClocks();
         this.TickLongGoalIntervals();
         this.TickGoalResults(e);
         if (e.IsMultipleOf(60)) { this.TickRomance(); this.DeliverLifeLetters(); }

@@ -184,7 +184,7 @@ Check("old life and story histories do not require the new capability", LongGoal
 Check("only a new long-term event upgrades the native save version", LongGoalRules.VersionAfterEvent(1, "goal.delivered") == 1
     && LongGoalRules.VersionAfterEvent(1, "story.started") == 1 && LongGoalRules.VersionAfterEvent(1, "longgoal.started") == 2);
 Check("v1 with new history is rejected instead of losing new fields", !LongGoalRules.SaveVersion(1, full.Events) && LongGoalRules.SaveVersion(2, full.Events));
-Check("empty legacy saves remain version one", LongGoalRules.SaveVersion(1, Array.Empty<LifeEvent>()) && !LongGoalRules.SaveVersion(4, Array.Empty<LifeEvent>()));
+Check("empty legacy saves remain version one", LongGoalRules.SaveVersion(1, Array.Empty<LifeEvent>()) && !LongGoalRules.SaveVersion(5, Array.Empty<LifeEvent>()));
 JsonElement oldWire = LifeEventWire.Encode(new[] { new LifeEvent { Id = "life-1", Npc = "gus", Day = 1, Kind = "story.started", StoryId = "gus_parcel" } })[0];
 Check("new fields never appear on the old story wire", oldWire.EnumerateObject().Count() == 5 && !oldWire.TryGetProperty("chapterId", out _));
 JsonElement materialWire = LifeEventWire.Encode(full.Events.Where(e => e.Kind == "longgoal.contributed" && e.ChapterId == 2))[0];

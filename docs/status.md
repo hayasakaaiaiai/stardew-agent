@@ -1,17 +1,18 @@
 # 项目现状
 
-> 更新于 2026-11-09（`codex/npc-project-practice` 功能分支）。验收版 `codex/npc-long-goals / 80bdaf4` 已推送供 Windows 测试。本轮完成成果提醒、七位居民的真实共同实践及次日回访；Node512／C#506与Release检查通过，详见 [spec](npc-project-practice-spec.md)、[验证报告](test-results/2026-11-09-npc-project-practice.md) 和 [游戏清单](npc-project-practice-game-checklist.md)。本阶段功能提交 `3b2c0ea` 按用户要求交付 Windows 验收；未部署、合并 main 或运行游戏，后续调查扩展另开分支。
+> 更新于 2026-11-09（`codex/npc-town-cases` 功能分支）。成果实践验收版 `codex/npc-project-practice / a1389a4` 已推送供 Windows 测试。本轮继续完成四条调查、八份完整结案与实际现场核验；Node555／C#743、类型检查、构建与demo通过，详见 [spec](npc-town-cases-spec.md)、[验证报告](test-results/2026-11-09-npc-town-cases.md) 和 [游戏清单](npc-town-cases-game-checklist.md)。四案版本地提交、尚未推送；未部署、运行游戏或合并main。
 
 ## 1. 这个项目在做什么
 
 为星露谷物语 1.6 的 34 位社交 NPC 提供中文自由对话和随存档保存、回滚、恢复的记忆。Node.js / TypeScript 后端通过本机 WebSocket 连接 SMAPI / C# Mod，界面使用原版对话框、选项和输入框。当前支持单人。
 
-NPC 已能按原版日程聊天、传话、寄信、主动靠近、约定赴约、帮农活、照顾动物、陪下矿和一起逛。本分支包含真实材料委托、相处情绪与关系修复、六种陪伴及家庭活动、原版恋人共同筹备约会、真实相处后的共同回忆与角色差异；另有格斯包裹调查、潘妮观察题、艾利欧特短文和可阅读成品。自由模型内容仍会出错，功能实现和限定场景通过不等于所有模型内容都正确。
+NPC 已能按原版日程聊天、传话、寄信、主动靠近、约定赴约、帮农活、照顾动物、陪下矿和一起逛。本分支包含真实材料委托、相处情绪与关系修复、六种陪伴及家庭活动、原版恋人共同筹备约会、真实相处后的共同回忆与角色差异；另有格斯包裹调查、潘妮观察题、艾利欧特短文和可阅读成品；新增卡洛琳路线、克林特样品、艾芙琳跨日复查、玛妮本人在场四案，共七故事、十六种结局。自由模型内容仍会出错，功能实现和限定场景通过不等于所有模型内容都正确。
 
 ## 2. 当前进度与证据
 
 | 部分 | 状态与证据 |
 |---|---|
+| 四条调查扩展 | 已实现两证词＋两核验、个人笔记／当面汇报与8完整结案；新增Node43项、原生237项，独立TownCases开关和存档版本4；未真人游戏验收 |
 | 成果实践与回访 | 已实现完成提醒、七种真实路线／行动实践、一次次日回访；14记录点／70正文，新增Node49项、原生148项；同行仍需8心或配偶／室友，未真人游戏验收 |
 | 长期目标扩展 | 已实现七项目各三章、六工作日推进、观察／真实材料贡献、63篇章节稿页与合册、独立日志和旧档保护；新增Node47项、原生191项，未真人游戏验收 |
 | 小镇调查与长期目标 | 已完成真实任务包裹／证词／实地调查，两条跨日自主项目与可阅读成品、NPC 知情隔离；三故事八种结局，Node 新增 42 项检查，未真人游戏验收 |
@@ -28,7 +29,9 @@ NPC 已能按原版日程聊天、传话、寄信、主动靠近、约定赴约�
 | 角色资料 | 34 张角色卡、226 条事件后话题；123 个可送物品在原版游戏中识别；卡片模板和资料许可见 §8 |
 | H 线硬件陪伴 | 暂停，保留在 `hardware-companion`，不合入 main；本轮未修改 H 线 |
 
-本轮成果实践独立保存 `log.goalResultState`，全局日志先核签名再略过已压缩的旧尝试重放；生活存档版本3，不降级覆盖。Node全仓 **512/512**、类型检查、构建、两个demo、独立C# **506/506** 和Mod Release通过。新摘要实测 **0 或51–97 o200k token**，详见 [实践报告](test-results/2026-11-09-npc-project-practice.md)。无新依赖、真实模型调用或游戏启动。
+本轮四案复用 `log.storyState/storyEvents`，增加 `casesProtocol:1`；原生独立Cases及生活存档版本4。未汇报来源不进入主人公prompt，结案披露完整来源，证人不自动知道结局。全仓 **555/555**、类型检查、构建、两个demo、独立C# **743/743** 和Mod Release通过。新摘要增加 **0 或71–380 o200k token**，详见 [四案报告](test-results/2026-11-09-npc-town-cases.md)。无新依赖、真实模型调用或游戏启动；旧mod-flow在本机加载原版程序集失败，未执行断言，单独保留。
+
+上一轮成果实践独立保存 `log.goalResultState`，全局日志先核签名再略过已压缩的旧尝试重放；生活存档版本3，不降级覆盖。Node全仓 **512/512**、类型检查、构建、两个demo、独立C# **506/506** 和Mod Release通过。新摘要实测 **0 或51–97 o200k token**，详见 [实践报告](test-results/2026-11-09-npc-project-practice.md)。无新依赖、真实模型调用或游戏启动。
 
 上一轮长期目标独立保存 `log.longGoalState`，与生活／恋爱／故事四域一起原子落盘，另补跨域、跨NPC全局事件编号一致性，不改记忆内核。Node全仓 **463/463**、类型检查、构建、两个demo、独立C# **358/358** 和Mod Release通过。新摘要实测 **0 或97–226 o200k token**；详情见 [长期目标报告](test-results/2026-11-09-npc-long-goals.md)。无新依赖、真实模型调用或游戏启动。
 
@@ -49,7 +52,8 @@ NPC 已能按原版日程聊天、传话、寄信、主动靠近、约定赴约�
 | `codex/npc-romance` | 从生活分支 `d7b11a3` 建立；本轮三项恋爱功能、spec、自动检查和游戏清单，功能提交 `abd6479` 已推送。目录 `/Users/a11/Documents/ChatGPT/stardew-agent-romance`；Windows 恋爱验收分支，未合并 main |
 | `codex/npc-town-life` | 从恋爱分支 `dc36f8e` 建立；调查与长期目标已实现并完成离线检查，功能提交 `fcce80c` 已推送。目录 `/Users/a11/Documents/ChatGPT/stardew-agent-town`；Windows 验收分支，未合并 main |
 | `codex/npc-long-goals` | 从小镇验收分支 `b281ed1` 建立；七角色长期目标扩展已实现并通过离线检查，功能提交 `e4af355` 已推送。目录 `/Users/a11/Documents/ChatGPT/stardew-agent-long-goals`；Windows 验收分支，未合并 main |
-| `codex/npc-project-practice` | 从长期目标验收提交 `80bdaf4` 建立；成果实践与回访已完成并通过离线检查，功能提交 `3b2c0ea` 交付 Windows 验收。目录 `/Users/a11/Documents/ChatGPT/stardew-agent-project-practice` |
+| `codex/npc-project-practice` | 从长期目标验收提交 `80bdaf4` 建立；成果实践与回访已完成并通过离线检查，功能提交 `3b2c0ea`，发布记录 `a1389a4` 已推送供 Windows 验收。目录 `/Users/a11/Documents/ChatGPT/stardew-agent-project-practice` |
+| `codex/npc-town-cases` | 从成果实践验收提交 `a1389a4` 建立；四条调查扩展已实现并通过离线检查，本地提交、尚未推送。目录 `/Users/a11/Documents/ChatGPT/stardew-agent-town-cases` |
 | `hardware-companion` | H 线硬件陪伴，暂停；本轮保持原提交 `6e92320` |
 
 历史功能分支和验收分支在 2026-10-24 的内容核对、合并与验证后清理，提交历史保留在 main。该轮删除 51 条远端、23 条本地历史分支，当时两边只剩 main 和 hardware-companion；这不是本次本地分支清单。清理前的 refs 和完整 Git bundle 保存在本机 `.runtime/repository-publication-20261024/`；旧分支对应的设计、测试记录仍在仓库。
@@ -90,6 +94,7 @@ dotnet run --project tests/romance-rules
 dotnet run --project tests/town-story-rules
 dotnet run --project tests/long-goal-rules
 dotnet run --project tests/goal-result-rules
+dotnet run --project tests/town-case-rules
 
 # 显式启动独立游戏验收：固定反例不收费，live 会调用你配置的真实模型。
 powershell -NoProfile -File tools/test-game-real-meetings.ps1 -Section edges
@@ -103,6 +108,7 @@ powershell -NoProfile -File tools/test-game-real-meetings.ps1 -Section live
 
 | 问题 | 在哪记的 |
 |---|---|
+| 四条调查尚未Windows真人游戏验收；87编号／91结果格覆盖四案八结局、真实样品／本人在场、跨日与知情隔离、版本4和旧功能回归；旧mod-flow本机加载失败未进入断言 | `test-results/2026-11-09-npc-town-cases.md`、`npc-town-cases-game-checklist.md` |
 | 新成果实践尚未Windows真人游戏验收；83编号／90结果格覆盖七条实践、原版分页、实际跟随／钓鱼／采集、取消恢复、版本3与回访 | `test-results/2026-11-09-npc-project-practice.md`、`npc-project-practice-game-checklist.md` |
 | 新长线七人21章尚未Windows真人游戏验收；原版菜单阅读、自然日程六工作日、材料与婚后住所、存档升级降级须按99编号／141结果格记录 | `test-results/2026-11-09-npc-long-goals.md`、`npc-long-goals-game-checklist.md` |
 | 本轮三条小镇故事已完成代码与离线检查；包裹在原版界面中的表现、自然日程实际工作、菜单和自由聊天待 Windows 用户验收，72 项结果留空 | `test-results/2026-11-09-npc-town-stories.md`、`npc-town-stories-game-checklist.md` |
@@ -128,7 +134,7 @@ powershell -NoProfile -File tools/test-game-real-meetings.ps1 -Section live
 
 ## 7. 下一步
 
-当前交付：长期目标 `codex/npc-long-goals / 80bdaf4` 已按用户要求推送，Windows按 [扩展清单](npc-long-goals-game-checklist.md) 验收；该分支也可完成此前 [小镇清单](npc-town-stories-game-checklist.md)。用户要求推送后继续，已在独立 `codex/npc-project-practice` 完成 [实践 spec](npc-project-practice-spec.md)，功能提交 `3b2c0ea` 已获推送授权，按 [新清单](npc-project-practice-game-checklist.md) 验收。后续在独立分支扩充小镇调查事件。不要把含新长线的测试存档覆盖回旧验收副本；摆摊、团体活动和公共改造仍未纳入。
+当前交付：成果实践 `codex/npc-project-practice / a1389a4` 已按用户要求推送，Windows按 [实践清单](npc-project-practice-game-checklist.md) 验收；该分支包含此前生活、恋爱、三故事和七人长期目标。用户要求推送后继续，现已在独立 `codex/npc-town-cases` 完成 [四案spec](npc-town-cases-spec.md) 和离线验证，本地提交、尚未推送，下一次交付按 [四案清单](npc-town-cases-game-checklist.md) 记录。游戏验收后依实际反馈修复并再讨论下一批内容，不自动合入main。含版本4调查记录的存档不要覆盖回旧版验收副本；摆摊、团体活动和公共改造仍未纳入。
 
 0. **恋爱三功能全量游戏验收**：`codex/npc-romance` 已按用户要求推送；Windows 拉取并切到此分支，按 [恋爱清单](npc-romance-game-checklist.md) 测试 12 人、存档、关系变化与旧生活回归。本分支已包含生活功能，不需要来回切换；独立生活清单见 [这里](npc-life-game-checklist.md)。两条功能分支均未合并 main。
 1. 处理真实游戏留下的三处模型内容问题：主动邀约只寒暄、取消后编造等候、花舞节夜间漏约。保留原始失败；改变 prompt 或放宽接受词表前，继续按用户决定和实测 token 数评估。
@@ -140,6 +146,11 @@ powershell -NoProfile -File tools/test-game-real-meetings.ps1 -Section live
 
 | 文档 | 讲什么 |
 |---|---|
+| `docs/npc-town-cases-spec.md` | 四条调查、真实核验、知情隔离、两种完整结案、版本4与实施记录 |
+| `docs/npc-town-cases-content.md` | 四案8证词／8现场／8完整结案与11位居民的本地资料依据 |
+| `docs/npc-town-cases-game-checklist.md` | Windows四案87编号／91个空白结果格，覆盖八结局和旧功能回归 |
+| `docs/test-results/2026-11-09-npc-town-cases.md` | 555 Node／743 C#、最终构建、来源／保存、环境失败与游戏验收边界 |
+| `docs/test-results/2026-11-09-town-cases-prompt.json` | 54生产场景、34卡、42源哈希，已知摘要与完整资料成本比较 |
 | `docs/npc-project-practice-spec.md` | 成果提醒、七种实际实践、原版菜单／保存／次日回访、顺序与边界 |
 | `docs/npc-project-practice-content.md` | 七套角色依据、14记录点和70条选择正文目录 |
 | `docs/npc-project-practice-game-checklist.md` | Windows实践验收83编号／90结果格，含所有选择及旧功能回归 |

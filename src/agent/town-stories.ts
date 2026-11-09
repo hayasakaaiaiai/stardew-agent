@@ -1,11 +1,15 @@
 import { readFileSync } from 'node:fs';
 import { SOCIAL_NPCS, type Json, type MemoryDraft, type NpcChange, type NpcState } from '../types.ts';
 import { lifeSerial } from './life.ts';
+import { TOWN_CASE_IDS, TOWN_CASE_DEFINITIONS, TOWN_CASE_NPCS, townCaseInspectionKeys, validTownCaseInspection,
+  type TownCaseDefinition, type TownCaseId } from './town-cases.ts';
 
 export const STORY_IDS = ['gus_parcel', 'penny_field_notes', 'elliott_short_piece'] as const;
-export const STORY_KINDS = ['story.started', 'story.clue', 'story.observed', 'story.choice', 'story.worked', 'story.resolved', 'story.told'] as const;
+export const STORY_KINDS = ['story.started', 'story.clue', 'story.observed', 'story.choice', 'story.worked', 'story.resolved', 'story.told', 'story.inspected'] as const;
 export const STORY_WEATHERS = ['sunny', 'rain', 'storm', 'snow', 'windy'] as const;
 export type StoryId = typeof STORY_IDS[number];
+export type AllStoryId = StoryId | TownCaseId;
+export const ALL_STORY_IDS = [...STORY_IDS, ...TOWN_CASE_IDS] as const;
 export type StoryKind = typeof STORY_KINDS[number];
 export type StoryWeather = typeof STORY_WEATHERS[number];
 interface StoryEnding { id: string; title: string; text: string }
@@ -22,11 +26,14 @@ export interface ProjectStory extends StoryBase {
   choices: { id: string; label: string; text: string }[];
 }
 export type StoryDefinition = InvestigationStory | ProjectStory;
+export type AllStoryDefinition = StoryDefinition | TownCaseDefinition;
 const OWNERS: Record<StoryId, string> = { gus_parcel: 'gus', penny_field_notes: 'penny', elliott_short_piece: 'elliott' };
 const NPCS = new Set<string>(SOCIAL_NPCS);
 const VENUES: Record<string, string> = { Town: '镇上', Forest: '森林', Beach: '海滩', Trailer: '拖车屋',
   Trailer_Big: '潘妮家', ArchaeologyHouse: '博物馆', ElliottHouse: '艾利欧特的小屋' };
 const WEATHER: Record<StoryWeather, string> = { sunny: '晴天', rain: '下雨', storm: '雷雨', snow: '下雪', windy: '刮风' };
+const NAMES: Record<string, string> = { emily: '艾米丽', pierre: '皮埃尔', jodi: '乔迪', demetrius: '德米特里厄斯',
+  george: '乔治', alex: '亚历克斯', shane: '谢恩', marnie: '玛妮' };
 const RECEIPT_LIMIT = 48;
 
 function fail(message: string): never { throw new Error(`INVALID_STORY_EVENT: ${message}`); }
@@ -98,17 +105,19 @@ export function parseStoryDefinitions(value: unknown): StoryDefinition[] {
 export const STORY_DEFINITIONS: readonly StoryDefinition[] = parseStoryDefinitions(
   JSON.parse(readFileSync(new URL('../../data/town/stories.json', import.meta.url), 'utf8')),
 );
-const DEFINITIONS = new Map(STORY_DEFINITIONS.map(definition => [definition.id, definition]));
-export function storyDefinition(id: string): StoryDefinition | undefined { return DEFINITIONS.get(id as StoryId); }
+export const ALL_STORY_DEFINITIONS: readonly AllStoryDefinition[] = [...STORY_DEFINITIONS, ...TOWN_CASE_DEFINITIONS];
+const DEFINITIONS = new Map(ALL_STORY_DEFINITIONS.map(definition => [definition.id, definition]));
+export function storyDefinition(id: string): AllStoryDefinition | undefined { return DEFINITIONS.get(id as AllStoryId); }
 export const STORY_NPCS: readonly string[] = [...new Set(STORY_DEFINITIONS.flatMap(definition =>
   [definition.owner, ...(definition.kind === 'investigation' ? definition.clues.flatMap(clue => clue.witness ? [clue.witness] : []) : [])]))];
+export const ALL_STORY_NPCS: readonly string[] = [...new Set([...STORY_NPCS, ...TOWN_CASE_NPCS])];
 
 export interface StoryEvent {
   id: string;
   npc: string;
   day: number;
   kind: StoryKind;
-  storyId: StoryId;
+  storyId: AllStoryId;
   clueId?: string;
   other?: string;
   venue?: string;
@@ -118,11 +127,20 @@ export interface StoryEvent {
   sourceId?: string;
   step?: number;
   outcome?: string;
+  x?: number;
+  y?: number;
+  time?: number;
+  itemId?: string;
+  count?: number;
+  subject?: string;
+  subjectX?: number;
+  subjectY?: number;
 }
 const EXTRA: Record<StoryKind, readonly string[]> = {
   'story.started': [], 'story.clue': ['clueId', 'other'], 'story.observed': ['venue', 'weather', 'minutes'],
   'story.choice': ['choiceId', 'sourceId'], 'story.worked': ['step', 'venue', 'minutes'],
   'story.resolved': ['outcome'], 'story.told': ['sourceId'],
+  'story.inspected': ['clueId', 'venue', 'x', 'y', 'time', 'minutes', 'weather', 'sourceId', 'itemId', 'count', 'subject', 'subjectX', 'subjectY'],
 };
 
 /** Native evidence only; free dialogue cannot discover a clue, perform work or return the parcel. */
@@ -130,7 +148,7 @@ export function parseStoryEvents(value: unknown): StoryEvent[] {
   if (!Array.isArray(value) || value.length > 32) fail('events must contain at most 32 observations');
   let previous = 0;
   return value.map(raw => {
-    if (!object(raw) || !member(raw.kind, STORY_KINDS) || !member(raw.storyId, STORY_IDS)
+    if (!object(raw) || !member(raw.kind, STORY_KINDS) || !member(raw.storyId, ALL_STORY_IDS)
       || !keys(raw, ['id', 'npc', 'day', 'kind', 'storyId', ...EXTRA[raw.kind]], ['id', 'npc', 'day', 'kind', 'storyId']))
       fail('unknown kind, story or fields');
     const current = serial(raw.id), definition = DEFINITIONS.get(raw.storyId)!;
@@ -139,9 +157,15 @@ export function parseStoryEvents(value: unknown): StoryEvent[] {
     if (raw.npc !== definition.owner || !integer(raw.day, 1, 1_000_000)) fail('invalid owner or game day');
     if (raw.sourceId !== undefined && serial(raw.sourceId) >= current) fail('source must precede the event');
     if (raw.kind === 'story.clue') {
-      if (definition.kind !== 'investigation') fail('only investigations have clues');
+      if (definition.kind === 'project') fail('only investigations have clues');
       const clue = definition.clues.find(clue => clue.id === raw.clueId);
       if (!clue || raw.other !== clue.witness || raw.other !== undefined && !NPCS.has(raw.other as string)) fail('clue or witness does not belong to this story');
+    }
+    if (raw.kind === 'story.inspected') {
+      if (definition.kind !== 'case') fail('only new cases have inspected evidence');
+      const fields = townCaseInspectionKeys(definition, raw.clueId);
+      if (!fields || !keys(raw, ['id', 'npc', 'day', 'kind', 'storyId', ...fields]) || !validTownCaseInspection(raw, definition))
+        fail('invalid inspected evidence or mode fields');
     }
     if (raw.kind === 'story.observed' || raw.kind === 'story.choice' || raw.kind === 'story.worked') {
       if (definition.kind !== 'project') fail('this event requires a project');
@@ -164,11 +188,20 @@ export function storyNpcIds(event: StoryEvent): string[] { return event.other ? 
 interface Source {
   id: string;
   day: number;
-  kind: 'clue' | 'observed';
+  kind: 'clue' | 'observed' | 'inspected';
   clueId?: string;
   venue?: string;
   weather?: StoryWeather;
   minutes?: number;
+  x?: number;
+  y?: number;
+  time?: number;
+  sourceId?: string;
+  itemId?: string;
+  count?: number;
+  subject?: string;
+  subjectX?: number;
+  subjectY?: number;
 }
 interface Choice { id: string; day: number; choiceId: string; sourceId: string }
 interface Work { id: string; day: number; step: number; venue: string; minutes: number }
@@ -193,36 +226,42 @@ interface StoryState {
   version: 1;
   lastSerial: number;
   updatedDay: number;
-  progress: Partial<Record<StoryId, Progress>>;
-  knowledge: Partial<Record<StoryId, Knowledge>>;
+  progress: Partial<Record<AllStoryId, Progress>>;
+  knowledge: Partial<Record<AllStoryId, Knowledge>>;
   recent: { id: string; signature: string }[];
 }
 const EMPTY_KNOWLEDGE = (): Knowledge => ({ role: 'owner', startedDay: null, sources: [], choice: null, work: [], resolution: null });
 function stamp(value: unknown): value is Record<string, unknown> & { id: string; day: number } {
   return object(value) && serial(value.id) > 0 && integer(value.day, 1, 1_000_000);
 }
-function validSource(value: unknown, definition: StoryDefinition): value is Source {
+function validSource(value: unknown, definition: AllStoryDefinition): value is Source {
   if (!stamp(value)) return false;
   const source = value as unknown as Record<string, unknown>;
-  if (source.kind === 'clue') return definition.kind === 'investigation' && keys(source, ['id', 'day', 'kind', 'clueId'])
+  if (source.kind === 'clue') return definition.kind !== 'project' && keys(source, ['id', 'day', 'kind', 'clueId'])
     && definition.clues.some(clue => clue.id === source.clueId);
+  if (source.kind === 'inspected') {
+    if (definition.kind !== 'case') return false;
+    const fields = townCaseInspectionKeys(definition, source.clueId);
+    return !!fields && keys(source, ['id', 'day', 'kind', ...fields]) && validTownCaseInspection(source, definition)
+      && (source.sourceId === undefined || serial(source.sourceId) < serial(source.id));
+  }
   return source.kind === 'observed' && definition.kind === 'project'
     && keys(source, ['id', 'day', 'kind', 'venue', 'weather', 'minutes'])
     && definition.observationVenues.some(venue => venue.map === source.venue) && member(source.weather, STORY_WEATHERS)
     && integer(source.minutes, 10, 1440);
 }
-function validChoice(value: unknown, definition: StoryDefinition): value is Choice | null {
+function validChoice(value: unknown, definition: AllStoryDefinition): value is Choice | null {
   if (value === null) return true;
   return definition.kind === 'project' && stamp(value) && keys(value, ['id', 'day', 'choiceId', 'sourceId'])
     && definition.choices.some(choice => choice.id === value.choiceId) && serial(value.sourceId) < serial(value.id);
 }
-function validWork(value: unknown, definition: StoryDefinition): value is Work[] {
+function validWork(value: unknown, definition: AllStoryDefinition): value is Work[] {
   return Array.isArray(value) && value.length <= 2 && value.every((work, index) => definition.kind === 'project'
     && stamp(work) && keys(work, ['id', 'day', 'step', 'venue', 'minutes']) && work.step === index + 1
     && member(work.venue, definition.workVenues) && integer(work.minutes, 30, 1440)
     && (index === 0 || work.day > value[index - 1].day && serial(work.id) > serial(value[index - 1].id)));
 }
-function validResolution(value: unknown, definition: StoryDefinition): value is Resolution | null {
+function validResolution(value: unknown, definition: AllStoryDefinition): value is Resolution | null {
   return value === null || stamp(value) && keys(value, ['id', 'day', 'outcome'])
     && definition.endings.some(ending => ending.id === value.outcome);
 }
@@ -231,7 +270,22 @@ function sameFields(left: object | null, right: object | null): boolean {
   const a = left as Record<string, unknown>, b = right as Record<string, unknown>;
   return Object.keys(a).length === Object.keys(b).length && Object.keys(a).every(key => a[key] === b[key]);
 }
-function readState(state: NpcState): StoryState {
+function sourceLimit(definition: AllStoryDefinition): number { return definition.kind === 'case' ? 4 : definition.kind === 'investigation' ? 3 : 1; }
+function validInspectionDependency(source: Source, sources: readonly Source[], definition: AllStoryDefinition): boolean {
+  if (source.kind !== 'inspected' || definition.kind !== 'case') return true;
+  const inspection = definition.inspections.find(inspection => inspection.id === source.clueId)!;
+  if (inspection.mode !== 'site' || !inspection.after) return true;
+  return sources.some(prior => prior.kind === 'inspected' && prior.clueId === inspection.after && prior.id === source.sourceId
+    && serial(prior.id) < serial(source.id) && prior.day < source.day);
+}
+function readyToResolve(definition: AllStoryDefinition, progress: Progress, outcome: string): boolean {
+  if (definition.kind === 'project') return progress.work.length === 2 && outcome === (progress.choice?.choiceId ?? 'independent');
+  if (definition.kind === 'case') return [...definition.clues, ...definition.inspections]
+    .every(clue => progress.sources.some(source => source.clueId === clue.id));
+  return progress.sources.some(source => source.clueId === 'parcel')
+    && (outcome !== 'explained' || ['emily_mark', 'pierre_mark'].every(id => progress.sources.some(source => source.clueId === id)));
+}
+function readState(state: NpcState, npc?: string): StoryState {
   const raw = state.story;
   if (raw === undefined) return { version: 1, lastSerial: 0, updatedDay: 0, progress: {}, knowledge: {}, recent: [] };
   if (!object(raw) || !keys(raw, ['version', 'lastSerial', 'updatedDay', 'progress', 'knowledge', 'recent']) || raw.version !== 1
@@ -240,11 +294,16 @@ function readState(state: NpcState): StoryState {
     || raw.recent.some(receipt => !object(receipt) || !keys(receipt, ['id', 'signature'])
       || serial(receipt.id) > (raw.lastSerial as number) || typeof receipt.signature !== 'string')) fail('invalid saved story state');
   const lastSerial = raw.lastSerial, updatedDay = raw.updatedDay;
+  let boundNpc = npc;
+  const bind = (owner: string) => {
+    if (boundNpc !== undefined && owner !== boundNpc) fail('saved story belongs to another NPC');
+    boundNpc = owner;
+  };
   for (const [id, candidate] of Object.entries(raw.progress)) {
     const definition = storyDefinition(id);
     if (!definition || !object(candidate) || !keys(candidate, ['started', 'sources', 'choice', 'work', 'resolution', 'told'])
       || !stamp(candidate.started) || !keys(candidate.started, ['id', 'day']) || !Array.isArray(candidate.sources)
-      || candidate.sources.length > (definition.kind === 'investigation' ? 3 : 1) || !candidate.sources.every(source => validSource(source, definition))
+      || candidate.sources.length > sourceLimit(definition) || !candidate.sources.every(source => validSource(source, definition))
       || new Set(candidate.sources.map(source => source.id)).size !== candidate.sources.length
       || new Set(candidate.sources.map(source => source.clueId ?? source.kind)).size !== candidate.sources.length
       || !validChoice(candidate.choice, definition) || !validWork(candidate.work, definition) || !validResolution(candidate.resolution, definition)
@@ -252,10 +311,13 @@ function readState(state: NpcState): StoryState {
       || new Set(candidate.told).size !== candidate.told.length)
       fail('invalid saved story progress');
     const progress = candidate as unknown as Progress;
+    bind(definition.owner);
+    if (!Object.hasOwn(raw.knowledge, id)) fail('saved progress is missing its owner knowledge');
     const evidence = [...progress.sources, ...progress.work, ...(progress.choice ? [progress.choice] : []),
       ...(progress.resolution ? [progress.resolution] : [])];
     if (serial(progress.started.id) > lastSerial || progress.started.day > updatedDay
       || progress.told.some(sourceId => !progress.sources.some(source => source.id === sourceId))
+      || progress.sources.some(source => !validInspectionDependency(source, progress.sources, definition))
       || evidence.some(source => source.day < progress.started.day || serial(source.id) <= serial(progress.started.id)
         || serial(source.id) > lastSerial || source.day > updatedDay)
       || progress.choice && !progress.sources.some(source => source.kind === 'observed' && source.id === progress.choice!.sourceId
@@ -263,23 +325,22 @@ function readState(state: NpcState): StoryState {
       || progress.work[0] && progress.work[0].day <= progress.started.day
       || progress.resolution && [...progress.sources, ...progress.work, ...(progress.choice ? [progress.choice] : [])]
         .some(source => source.day > progress.resolution!.day || serial(source.id) >= serial(progress.resolution!.id))
-      || progress.resolution && (definition.kind === 'project'
-        ? progress.work.length !== 2 || progress.resolution.outcome !== (progress.choice?.choiceId ?? 'independent')
-        : !progress.sources.some(source => source.clueId === 'parcel')
-          || progress.resolution.outcome === 'explained' && progress.sources.length !== 3)) fail('inconsistent saved story progress');
+      || progress.resolution && !readyToResolve(definition, progress, progress.resolution.outcome)
+      || progress.resolution && definition.kind === 'case' && progress.sources.some(source => !progress.told.includes(source.id)))
+      fail('inconsistent saved story progress');
   }
   for (const [id, candidate] of Object.entries(raw.knowledge)) {
     const definition = storyDefinition(id);
     if (!definition || !object(candidate) || !keys(candidate, ['role', 'startedDay', 'sources', 'choice', 'work', 'resolution'])
       || !member(candidate.role, ['owner', 'witness'] as const)
       || candidate.startedDay !== null && !integer(candidate.startedDay, 1, raw.updatedDay)
-      || !Array.isArray(candidate.sources) || candidate.sources.length > (definition.kind === 'investigation' ? 3 : 1)
+      || !Array.isArray(candidate.sources) || candidate.sources.length > sourceLimit(definition)
       || !candidate.sources.every(source => validSource(source, definition))
       || new Set(candidate.sources.map(source => source.id)).size !== candidate.sources.length
       || !validChoice(candidate.choice, definition) || !validWork(candidate.work, definition) || !validResolution(candidate.resolution, definition)
-      || candidate.role === 'witness' && (definition.kind !== 'investigation' || candidate.startedDay !== null
+      || candidate.role === 'witness' && (definition.kind === 'project' || candidate.startedDay !== null
         || candidate.choice !== null || candidate.work.length !== 0 || candidate.resolution !== null
-        || candidate.sources.some(source => source.kind !== 'clue' || source.clueId === 'parcel')))
+        || candidate.sources.some(source => source.kind !== 'clue' || !definition.clues.some(clue => clue.id === source.clueId && clue.witness))))
       fail('invalid saved story knowledge');
     const known = candidate as unknown as Knowledge, owned = raw.progress[id] as unknown as Progress | undefined;
     const facts = [...known.sources, ...known.work, ...(known.choice ? [known.choice] : []), ...(known.resolution ? [known.resolution] : [])];
@@ -291,6 +352,8 @@ function readState(state: NpcState): StoryState {
         || !sameFields(known.choice, owned.choice) || !sameFields(known.resolution, owned.resolution)
         || known.work.length !== owned.work.length || known.work.some((work, index) => !sameFields(work, owned.work[index]!))))
       fail('inconsistent saved story knowledge');
+    bind(known.role === 'owner' ? definition.owner : (definition as InvestigationStory | TownCaseDefinition).clues
+      .find(clue => clue.id === known.sources[0]!.clueId)!.witness!);
   }
   return structuredClone(raw) as unknown as StoryState;
 }
@@ -300,17 +363,26 @@ function seen(state: StoryState, event: StoryEvent): boolean {
   if (receipt && receipt.signature !== signature(event)) fail('an event ID was reused with different content');
   return serial(event.id) <= state.lastSerial;
 }
-function sourceFact(definition: StoryDefinition, source: Source, ownTestimony = false): string {
-  if (source.kind === 'clue' && definition.kind === 'investigation') {
+function sourceFact(definition: AllStoryDefinition, source: Source, ownTestimony = false): string {
+  if (source.kind === 'clue' && definition.kind !== 'project') {
     const clue = definition.clues.find(clue => clue.id === source.clueId)!;
-    const name = clue.witness === 'emily' ? '艾米丽' : '皮埃尔';
+    const name = clue.witness ? NAMES[clue.witness]! : '';
     return clue.witness && !ownTestimony ? `${name}的当面证词：“${clue.text}”` : clue.text;
+  }
+  if (source.kind === 'inspected' && definition.kind === 'case') {
+    const inspection = definition.inspections.find(inspection => inspection.id === source.clueId)!;
+    const clock = `${Math.floor(source.time! / 100)}:${String(source.time! % 100).padStart(2, '0')}`;
+    const base = `第 ${source.day} 天 ${clock}，在${inspection.label}实际核验了 10 分钟`;
+    if (inspection.mode === 'site') return `${base}，当时${WEATHER[source.weather!]}${inspection.after ? '，这是对首次记录的后日复查' : ''}。`;
+    if (inspection.mode === 'sample') return `${base}，查看了自己背包中的一份${inspection.itemLabel}，没有消耗或交付样品。`;
+    return `${base}，${NAMES[inspection.subject]}本人同图且一直在八格范围内。`;
   }
   return `第 ${source.day} 天在${VENUES[source.venue!]!}实际观察了 ${source.minutes} 分钟，当时${WEATHER[source.weather!]}。`;
 }
-function resolutionFact(definition: StoryDefinition, progress: Progress): string {
+function resolutionFact(definition: AllStoryDefinition, progress: Progress): string {
   const outcome = progress.resolution!.outcome;
   const ending = definition.endings.find(ending => ending.id === outcome)!;
+  if (definition.kind === 'case') return `农场主已当面向我提交“${definition.title}”的两份证词与两次实际核验，并明确选择“${definition.endings.find(ending => ending.id === outcome)!.label}”；案件以“${ending.title}”结束。`;
   if (definition.kind === 'investigation') return outcome === 'explained'
     ? `农场主把故事包裹当面归还给我，并结合两份证词核清了备货标记的混淆；“${definition.title}”以“${ending.title}”结束。`
     : `农场主已把故事包裹当面归还给我；“${definition.title}”以“${ending.title}”结束，没有记录为已核清全部标记。`;
@@ -324,7 +396,7 @@ export function storyChanges(events: readonly StoryEvent[], prior: Readonly<Reco
   const batch = parseStoryEvents(events), working = new Map<string, StoryState>(), changes = new Map<string, NpcChange>();
   const stateFor = (npc: string) => {
     let state = working.get(npc);
-    if (!state) { state = readState(prior[npc] ?? {}); working.set(npc, state); }
+    if (!state) { state = readState(prior[npc] ?? {}, npc); working.set(npc, state); }
     return state;
   };
   const record = (npc: string, state: StoryState, event: StoryEvent, prose?: string, kind: MemoryDraft['kind'] = 'observation') => {
@@ -356,7 +428,9 @@ export function storyChanges(events: readonly StoryEvent[], prior: Readonly<Reco
         if (progress) fail('each story can only start once on a save branch');
         state.progress[event.storyId] = { started: { id: event.id, day: event.day }, sources: [], choice: null, work: [], resolution: null, told: [] };
         knowledge.startedDay = event.day;
-        prose = definition.kind === 'investigation'
+        prose = definition.kind === 'case'
+          ? `我当面向农场主说明了“${definition.title}”，调查刚刚开始；两份证词与两次核验尚未当面提交，尚未结案。`
+          : definition.kind === 'investigation'
           ? `我当面向农场主说明了“${definition.title}”，调查刚刚开始，尚未找到或归还包裹。`
           : `我当面向农场主提起准备“${definition.title}”的打算，项目刚开始；农场主尚未提供观察建议，我也还没有完成成品。`;
         break;
@@ -369,6 +443,15 @@ export function storyChanges(events: readonly StoryEvent[], prior: Readonly<Reco
           known.sources.push(structuredClone(source));
           record(event.other!, witnessState, event, `农场主当面询问“${definition.title}”，我告诉了自己掌握的这条线索：${sourceFact(definition, source, true)}其他调查进展没有因此告诉我。`);
         }
+        break;
+      }
+      case 'story.inspected': {
+        if (progress!.sources.some(source => source.clueId === event.clueId)) fail('the inspection was already obtained');
+        const fields = townCaseInspectionKeys(definition as TownCaseDefinition, event.clueId)!;
+        const source = { id: event.id, day: event.day, kind: 'inspected',
+          ...Object.fromEntries(fields.map(field => [field, (event as unknown as Record<string, unknown>)[field]])) } as Source;
+        if (!validInspectionDependency(source, progress!.sources, definition)) fail('the return inspection needs its exact first source on an earlier day');
+        progress!.sources.push(source);
         break;
       }
       case 'story.observed':
@@ -396,7 +479,9 @@ export function storyChanges(events: readonly StoryEvent[], prior: Readonly<Reco
         break;
       }
       case 'story.resolved':
-        if (definition.kind === 'investigation') {
+        if (definition.kind === 'case') {
+          if (!readyToResolve(definition, progress!, event.outcome!)) fail('case resolution requires both witnesses and both inspections');
+        } else if (definition.kind === 'investigation') {
           if (!progress!.sources.some(source => source.clueId === 'parcel')
             || event.outcome === 'explained' && !['emily_mark', 'pierre_mark'].every(id => progress!.sources.some(source => source.clueId === id)))
             fail('returning needs the acquired parcel; explaining also needs both witnesses');
@@ -404,8 +489,8 @@ export function storyChanges(events: readonly StoryEvent[], prior: Readonly<Reco
           fail('project outcome must match two real work stages and the actual contribution');
         progress!.resolution = { id: event.id, day: event.day, outcome: event.outcome! };
         knowledge.resolution = structuredClone(progress!.resolution);
-        if (definition.kind === 'investigation') {
-          const revealed = progress!.sources.filter(source => source.clueId === 'parcel' || event.outcome === 'explained');
+        if (definition.kind !== 'project') {
+          const revealed = progress!.sources.filter(source => definition.kind === 'case' || source.clueId === 'parcel' || event.outcome === 'explained');
           for (const source of revealed) {
             if (!knowledge.sources.some(known => known.id === source.id)) knowledge.sources.push(structuredClone(source));
             if (!progress!.told.includes(source.id)) progress!.told.push(source.id);
@@ -435,7 +520,7 @@ export function storyContext(state: NpcState, today: number): string | undefined
   const current = readState(state);
   if (!current.lastSerial || current.updatedDay > today) return undefined;
   const lines: string[] = [];
-  for (const id of STORY_IDS) {
+  for (const id of ALL_STORY_IDS) {
     const known = current.knowledge[id], definition = DEFINITIONS.get(id)!;
     if (!known) continue;
     const details: string[] = [];
@@ -446,7 +531,7 @@ export function storyContext(state: NpcState, today: number): string | undefined
     if (known.choice && definition.kind === 'project') details.push(`农场主明确建议“${definition.choices.find(choice => choice.id === known.choice!.choiceId)!.label}”`);
     if (known.work.length) details.push(`我已在第 ${known.work.map(work => work.day).join('、')} 天分别完成 ${known.work.length} 个实际工作阶段`);
     if (known.resolution) details.push(`第 ${known.resolution.day} 天已结束，结局为“${definition.endings.find(ending => ending.id === known.resolution!.outcome)!.title}”${known.resolution.outcome === 'independent' ? '，由我独立完成，没有玩家建议贡献' : ''}`);
-    else if (known.role === 'owner') details.push(definition.kind === 'project' ? '尚未记录成品完成' : '尚未记录包裹归还');
+    else if (known.role === 'owner') details.push(definition.kind === 'project' ? '尚未记录成品完成' : definition.kind === 'case' ? '尚未结案' : '尚未记录包裹归还');
     if (details.length) lines.push(`“${definition.title}”：${details.join('；')}。`);
   }
   return lines.length ? `## 我知道的镇上近况\n${lines.join('\n')}\n只采用这里已知的情况；未汇报的调查、他人的进展和未选结局不作已知。观察题不等于孩子已上课，短文不等于小说出版；不补写未提供的成品内容。` : undefined;

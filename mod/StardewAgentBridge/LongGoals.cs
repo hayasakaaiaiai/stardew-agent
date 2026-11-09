@@ -73,7 +73,8 @@ internal sealed partial class ModEntry
 
     private void LongGoalQuestion(NPC? npc, string text, IReadOnlyList<(string Label, Action Action)> options, bool field = false, int page = 0)
     {
-        bool Ready() => field ? this.StoryMenusReady && this.config.TownStories || this.LongGoalMenusReady && this.config.LongGoals : this.LongGoalMenusReady;
+        bool Ready() => field ? this.StoryMenusReady && this.config.TownStories || this.LongGoalMenusReady && this.config.LongGoals
+            || this.CaseMenusReady && this.config.TownCases : this.LongGoalMenusReady;
         if (!Ready() || npc is not null && (!LifeNear(npc) || ColdShoulder(npc.Name))) return;
         string nonce = this.loadNonce;
         int day = this.currentDay, generation = ++this.longGoalMenuGeneration;
@@ -286,10 +287,11 @@ internal sealed partial class ModEntry
 
     private bool TryOpenTownFieldMenu()
     {
-        if ((!this.StoryMenusReady || !this.config.TownStories) && (!this.LongGoalMenusReady || !this.config.LongGoals)
+        if ((!this.StoryMenusReady || !this.config.TownStories) && (!this.LongGoalMenusReady || !this.config.LongGoals) && (!this.CaseMenusReady || !this.config.TownCases)
             || Game1.activeClickableMenu is not null || this.talk is not null || Game1.dialogueUp) return false;
         List<(string Label, Action Action)> choices = new();
         this.AddStoryFieldOptions(choices);
+        this.AddCaseFieldOptions(choices);
         if (this.LongGoalMenusReady && this.config.LongGoals)
             foreach (LongGoalDefinition goal in this.longGoals.Values)
             {
@@ -301,7 +303,7 @@ internal sealed partial class ModEntry
             }
         if (choices.Count == 0) { this.LifeNotice("目前没有需要现场调查或观察的项目。"); return true; }
         choices.Add(("暂时不调查", () => { }));
-        this.LongGoalQuestion(null, "想记下哪件事的现场观察？请实际到本章地点，正常观察一会儿。", choices, field: true);
+        this.LongGoalQuestion(null, "想记录哪件事的现场核验？请先查看对应地点、人物或样品要求，并正常观察一会儿。", choices, field: true);
         return true;
     }
 

@@ -92,8 +92,8 @@ internal static class GoalResultRules
     };
     internal static bool IsResult(LifeEvent entry) => entry.Kind.StartsWith("goalresult.", StringComparison.Ordinal);
     internal static bool Compatible(bool supported, IEnumerable<LifeEvent> events) => supported || !events.Any(IsResult);
-    internal static int VersionAfterEvent(int current, string kind) => kind.StartsWith("goalresult.", StringComparison.Ordinal) ? 3 : current;
-    internal static bool SaveVersion(int version, IEnumerable<LifeEvent> events) => version is 1 or 2 or 3 && (version == 3 || !events.Any(IsResult));
+    internal static int VersionAfterEvent(int current, string kind) => kind.StartsWith("goalresult.", StringComparison.Ordinal) ? Math.Max(3, current) : current;
+    internal static bool SaveVersion(int version, IEnumerable<LifeEvent> events) => version is 1 or 2 or 3 or 4 && (version >= 3 || !events.Any(IsResult));
     internal static bool Choice(string? value) => value is "a" or "b";
     internal static bool Time(int time) => time is >= 900 and <= 2200 && time % 100 < 60 && time % 10 == 0;
     internal static int ClockMinutes(int time) => time / 100 * 60 + time % 100;

@@ -29,6 +29,7 @@ internal sealed partial class ModEntry
         public Dictionary<string, TownStoryState> Stories { get; set; } = new();
         public Dictionary<string, LongGoalState> LongGoals { get; set; } = new();
         public Dictionary<string, GoalResultState> GoalResults { get; set; } = new();
+        public Dictionary<string, TownCaseState> Cases { get; set; } = new();
     }
 
     private LifeSave lifeSave = new();
@@ -81,6 +82,7 @@ internal sealed partial class ModEntry
     {
         this.ClearLifeActivities();
         this.ClearStoryIntervals();
+        this.ClearCaseClocks();
         this.ClearLongGoalIntervals();
         this.ClearGoalResults();
         this.goalsUpgradeNotified = false;
@@ -94,14 +96,15 @@ internal sealed partial class ModEntry
         try
         {
             LifeSave saved = JsonSerializer.Deserialize<LifeSave>(json, LifeJson) ?? throw new InvalidOperationException("生活记录为空。");
-            if (saved.Version is not (1 or 2 or 3) || saved.Serial < 0 || saved.Serial > 9007199254740991L || saved.Events is null
-                || saved.Goals is null || saved.Letters is null || saved.Romance is null || saved.Stories is null || saved.LongGoals is null || saved.GoalResults is null || saved.Events.Count > LifeEventLimit
+            if (saved.Version is not (1 or 2 or 3 or 4) || saved.Serial < 0 || saved.Serial > 9007199254740991L || saved.Events is null
+                || saved.Goals is null || saved.Letters is null || saved.Romance is null || saved.Stories is null || saved.LongGoals is null || saved.GoalResults is null || saved.Cases is null || saved.Events.Count > LifeEventLimit
                 || saved.Events.Any(e => e is null || e.Day < 1 || e.Day > AbsoluteDay())
                 || !LifeGoalRules.OrderedEventIds(saved.Events.Select(e => e.Id), saved.Serial))
                 throw new InvalidOperationException("生活记录版本或内容无效；原始记录保留。");
             this.lifeSave = saved;
             this.ValidateRomanceSave();
             this.ValidateStorySave();
+            this.ValidateCaseSave();
             this.ValidateLongGoalSave();
             this.ValidateGoalResultSave();
             this.QueueGoalResultRecovery();
@@ -144,7 +147,7 @@ internal sealed partial class ModEntry
         entry.Id = "life-" + (serial + 1);
         entry.Day = this.currentDay;
         this.lifeSave.Serial = serial + 1;
-        this.lifeSave.Version = GoalResultRules.VersionAfterEvent(LongGoalRules.VersionAfterEvent(version, entry.Kind), entry.Kind);
+        this.lifeSave.Version = TownCaseRules.VersionAfterEvent(GoalResultRules.VersionAfterEvent(LongGoalRules.VersionAfterEvent(version, entry.Kind), entry.Kind), entry);
         this.lifeEvents.Add(entry);
         try { this.PersistLife(); }
         catch (Exception ex)
@@ -179,6 +182,11 @@ internal sealed partial class ModEntry
         if (!this.StoriesCompatible)
         {
             this.ReportStoryCompatibility();
+            return;
+        }
+        if (!this.CasesCompatible)
+        {
+            this.ReportCaseCompatibility();
             return;
         }
         if (!this.LongGoalsCompatible)
@@ -220,6 +228,10 @@ internal sealed partial class ModEntry
                 && storiesCapability.TryGetInt32(out int storiesVersion) && storiesVersion == 1;
             this.storiesUpgradeNotified = false;
             this.ReportStoryCompatibility();
+            this.casesSupported = message.TryGetProperty("casesProtocol", out JsonElement casesCapability)
+                && casesCapability.TryGetInt32(out int casesVersion) && casesVersion == 1;
+            this.casesUpgradeNotified = false;
+            this.ReportCaseCompatibility();
             this.goalsSupported = message.TryGetProperty("goalsProtocol", out JsonElement goalsCapability)
                 && goalsCapability.TryGetInt32(out int goalsVersion) && goalsVersion == 1;
             this.goalsUpgradeNotified = false;
@@ -250,6 +262,7 @@ internal sealed partial class ModEntry
     {
         this.ClearLifeActivities();
         this.ClearStoryIntervals();
+        this.ClearCaseClocks();
         this.ClearLongGoalIntervals();
         this.ClearGoalResults();
         this.lifeSave = new(); this.lifeReady = false; this.lifeCorrupt = false;

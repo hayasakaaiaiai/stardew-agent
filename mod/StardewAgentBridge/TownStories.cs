@@ -143,6 +143,11 @@ internal sealed partial class ModEntry
 
     private void ValidateStorySave()
     {
+        // Only the four fixed cases may bypass the legacy validator; their full journal is replayed separately.
+        if (this.lifeEvents.Any(e => (e.Kind.StartsWith("story.", StringComparison.Ordinal) || e.StoryId is not null)
+            && !TownCaseRules.IsCaseId(e.StoryId) && (e.StoryId is null || !TownStoryRules.Owners.ContainsKey(e.StoryId)
+                || !this.lifeSave.Stories.ContainsKey(e.StoryId))))
+            throw new InvalidOperationException("存在未知或缺少保存状态的小镇故事；原始记录保留。");
         foreach (var pair in this.lifeSave.Stories)
         {
             TownStoryState state = pair.Value;
@@ -205,7 +210,7 @@ internal sealed partial class ModEntry
         this.storyMenuGeneration++;
     }
 
-    private bool HasStoryEntry(NPC npc) => this.storiesSupported && this.townStories.Values.Any(story =>
+    private bool HasStoryEntry(NPC npc) => this.HasCaseEntry(npc) || this.storiesSupported && this.townStories.Values.Any(story =>
         story.Owner == npc.Name.ToLowerInvariant() && (this.config.TownStories || this.lifeSave.Stories.ContainsKey(story.Id))
         || this.config.TownStories && this.lifeSave.Stories.TryGetValue(story.Id, out TownStoryState? state)
             && state.Outcome is null && story.Clues.Any(clue => clue.Witness == npc.Name.ToLowerInvariant()));
@@ -247,10 +252,10 @@ internal sealed partial class ModEntry
 
     private void ShowTownStories(NPC npc)
     {
-        if (!this.StoryMenusReady || !LifeNear(npc)) return;
+        if ((!this.StoryMenusReady && !this.CaseMenusReady) || !LifeNear(npc)) return;
         string id = npc.Name.ToLowerInvariant();
         List<(string Label, Action Action)> options = new();
-        foreach (TownStoryTemplate story in this.townStories.Values)
+        foreach (TownStoryTemplate story in this.townStories.Values.Where(_ => this.StoryMenusReady))
         {
             if (story.Owner == id && (this.config.TownStories || this.lifeSave.Stories.ContainsKey(story.Id)))
                 options.Add((story.Title, () => this.ShowOwnedStory(npc, story)));
@@ -258,8 +263,9 @@ internal sealed partial class ModEntry
                 foreach (TownStoryClue clue in story.Clues.Where(c => c.Witness == id))
                     options.Add(($"问问{story.Title}的线索", () => this.AskStoryWitness(npc, story, clue)));
         }
+        this.AddCaseNpcOptions(npc, options);
         options.Add(("以后再聊", () => { }));
-        this.StoryQuestion(npc, "想聊哪件事？", options);
+        this.CaseQuestion(npc, "想聊哪件事？", options, shared: true);
     }
 
     private void ShowOwnedStory(NPC npc, TownStoryTemplate story)

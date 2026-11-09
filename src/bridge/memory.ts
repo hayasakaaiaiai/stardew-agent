@@ -16,7 +16,7 @@ import { type DeliveredLetter, type Letter, letterFor, letterKey } from '../agen
 import { lifeContext } from '../agent/life.ts';
 import { journalFreshEvents, lifeJournalChanges } from '../agent/life-journal.ts';
 import { romanceContext, ROMANCE_NPCS } from '../agent/romance.ts';
-import { storyContext, storyNpcIds, STORY_NPCS } from '../agent/town-stories.ts';
+import { storyContext, storyNpcIds, ALL_STORY_NPCS } from '../agent/town-stories.ts';
 import { longGoalContext, LONG_GOAL_NPCS } from '../agent/long-goals.ts';
 import { goalResultContext, GOAL_RESULT_NPCS } from '../agent/goal-results.ts';
 import { callOffIn, changeIn, LATER_TOPIC, laterCallOffNote, laterIn, type LaterMeeting, laterMeetings, laterMovedNote, laterNote, type Meeting, meetingFor,
@@ -551,7 +551,7 @@ export class GameSave {
           const [projection, romantic, stories, longGoals, goalResults] = await Promise.all([
             this.journalState(npcId, 'lifeState'),
             (ROMANCE_NPCS as readonly string[]).includes(npcId) ? this.journalState(npcId, 'romanceState') : undefined,
-            STORY_NPCS.includes(npcId) ? this.journalState(npcId, 'storyState') : undefined,
+            ALL_STORY_NPCS.includes(npcId) ? this.journalState(npcId, 'storyState') : undefined,
             LONG_GOAL_NPCS.includes(npcId) ? this.journalState(npcId, 'longGoalState') : undefined,
             GOAL_RESULT_NPCS.includes(npcId) ? this.journalState(npcId, 'goalResultState') : undefined,
           ]);
@@ -624,7 +624,7 @@ export class GameSave {
       for (const id of ids) {
         const [life, romance, story, longGoal, goalResult] = await Promise.all([
           this.journalState(id, 'lifeState'), this.journalState(id, 'romanceState'),
-          STORY_NPCS.includes(id) ? this.journalState(id, 'storyState') : undefined,
+          ALL_STORY_NPCS.includes(id) ? this.journalState(id, 'storyState') : undefined,
           LONG_GOAL_NPCS.includes(id) ? this.journalState(id, 'longGoalState') : undefined,
           GOAL_RESULT_NPCS.includes(id) ? this.journalState(id, 'goalResultState') : undefined,
         ]);

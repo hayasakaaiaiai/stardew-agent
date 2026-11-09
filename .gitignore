@@ -26,3 +26,5 @@ tests/long-goal-rules/bin/
 tests/long-goal-rules/obj/
 tests/goal-result-rules/bin/
 tests/goal-result-rules/obj/
+tests/town-case-rules/bin/
+tests/town-case-rules/obj/

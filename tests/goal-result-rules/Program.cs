@@ -150,7 +150,7 @@ Check("menus pauses and warp intervals never count", !GoalResultRules.Together("
 Check("ordinary whole clock steps credit exactly ten minutes", LifeActivityRules.ClockStep(950, 1000, true) == 10 && LifeActivityRules.ClockStep(900, 930, true) == 0
     && LifeActivityRules.ClockStep(900, 910, false) == 0);
 Check("new results require v3 while old saves remain readable", GoalResultRules.SaveVersion(1, Array.Empty<LifeEvent>()) && GoalResultRules.SaveVersion(2, Array.Empty<LifeEvent>())
-    && GoalResultRules.SaveVersion(3, completeEvents) && !GoalResultRules.SaveVersion(2, completeEvents) && !GoalResultRules.SaveVersion(4, completeEvents));
+    && GoalResultRules.SaveVersion(3, completeEvents) && !GoalResultRules.SaveVersion(2, completeEvents) && !GoalResultRules.SaveVersion(5, completeEvents));
 Check("a new long goal event must never downgrade a v3 save", LongGoalRules.VersionAfterEvent(3, "longgoal.completed") == 3 && LongGoalRules.SaveVersion(3, completeEvents));
 Check("the first result event upgrades and older domains preserve v3", GoalResultRules.VersionAfterEvent(2, "goalresult.started") == 3
     && GoalResultRules.VersionAfterEvent(3, "story.started") == 3 && LongGoalRules.VersionAfterEvent(1, "longgoal.started") == 2);

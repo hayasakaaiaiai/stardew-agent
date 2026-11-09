@@ -116,7 +116,7 @@ internal static class LongGoalRules
     internal static bool IsLongGoal(LifeEvent entry) => entry.Kind.StartsWith("longgoal.", StringComparison.Ordinal);
     internal static bool Compatible(bool supported, IEnumerable<LifeEvent> events) => supported || !events.Any(IsLongGoal);
     internal static int VersionAfterEvent(int currentVersion, string kind) => kind.StartsWith("longgoal.", StringComparison.Ordinal) ? Math.Max(2, currentVersion) : currentVersion;
-    internal static bool SaveVersion(int version, IEnumerable<LifeEvent> events) => version is 1 or 2 or 3 && (version >= 2 || !events.Any(IsLongGoal));
+    internal static bool SaveVersion(int version, IEnumerable<LifeEvent> events) => version is 1 or 2 or 3 or 4 && (version >= 2 || !events.Any(IsLongGoal));
     internal static int CurrentChapter(LongGoalState state) => state.Chapters.FindIndex(chapter => chapter.Outcome is null) + 1;
     internal static int OpenedDay(LongGoalState state, int chapter) => chapter == 1 ? state.StartedDay : state.Chapters[chapter - 2].CompletedDay;
     internal static bool ChapterAvailable(int chapter, int day, int openedDay) => chapter is >= 1 and <= 3 && openedDay > 0

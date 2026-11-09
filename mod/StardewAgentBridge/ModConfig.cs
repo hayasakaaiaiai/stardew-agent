@@ -8,6 +8,8 @@ internal sealed class ModConfig
     public bool LongGoals { get; set; } = true;
     /// <summary>Investigations and persistent projects grounded in observed game actions.</summary>
     public bool TownStories { get; set; } = true;
+    /// <summary>Four source-bound investigations using real sites, samples and presence.</summary>
+    public bool TownCases { get; set; } = true;
     /// <summary>Opens native choices for nearby investigation and field observations.</summary>
     public StardewModdingAPI.SButton StoryInvestigationKey { get; set; } = StardewModdingAPI.SButton.F8;
     /// <summary>Explicit dates and private shared memories for vanilla romantic relationships.</summary>
