@@ -8,11 +8,12 @@ import { type Bubble, bubblesFor } from '../agent/bubbles.ts';
 import { AgentMemory, turnLog } from '../agent/dialogue-memory.ts';
 import type { DialogueMemory, Exchange, Remembered, Standing, TurnResult } from '../agent/dialogue.ts';
 import { FESTIVAL_TOPIC, festivalMemories } from '../agent/festivals.ts';
-import { friendshipPoints, friendshipSoFar } from '../agent/friendship.ts';
+import { friendshipPoints, friendshipSoFar, FRIENDSHIP_DAY_MIN, FRIENDSHIP_DAY_MAX } from '../agent/friendship.ts';
 import { giftItemName, giftMemory } from '../agent/gifts.ts';
 import { GIVEN_TOPIC, givenMemory, withInPersonGift } from '../agent/in-person-gifts.ts';
 import { type Gossip, gossipOf, heardMemory, heardToday, shareFor, spread, type Transfer } from '../agent/news.ts';
 import { type DeliveredLetter, type Letter, letterFor, letterKey } from '../agent/letters.ts';
+import { lifeChanges, lifeContext, type LifeEvent } from '../agent/life.ts';
 import { callOffIn, changeIn, LATER_TOPIC, laterCallOffNote, laterIn, type LaterMeeting, laterMeetings, laterMovedNote, laterNote, type Meeting, meetingFor,
   meetingMemory, MEET_PLACES, movedLabel, movedNote,
   MEETS_PER_DAY, declinedIn, invitedIn, MOOD_TOPIC, moodLine, openedAtMeeting, stoodUpTopics, todayAgreement, todayMeeting,
@@ -22,7 +23,7 @@ import { Nightly } from '../agent/nightly.ts';
 import { withMorningPlan } from '../agent/morning.ts';
 import { createRuntime, type SaveScope } from '../index.ts';
 import type { Gift } from '../services/roster/index.ts';
-import { type MemoryDraft, SOCIAL_NPCS } from '../types.ts';
+import { type ConsolidationInput, type Json, type MemoryDraft, type NpcState, SOCIAL_NPCS } from '../types.ts';
 import { canonical, digest, requireValue } from '../validation.ts';
 import { absoluteDay, gameMinutes, type Envelope, type GameDate, type LoadedSave, type ModMessage, type SavePointer, type TalkReply } from './protocol.ts';
 
@@ -172,6 +173,9 @@ export class GameSave {
   private laterNpcs: Promise<Set<string>> | undefined;
   /** Backstage results waiting for the next town hour (docs/scheduler.md §4.5); only in memory, like scenes. */
   private backstage: { day: number; notes: BackstageNote[] }[] = [];
+  /** Immutable life projections live in day logs, independently of asynchronous nightly NPC state. */
+  private lifeHistoryHead = '';
+  private readonly lifeHistory = new Map<string, Promise<Json | undefined>>();
 
   constructor(runtime: Runtime, path: string, state: Checkpoint, confirmed: (commitId: string) => void = () => {}) {
     this.runtime = runtime; this.path = path; this.state = state; this.confirmed = confirmed;
@@ -201,6 +205,33 @@ export class GameSave {
 
   private async openScope(head: string, day: number): Promise<void> {
     this.scope = await this.runtime.ctx.saves.load({ lineageId: this.initial.lineageId, loadNonce: this.loadNonce, day, commitId: head });
+  }
+
+  private async lifeState(npcId: string): Promise<Json | undefined> {
+    const current = this.dayEntries(npcId).findLast(entry =>
+      entry.changes.some(change => change.npcId === npcId && change.log?.lifeState !== undefined));
+    if (current) return current.changes.find(change => change.npcId === npcId)!.log!.lifeState;
+    const head = this.state.head;
+    if (this.lifeHistoryHead !== head) { this.lifeHistory.clear(); this.lifeHistoryHead = head; }
+    let found = this.lifeHistory.get(npcId);
+    if (!found) {
+      found = (async () => {
+        let commitId: string | null = head;
+        while (commitId !== null) {
+          const input: ConsolidationInput = await this.runtime.ctx.store.call('consolidationInput', {
+            lineageId: this.initial.lineageId, commitId, npcIds: [npcId],
+          });
+          const entry = input.npcs[0]?.logs.findLast(log => log.changes.some(change =>
+            change.npcId === npcId && change.log?.lifeState !== undefined));
+          if (entry) return entry.changes.find(change => change.npcId === npcId)!.log!.lifeState;
+          commitId = input.commit.parentId;
+        }
+        return undefined;
+      })();
+      this.lifeHistory.set(npcId, found);
+      void found.catch(() => { if (this.lifeHistory.get(npcId) === found) this.lifeHistory.delete(npcId); });
+    }
+    return found;
   }
 
   async restore(): Promise<void> {
@@ -471,7 +502,14 @@ export class GameSave {
         return context;
       };
       const memory = withInPersonGift(withMorningPlan({
-        context: async (query, current) => { signal.throwIfAborted(); standing = current; return reader.context(query, current); },
+        context: async (query, current) => {
+          signal.throwIfAborted(); standing = current;
+          const context = await reader.context(query, current);
+          const projection = await this.lifeState(npcId);
+          signal.throwIfAborted();
+          const life = lifeContext(projection === undefined ? {} : { life: projection }, this.day);
+          return life ? { ...context, summary: [context.summary, life].filter(Boolean).join('\n') } : context;
+        },
         record: async (exchange, remembered) => { signal.throwIfAborted(); staged = { exchange, remembered }; },
       }, { now: () => gameMinutes(date), read, skip: inviting }), { gifts, now: () => gameMinutes(date), read: async () => {
         signal.throwIfAborted();
@@ -508,6 +546,41 @@ export class GameSave {
         await this.persist();
         return reply;
       }) };
+    });
+  }
+
+  /** Replays the Mod's durable journal into this branch, atomically with the bridge receipt. */
+  syncLife(message: Extract<Event, { type: 'life.sync' }>): Promise<void> {
+    return this.enqueue(async () => {
+      if (this.check(message)) return;
+      requireValue(this.state.phase === 'open', 'DAY_CLOSED', '生活记录等待当前存档准备就绪');
+      requireValue(message.events.every(event => event.day <= this.day), 'FUTURE_LIFE_EVENT', '不能记录未来日期的生活事件');
+      const prior: Record<string, NpcState> = {};
+      const ids = [...new Set(message.events.flatMap(event => [event.npc, ...(event.other ? [event.other] : [])]))];
+      for (const id of ids) {
+        const projection = await this.lifeState(id);
+        prior[id] = projection === undefined ? {} : { life: projection };
+      }
+      const changes = lifeChanges(message.events, prior);
+      for (const change of changes) {
+        const events = (change.log?.lifeEvents ?? []) as unknown as LifeEvent[];
+        let points = 0;
+        let total = friendshipSoFar(this.dayEntries(change.npcId), change.npcId);
+        for (const event of events.filter(event => event.day === this.day)) {
+          points += event.friendship ?? 0;
+          total += event.friendship ?? 0;
+          requireValue(total >= FRIENDSHIP_DAY_MIN && total <= FRIENDSHIP_DAY_MAX, 'LIFE_FRIENDSHIP_LIMIT', '生活活动的好感超过当天共用上限');
+        }
+        if (points) change.log = { ...change.log, friendship: points };
+      }
+      const receipt: Receipt = { seq: message.seq, hash: digest(canonical(message)) };
+      if (changes.length) await this.scope!.record({ seq: message.seq, gameTime: this.day * 1440,
+        changes: changes.map(({ state, ...change }, i) => ({
+          ...change, log: { ...change.log, lifeState: state!.life!,
+            ...(i === 0 ? { bridgeReceipt: JSON.parse(canonical(receipt)) } : {}) },
+        })) });
+      this.addReceipt(receipt);
+      await this.persist();
     });
   }
 

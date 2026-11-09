@@ -278,7 +278,7 @@ internal sealed partial class ModEntry
                     this.meetings[name] = new Meeting(name, hhmm, place.GetString()!, sameDay: true);
                 continue;
             }
-            if (name is not null && !this.meetings.ContainsKey(name) && this.meetings.Count < MeetsPerDay)
+            if (name is not null && !this.meetings.ContainsKey(name) && this.meetings.Count + this.LifeActivityStartsToday < MeetsPerDay)
                 this.meetings[name] = new Meeting(name, hhmm, place.GetString()!, sameDay);
         }
         return true;
@@ -307,6 +307,12 @@ internal sealed partial class ModEntry
     private void ApplyMeeting(Meeting m)
     {
         m.ReceivedAt = Game1.timeOfDay;
+        if (this.IsLifeActivityNpc(m.Npc))
+        {
+            m.Failed = true;
+            this.Monitor.Log($"{m.Npc} 正在参加其他共同活动，本次约定未接管日程。", LogLevel.Info);
+            return;
+        }
         if (m.Festival is string festival)
         {
             this.ApplyFestivalMeeting(m, festival);
@@ -365,6 +371,8 @@ internal sealed partial class ModEntry
             return;
         }
         m.Applied = true;
+        // A newly accepted schedule owns the actor; an older life activity must not warp it back later.
+        this.lifeActivityReturns.RemoveAll(returning => returning.Npc.Name.Equals(m.Npc, StringComparison.OrdinalIgnoreCase));
         if (m.SameDay && !m.Moved && npc is not null)
             Game1.addHUDMessage(new HUDMessage(m.Agreed <= m.ReceivedAt ? $"和{npc.displayName}约好马上在{m.Place}见"
                 : $"和{npc.displayName}约好 {m.Time / 100}:{m.Time % 100:00} 在{m.Place}见", HUDMessage.newQuest_type));
@@ -795,6 +803,7 @@ internal sealed partial class ModEntry
             return;
         }
         m.Applied = true;
+        this.lifeActivityReturns.RemoveAll(returning => returning.Npc.Name.Equals(m.Npc, StringComparison.OrdinalIgnoreCase));
         m.Spouse = GameState.Relation(npc) is "married" or "roommate";
         if (m.SameDay && !m.Moved)
             Game1.addHUDMessage(new HUDMessage($"和{npc.displayName}约好一起去{m.Place}", HUDMessage.newQuest_type));
@@ -873,5 +882,7 @@ internal sealed partial class ModEntry
                 fields["friendship"] = changed;
         }
         this.Send("meet.ended", fields);
+        if (fields.ContainsKey("stoodUp"))
+            this.EmitLifeEvent(m.Npc, "activity.missed", minutes: 0);
     }
 }

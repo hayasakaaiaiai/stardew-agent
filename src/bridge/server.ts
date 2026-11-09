@@ -17,7 +17,7 @@ import type { Roster } from '../services/roster/index.ts';
 import { SOCIAL_NPCS } from '../types.ts';
 import { requireValue } from '../validation.ts';
 import { GameMemory, type GameSave } from './memory.ts';
-import { absoluteDay, type BackendMessage, type Envelope, gameMinutes, type ModMessage, parseModMessage, PROTOCOL_VERSION, type Schedules } from './protocol.ts';
+import { absoluteDay, type BackendMessage, type Envelope, gameMinutes, LIFE_ACTIVITIES, type ModMessage, parseModMessage, PROTOCOL_VERSION, type Schedules } from './protocol.ts';
 import { clock, WEATHER, worldState } from './world.ts';
 
 export interface BridgeOptions {
@@ -52,6 +52,7 @@ function scheduleOf(schedules: Schedules | undefined, id: string): ScheduleStop[
 }
 class Session {
   hello = false;
+  lifeSyncing = false;
   save: GameSave | undefined;
   readonly open = new Map<string, OpenTalk>();
   pending: AbortController | undefined;
@@ -325,7 +326,20 @@ export class BridgeServer {
     socket.on('message', data => {
       let message: ModMessage;
       try { message = parseModMessage(data.toString()); }
-      catch (error) { this.log(`忽略一条无法解析的消息：${String(error)}`); return; }
+      catch (error) {
+        this.log(`忽略一条无法解析的消息：${String(error)}`);
+        // A corrupted durable life batch must fail visibly rather than leave the Mod waiting forever.
+        try {
+          const invalid = JSON.parse(data.toString()) as Record<string, unknown>;
+          if (invalid?.type === 'life.sync' && session.save && invalid.lineageId === session.save.initial.lineageId
+            && invalid.loadNonce === session.save.loadNonce && Number.isSafeInteger(invalid.seq) && (invalid.seq as number) > 0) {
+            session.lifeSyncing = true;
+            send({ type: 'sync.error', lineageId: session.save.initial.lineageId, loadNonce: session.save.loadNonce,
+              seq: invalid.seq as number, message: `生活记录格式无效：${error instanceof Error ? error.message : String(error)}` });
+          }
+        } catch { /* A non-JSON frame has no trustworthy load identity. */ }
+        return;
+      }
       // Lifecycle messages stay ordered, but model requests run outside this queue so Saving can cancel them immediately.
       session.chain = session.chain.then(() => this.handle(session, message, send)).catch((error: unknown) => {
         const reason = error instanceof Error ? error.message : String(error);
@@ -340,13 +354,14 @@ export class BridgeServer {
       session.hello = false;
       requireValue(message.protocol === PROTOCOL_VERSION, 'PROTOCOL_MISMATCH', 'Mod 与后端协议不一致，请一同更新');
       session.hello = true;
-      send({ type: 'hello', protocol: PROTOCOL_VERSION });
+      send({ type: 'hello', protocol: PROTOCOL_VERSION, lifeProtocol: 1 });
       return;
     }
     requireValue(session.hello, 'HANDSHAKE_REQUIRED', '请先完成协议握手');
     if (message.type === 'save.loaded') {
       session.pending?.abort('Save reannounced');
       session.open.clear();
+      session.lifeSyncing = false;
       if (session.save && this.owners.get(session.save.initial.lineageId) === session)
         this.owners.delete(session.save.initial.lineageId);
       const previousSave = session.save;
@@ -373,6 +388,24 @@ export class BridgeServer {
       && message.lineageId === save.initial.lineageId && message.loadNonce === save.loadNonce,
       'STALE_LOAD', '消息不属于当前读档');
 
+    if (message.type === 'life.sync') {
+      session.lifeSyncing = true;
+      session.pending?.abort('Life state is synchronizing');
+      session.open.clear();
+      await save.syncLife(message);
+      send({ type: 'ack', ...envelope(message) });
+      if (message.final) {
+        session.lifeSyncing = false;
+        send({ type: 'life.ready', ...envelope(message), day: save.day });
+      }
+      return;
+    }
+
+    if ((message.type === 'talk.open' || message.type === 'talk.say') && session.lifeSyncing) {
+      send({ type: 'talk.error', ...envelope(message), npc: message.npc, message: '生活记录正在同步，请稍后再聊。' });
+      return;
+    }
+
     if (message.type === 'talk.open') {
       const npcId = message.npc.toLowerCase();
       if (!this.options.roster.has(npcId)) {
@@ -397,6 +430,10 @@ export class BridgeServer {
         world: { ...worldState(message.world, save.player, this.cardName),
           ...(schedule ? { schedule, scheduleFacts: scheduleReplies(message.schedule!, message.world.date.time)! } : {}),
           ...(meeting && !visit ? { meeting } : {}), ...(visit ? { visit } : {}), ...(invitation ? { invitation } : {}), ...(mood ? { mood } : {}) } };
+      if (message.lifeActivity) {
+        const activity = message.lifeActivity;
+        talk.world.facts['当前共同活动'] = `${LIFE_ACTIVITIES[activity.activity]}；有效同行 ${activity.minutes} 游戏分钟，实际完成计数 ${activity.count}；活动仍在进行，尚未结算，不推断作品或整条目标已完成。`;
+      }
       session.open.set(message.npc, talk);
       void this.turn(session, talk, message, OPENING_LINE, send);
       return;

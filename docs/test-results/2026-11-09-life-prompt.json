@@ -1,0 +1,94 @@
+{
+  "measuredOn": "2026-11-09",
+  "tokenizer": "gpt-tokenizer@3.4.0 / o200k_base",
+  "modelCalls": 0,
+  "method": "Actual lifeContext and buildMessages; sum message content tokens. Same 8-heart Leah card, existing impression and empty retrieval/history. Excludes provider framing, retrieval growth and output. Approximation for DeepSeek, not its billing count.",
+  "baselineTokens": 1893,
+  "samples": [
+    {
+      "name": "没有生活记录",
+      "day": 2,
+      "cue": "",
+      "cueTokens": 0,
+      "totalTokens": 1893,
+      "addedTokens": 0
+    },
+    {
+      "name": "已接取",
+      "day": 2,
+      "cue": "## 最近相处\n共同目标：第 1 天已接取 3 块浮木，尚未交付。\n当前心情：期待；依据：第 1 天：农场主明确接下了帮我收集 3 块浮木的目标，尚未交付。\n亲疏仍按原版心数和关系，不编造未记录的经历。",
+      "cueTokens": 84,
+      "totalTokens": 1977,
+      "addedTokens": 84
+    },
+    {
+      "name": "已交料",
+      "day": 2,
+      "cue": "## 最近相处\n共同目标：第 1 天已交付 3 块浮木，后续在森林散步尚未完成。\n当前心情：感谢；依据：第 1 天：农场主实际交给我 3 块浮木。\n亲疏仍按原版心数和关系，不编造未记录的经历。",
+      "cueTokens": 78,
+      "totalTokens": 1971,
+      "addedTokens": 78
+    },
+    {
+      "name": "已完成",
+      "day": 2,
+      "cue": "## 最近相处\n当前心情：欣慰；依据：第 1 天：农场主完成了浮木目标，我们在森林散步，实际共同活动 30 分钟。\n实际共同经历让你更相信农场主会兑现承诺。\n亲疏仍按原版心数和关系，不编造未记录的经历。",
+      "cueTokens": 75,
+      "totalTokens": 1968,
+      "addedTokens": 75
+    },
+    {
+      "name": "仅材料结局",
+      "day": 2,
+      "cue": "## 最近相处\n当前心情：平静；依据：第 1 天：农场主明确结束了共同目标；此前已交付 3 块浮木，后续共同活动没有完成，没有记为失约。\n亲疏仍按原版心数和关系，不编造未记录的经历。",
+      "cueTokens": 70,
+      "totalTokens": 1963,
+      "addedTokens": 70
+    },
+    {
+      "name": "失约",
+      "day": 2,
+      "cue": "## 最近相处\n当前心情：失落；依据：第 1 天：原先与农场主有约，实际等候后农场主没有赴约。\n实际失约让你对承诺仍有顾虑；不要把正常取消说成失约。\n亲疏仍按原版心数和关系，不编造未记录的经历。",
+      "cueTokens": 80,
+      "totalTokens": 1973,
+      "addedTokens": 80
+    },
+    {
+      "name": "道歉待行动",
+      "day": 2,
+      "cue": "## 最近相处\n当前心情：缓和；依据：第 2 天：农场主当面为先前的失约向我道歉。我听到了道歉，仍想看看之后的实际行动。\n实际失约让你对承诺仍有顾虑；不要把正常取消说成失约。\n已听到针对失约的道歉，关系修复还要看之后的实际行动。\n亲疏仍按原版心数和关系，不编造未记录的经历。",
+      "cueTokens": 110,
+      "totalTokens": 2003,
+      "addedTokens": 110
+    },
+    {
+      "name": "实际行动修复",
+      "day": 2,
+      "cue": "## 最近相处\n当前心情：释然；依据：第 2 天：我和农场主在森林散步，实际共同活动 30 分钟。此前道歉后又用实际行动兑现承诺，我愿意逐步恢复信任。\n亲疏仍按原版心数和关系，不编造未记录的经历。",
+      "cueTokens": 76,
+      "totalTokens": 1969,
+      "addedTokens": 76
+    },
+    {
+      "name": "未完成目标过三日",
+      "day": 10,
+      "cue": "## 最近相处\n共同目标：第 1 天已交付 3 块浮木，后续在森林散步尚未完成。\n亲疏仍按原版心数和关系，不编造未记录的经历。",
+      "cueTokens": 51,
+      "totalTokens": 1944,
+      "addedTokens": 51
+    },
+    {
+      "name": "完成后过三日",
+      "day": 10,
+      "cue": "## 最近相处\n实际共同经历让你更相信农场主会兑现承诺。\n亲疏仍按原版心数和关系，不编造未记录的经历。",
+      "cueTokens": 39,
+      "totalTokens": 1932,
+      "addedTokens": 39
+    }
+  ],
+  "liveActivity": {
+    "text": "森林散步；有效同行 20 游戏分钟，实际完成计数 0；活动仍在进行，尚未结算，不推断作品或整条目标已完成。",
+    "totalTokens": 1941,
+    "addedTokens": 48
+  }
+}

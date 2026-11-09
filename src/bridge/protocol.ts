@@ -7,11 +7,23 @@ import { FRIENDSHIP_DAY_MAX, FRIENDSHIP_DAY_MIN } from '../agent/friendship.ts';
 import { GIFT_TASTES, type GiftTaste } from '../agent/gifts.ts';
 import { MAX_STOPS, type ScheduleStop } from '../agent/schedule.ts';
 import type { DeliveredLetter } from '../agent/letters.ts';
+import { LIFE_GOAL_DETAILS, parseLifeEvents, type LifeEvent } from '../agent/life.ts';
 import type { Helped, MineTrip, Outing } from '../agent/meetings.ts';
 import type { SceneLine } from '../agent/scene.ts';
 import type { Relation } from '../services/roster/index.ts';
 
 export const PROTOCOL_VERSION = 3;
+
+export const LIFE_ACTIVITIES = {
+  forest_walk: '森林散步', foraging: '一起采集', fishing: '陪钓鱼', cooking: '一起做饭',
+  spouse_walk: '配偶外出散步', home_dinner: '家庭晚餐',
+} as const;
+export interface LifeActivitySnapshot {
+  activity: keyof typeof LIFE_ACTIVITIES;
+  minutes: number;
+  count: number;
+  goal?: string;
+}
 
 /** seq=0 is reserved for the connection handshake; game events increase within one load. */
 export interface Envelope {
@@ -80,6 +92,7 @@ export type ModMessage =
   | ({ type: 'save.saving'; commit: SavePointer } & Envelope)
   | ({ type: 'save.saved'; commitId: string; date: GameDate } & Envelope)
   | ({ type: 'title.returned' } & Envelope)
+  | ({ type: 'life.sync'; events: LifeEvent[]; final: boolean } & Envelope)
   | ({
     type: 'talk.open';
     /** The game's internal name, e.g. "Abigail". */
@@ -99,6 +112,8 @@ export type ModMessage =
     mine?: MineTrip;
     /** It has been with the player since they met somewhere ordinary (docs/npc-outing.md). */
     outing?: Outing;
+    /** Native progress in the current shared activity; never inferred from dialogue. */
+    lifeActivity?: LifeActivitySnapshot;
     /** The Mod chose this NPC to ask the player out on its first opening today (docs/npc-invites.md). */
     invite?: boolean;
     /** Its birthday, so "你生日那天" names a day (docs/npc-meetings-more.md §3). */
@@ -153,8 +168,9 @@ export interface AmbientNpc {
 }
 
 export type BackendMessage =
-  | { type: 'hello'; protocol: number }
+  | { type: 'hello'; protocol: number; lifeProtocol?: 1 }
   | ({ type: 'save.ready'; day: number } & Envelope)
+  | ({ type: 'life.ready'; day: number } & Envelope)
   | ({ type: 'ack' } & Envelope)
   | ({ type: 'sync.error'; message: string } & Partial<Envelope>)
   /** Today's lines to mutter when the player is near, by NPC id (docs/npc-bubbles.md); seq is 0. */
@@ -299,6 +315,12 @@ export function parseModMessage(raw: string): ModMessage {
       envelope(); text('commitId', 200); date(data.date); break;
     case 'title.returned':
       envelope(); break;
+    case 'life.sync':
+      envelope();
+      if (typeof data.final !== 'boolean') fail('final must be a boolean');
+      try { data.events = parseLifeEvents(data.events); }
+      catch (error) { fail(error instanceof Error ? error.message : String(error)); }
+      break;
     case 'day.started':
       envelope();
       date(data.date);
@@ -324,6 +346,17 @@ export function parseModMessage(raw: string): ModMessage {
       helped(data.helped);
       mine(data.mine);
       outing(data.outing);
+      if (data.lifeActivity !== undefined) {
+        const life = data.lifeActivity as Record<string, unknown> | null;
+        if (!life || typeof life !== 'object' || Array.isArray(life)
+          || typeof life.activity !== 'string' || !Object.hasOwn(LIFE_ACTIVITIES, life.activity)
+          || !Number.isSafeInteger(life.minutes) || (life.minutes as number) < 0 || (life.minutes as number) > 1200
+          || !Number.isSafeInteger(life.count) || (life.count as number) < 0 || (life.count as number) > 10000
+          || (life.goal !== undefined && (typeof life.goal !== 'string' || !Object.hasOwn(LIFE_GOAL_DETAILS, life.goal)
+            || LIFE_GOAL_DETAILS[life.goal]!.npc !== (data.npc as string).toLowerCase()
+            || LIFE_GOAL_DETAILS[life.goal]!.activity !== life.activity)))
+          fail('lifeActivity is invalid');
+      }
       world(data.world);
       break;
     }

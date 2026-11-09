@@ -96,11 +96,11 @@ internal sealed partial class ModEntry
         ? new[] { new Point(player.X - 1, player.Y), new Point(player.X + 1, player.Y) }
         : new[] { new Point(player.X, player.Y - 1), new Point(player.X, player.Y + 1) };
 
-    private bool OnOuting(string name) => this.meetings.TryGetValue(name, out Meeting? m) && m.Out.Together;
+    private bool OnOuting(string name) => this.IsLifeActivityNpc(name) || this.meetings.TryGetValue(name, out Meeting? m) && m.Out.Together;
 
     /// <summary>The outing so far, for a talk while together.</summary>
     private Dictionary<string, object?>? MeetingOuting(NPC npc)
-        => this.meetings.TryGetValue(npc.Name, out Meeting? m) && m.Out.Together ? m.Out.Fields() : null;
+        => this.meetings.TryGetValue(npc.Name, out Meeting? m) && m.Out.Together ? m.Out.Fields() : this.LifeActivityOuting(npc);
 
     private static int ArtifactsFound() => Game1.player.archaeologyFound.Values.Sum(found => found.Length > 0 ? found[0] : 0);
 

@@ -128,7 +128,7 @@ internal sealed partial class ModEntry
     }
 
     /// <summary>Walks over like one with something to say, until it has asked or the day is over.</summary>
-    private bool InvitesToday(NPC npc) => this.config.NpcInvites && this.TodayInviter() is string name && name.Equals(npc.Name, StringComparison.OrdinalIgnoreCase)
+    private bool InvitesToday(NPC npc) => !this.IsLifeActivityNpc(npc.Name) && this.config.NpcInvites && this.TodayInviter() is string name && name.Equals(npc.Name, StringComparison.OrdinalIgnoreCase)
         && this.MayInvite(npc.Name, (int)Game1.Date.TotalDays) && Game1.timeOfDay < ApproachLatestTime;
 
     /// <summary>Its opening asked: kept with the save, so a reload without saving forgets it.</summary>

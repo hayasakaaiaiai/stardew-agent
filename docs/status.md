@@ -1,18 +1,20 @@
 # 项目现状
 
-> 更新于 2026-11-09（`codex/npc-shared-goals` 功能分支）。莉亚共同目标设计已起草，等待用户确认后实现，见 [设计稿](npc-shared-goals.md)。主线 2026-10-24 的全仓审查、归并与公开结果见 [全仓审查报告](test-results/2026-10-24-repository-audit.md)。
+> 更新于 2026-11-09（`codex/npc-shared-goals` 功能分支）。用户授权的三类生活功能已完成代码接入，按 [完整 spec](npc-life-spec.md) 实施；本轮验证见 [报告](test-results/2026-11-09-npc-life.md)，下一步由用户按 [全量游戏清单](npc-life-game-checklist.md) 测试。尚未部署、推送或合并 main。
 
 ## 1. 这个项目在做什么
 
 为星露谷物语 1.6 的 34 位社交 NPC 提供中文自由对话和随存档保存、回滚、恢复的记忆。Node.js / TypeScript 后端通过本机 WebSocket 连接 SMAPI / C# Mod，界面使用原版对话框、选项和输入框。当前支持单人。
 
-NPC 已能按原版日程聊天、传话、寄信、主动靠近、约定赴约、帮农活、照顾动物、陪下矿和一起逛。自由模型内容仍会出错，功能实现和限定场景通过不等于所有模型内容都正确。
+NPC 已能按原版日程聊天、传话、寄信、主动靠近、约定赴约、帮农活、照顾动物、陪下矿和一起逛。本分支新增真实材料委托、相处情绪与关系修复、六种陪伴及家庭活动。自由模型内容仍会出错，功能实现和限定场景通过不等于所有模型内容都正确。
 
 ## 2. 当前进度与证据
 
 | 部分 | 状态与证据 |
 |---|---|
-| 共同目标首版 | 设计待确认：莉亚的 3 浮木委托、森林同行、感谢信与后续态度。用户已定一次交齐消耗 3 块、不限期、无额外礼物；尚未实现。候选 prompt 有印象样例增量 65–70 o200k token，见 [设计与验证范围](npc-shared-goals.md) |
+| 可完成玩法 | 已实现莉亚 3 浮木、威利 1 鲶鱼、玛鲁 1 铜锭的完整目标流程：真实交付、关联活动、材料／完整结局、谢信与保存回滚；不限期，无额外物品奖励 |
+| 人物状态与社交 | 34 位 NPC 的事件驱动心情、有限信任、真实失约后的道歉与履约修复；六组原版好友的同场来源核验分享。生活投影存入独立日志，不覆盖夜间印象和计划 |
+| 陪伴与家庭 | 森林散步、采集、钓鱼、原版厨房做饭、配偶散步、家庭晚餐均接入；真实计时／成果、取消、日程恢复及活动衔接。普通约定和活动每天共用 3 次启动 |
 | 记忆内核 | M1 已完成：NPC 隔离、中文检索、保存提交、回滚、恢复、旧档分叉；本轮补修无效读档提前删除当前 JSONL，见 [API](memory-kernel.md) |
 | 对话与存档桥接 | M3a / M3b 已完成；Windows 中文输入、原版台词保留和 Esc 取消由用户在 10 月 20 日手测确认；跨天、回滚、重启和分叉见 [游戏记忆报告](test-results/2026-10-20-game-memory.md) |
 | 送礼、好感、传话与后台行动 | 已合入；来源核对、有限失败恢复和原版流程见各设计文档及历史测试报告 |
@@ -22,14 +24,16 @@ NPC 已能按原版日程聊天、传话、寄信、主动靠近、约定赴约�
 | 角色资料 | 34 张角色卡、226 条事件后话题；123 个可送物品在原版游戏中识别；卡片模板和资料许可见 §8 |
 | H 线硬件陪伴 | 暂停，保留在 `hardware-companion`，不合入 main；本轮未修改 H 线 |
 
-本轮全仓审查另修模型配置空值和浏览器访问本机桥接的问题；最终 Node **303/303**、C# **54/54**、类型检查、构建、两个 demo 通过，Release 零警告／错误，依赖审计零漏洞。独立游戏固定反例重跑 **41/41**、98 秒、0 次真实调用，原档六文件哈希相同。依赖版本固定为锁文件中已有版本，没有新增依赖、prompt 或收费调用，详见 [审查报告](test-results/2026-10-24-repository-audit.md)。历史测试数字和部署记录单独保存在 [历史快照](status-history-2026-10-24.md)，不作为当前安装状态。
+本轮新增生活函数及 WebSocket／SQLite 回归、可独立运行的 C# 目标／同步和活动规则检查，精确结果与环境限制见 [生活功能验证报告](test-results/2026-11-09-npc-life.md)。新增事实摘要的实测增量为 0 或 39–110 o200k token，活动进行中另增 48；不含检索增长、API 封装与输出。没有新增项目依赖或真实模型调用，未自动运行游戏。
+
+2026-10-24 全仓审查的历史结果是 Node **303/303**、C# **54/54**、两个 demo、Release 构建及依赖审计；独立游戏固定反例 **41/41**。这些结果不代替本轮生活功能验证，见 [历史审查报告](test-results/2026-10-24-repository-audit.md) 与 [历史快照](status-history-2026-10-24.md)。
 
 ## 3. 分支
 
 | 分支 | 用途 |
 |---|---|
 | `main` | 当前单人游戏实现、非 H 线功能及 Windows 修复、验收入口和本轮全仓审查修复 |
-| `codex/npc-shared-goals` | 从本地 `main / 789b911` 建立；当前仅设计与分词记录。目录 `/Users/a11/Documents/ChatGPT/stardew-agent-shared-goals`，未推送、未合并 |
+| `codex/npc-shared-goals` | 从本地 `main / 789b911` 建立；三类生活功能与测试、spec 和用户全量游戏清单。目录 `/Users/a11/Documents/ChatGPT/stardew-agent-shared-goals`，未推送、未合并 |
 | `hardware-companion` | H 线硬件陪伴，暂停；本轮保持原提交 `6e92320` |
 
 历史功能分支和验收分支在 2026-10-24 的内容核对、合并与验证后清理，提交历史保留在 main。该轮删除 51 条远端、23 条本地历史分支，当时两边只剩 main 和 hardware-companion；这不是本次本地分支清单。清理前的 refs 和完整 Git bundle 保存在本机 `.runtime/repository-publication-20261024/`；旧分支对应的设计、测试记录仍在仓库。
@@ -38,14 +42,14 @@ NPC 已能按原版日程聊天、传话、寄信、主动靠近、约定赴约�
 
 ## 4. 运行环境与数据
 
-需要 Node.js 24、星露谷物语 1.6 和 SMAPI 4；编译 Mod 需 .NET 8 或更高 SDK。Windows 本轮环境为 Node 24.14.1、.NET SDK 9.0.202、游戏 1.6.15、SMAPI 4.5.2。游戏使用自己的 .NET 6 运行时，Mod 目标 `net6.0`。
+需要 Node.js 24、星露谷物语 1.6 和 SMAPI 4；编译 Mod 需 .NET 8 或更高 SDK。2026-10-24 Windows 历史验收环境为 Node 24.14.1、.NET SDK 9.0.202、游戏 1.6.15、SMAPI 4.5.2；本轮在 macOS / Node 24.18 进行离线开发与编译。游戏使用自己的 .NET 6 运行时，Mod 目标 `net6.0`。
 
 安装、配置、后端启动和 Mod 编译步骤见 [README](../README.md)。可执行离线 demo 和测试，无需模型 key、游戏或 `reference/game/`；C# 流程检查和游戏内验收需要合法安装的游戏。
 
 - 模型配置只放 `.env`；`.env` 及其变体忽略，`.env.example` 是空模板。超时和输出上限留空分别用 60000 ms 和 4000 token，非空必须为正整数。
 - 游戏后端仅监听 `127.0.0.1:47711`；可用 `NPC_BRIDGE_PORT` 改端口，同时修改 Mod 的 `BackendUrl`。浏览器 Origin 请求会被拒绝，原生 Mod 可连接。
 - 正常游戏记忆在 `.runtime/game/`，包含 SQLite、恢复日志和桥接检查点；升级代码不删除这份数据。
-- 本轮验收使用独立游戏进程、存档副本、Mod 目录和数据库。未部署正常安装的 DLL，也未重载常驻后端。
+- 2026-10-24 的历史验收使用独立游戏进程、存档副本、Mod 目录和数据库。本轮仅临时测试数据库、假模型与离线编译，未启动游戏、部署正常安装 DLL 或重载常驻后端。
 - 原始游戏导出文本、存档、模型输入输出、数据库和截图只在本机，不进入公开仓库；报告里的本地路径用于定位原证据。
 - 本仓库 `mod/nuget.config` 使用华为云 NuGet 镜像；能访问官方源时可按需调整。
 
@@ -64,6 +68,8 @@ node tools/check-repository.ts
 # 本机游戏路径按实际安装修改；只编译，不部署正常 Mod。
 dotnet build mod/StardewAgentBridge -c Release '-p:GamePath=E:\games\steamapps\common\Stardew Valley' -p:EnableModDeploy=false
 dotnet run --project tests/mod-flow -- 'E:\stardew-agent\mod\StardewAgentBridge\bin\Release\net6.0\StardewAgentBridge.dll' 'E:\games\steamapps\common\Stardew Valley'
+dotnet run --project tests/life-flow
+dotnet run --project tests/life-activity-rules
 
 # 显式启动独立游戏验收：固定反例不收费，live 会调用你配置的真实模型。
 powershell -NoProfile -File tools/test-game-real-meetings.ps1 -Section edges
@@ -77,6 +83,7 @@ powershell -NoProfile -File tools/test-game-real-meetings.ps1 -Section live
 
 | 问题 | 在哪记的 |
 |---|---|
+| 本轮三类生活功能尚未真人游戏测试；macOS 上旧 tests/mod-flow 在游戏程序集加载阶段失败，不能套用历史 Windows 54/54。新增独立 C# 规则检查与 Release 构建验证各自范围 | `test-results/2026-11-09-npc-life.md`、`npc-life-game-checklist.md` |
 | 真实游戏七项 4/7：模型收到邀约指令仍只寒暄；取消前并未出发，次日却误说在海边等过；花舞节当面答应但夜间 `meet=null`。本轮只脚本验收，未修改这些 prompt 或识别行为 | `test-results/2026-10-24-real-meetings-game.md`、`real-model-meetings.md` §12 |
 | Mac 小批 E 最后一轮 0 错记；Windows 新回复 20 段仍有 3 漏记、1 未改约（“可以是可以”保留原钟点）。只暗示的答应、无关“想想”等保守过滤暂不放宽；“两天以后”（带“以后”）也仍不会记成后天。新发现的四类错记／误取消风险已修复 | `test-results/2026-10-24-real-meetings-windows.md` §1、§3；`test-results/2026-10-24-real-meetings-D.md` §5 |
 | 当天约当天由代码核对原话，没明说的答应（“我早就想去了”“两点应该能抽开身”）会漏，留出批次 19 段存下 12 段；漏了 NPC 当天不去，靠 HUD 提示让玩家再确认一句 | `npc-same-day-meetings.md` §3、§8 |
@@ -97,7 +104,7 @@ powershell -NoProfile -File tools/test-game-real-meetings.ps1 -Section live
 
 ## 7. 下一步
 
-0. **共同目标首版**：确认 [莉亚设计](npc-shared-goals.md)，包含最小桥接接入文件例外后再写功能代码。本轮基线 `npm test` 303/303、类型检查通过；未验证新功能、未运行游戏、未调用真实模型。实施后自己完成离线、模拟客户端及编译检查，游戏内按设计清单交用户验证。
+0. **三类生活功能全量游戏验收**：按照 [清单](npc-life-game-checklist.md) 一次性测试三目标、六活动、关系／好友、信件、保存和既有玩法回归；记录未通过步骤与 SMAPI／后端日志。用户已取消本轮中途确认门，不再等待旧草案批准。主线合并、GitHub 推送仍需用户授权。
 1. 处理真实游戏留下的三处模型内容问题：主动邀约只寒暄、取消后编造等候、花舞节夜间漏约。保留原始失败；改变 prompt 或放宽接受词表前，继续按用户决定和实测 token 数评估。
 2. 暂不放宽含蓄答应的保守过滤；没有明确确认的约定可能漏记，通过 HUD 让玩家再确认。不得把固定回复通过写成自由模型通过。
 3. 持续观察自然日程、全角色剧情和自由内容。多人、全 NPC、随机矿层、节日完整自然流程没有新增全面覆盖。
@@ -107,6 +114,10 @@ powershell -NoProfile -File tools/test-game-real-meetings.ps1 -Section live
 
 | 文档 | 讲什么 |
 |---|---|
+| `docs/npc-life-spec.md` | 本轮三类生活功能完整 spec、实现顺序、规则、协议、内容依据、成本和设计调整 |
+| `docs/npc-life-game-checklist.md` | Windows 全量游戏测试：前提、入口、步骤、预期与待填写结果 |
+| `docs/test-results/2026-11-09-npc-life.md` | 本轮自动验证、发现并修复的问题、Mac 旧原生检查限制与未运行的真人游戏部分 |
+| `docs/test-results/2026-11-09-life-prompt.json` | 实际生产函数的生活摘要和活动进度分词样本；可由 tools/measure-life-prompt.ts 复现 |
 | `docs/npc-shared-goals.md` | 共同目标首版设计：已确认玩法、待确认细节、物品与存档一致性、实际同行、信件限额、最小接入例外和用户游戏内清单 |
 | `docs/test-results/2026-11-09-shared-goals-prompt.json` | 候选阶段提示全文、固定场景及 o200k 分词结果，不是模型语义或新功能验收 |
 | `README.md` | 安装、配置、功能、已知限制和验证入口 |

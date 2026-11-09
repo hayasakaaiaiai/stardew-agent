@@ -14,3 +14,7 @@ mod/**/bin/
 mod/**/obj/
 tests/mod-flow/bin/
 tests/mod-flow/obj/
+tests/life-flow/bin/
+tests/life-flow/obj/
+tests/life-activity-rules/bin/
+tests/life-activity-rules/obj/

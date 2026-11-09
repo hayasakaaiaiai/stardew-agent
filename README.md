@@ -11,6 +11,11 @@
 - 好感变化、原版送礼记忆、NPC 赠礼、寄信、头顶气泡和在场／后台传话。
 - 原版日程与节日事实、主动靠近、今天至后天的约定、改约、取消和赴约好感。
 - 农场作物及动物帮忙、陪下矿与救援、碰面后一起逛、NPC 主动邀约。
+- 三条共同目标：莉亚的浮木、威利的鲶鱼、玛鲁的铜锭；明确交付、后续活动、感谢信及两种结局。
+- 真实相处事件带来的心情与信任、失约后的道歉和行动修复、原版好友之间有来源的当面分享。
+- 森林散步、一起采集、陪钓鱼、一起做饭、配偶散步、家庭晚餐。
+
+生活功能本轮已完成代码与离线检查，尚未运行游戏验收；详见 [完整 spec](docs/npc-life-spec.md)、[验证报告](docs/test-results/2026-11-09-npc-life.md) 和 [全量游戏测试清单](docs/npc-life-game-checklist.md)。
 
 H 线硬件陪伴保留在 `hardware-companion`，尚未纳入 main。
 
@@ -36,6 +41,8 @@ npm run bridge
 
 聊天会把角色卡、相关对话／记忆和游戏状态发送给你配置的模型服务。密钥保存在忽略的 `.env`；本地记忆与恢复数据在 `.runtime/game/`。更新代码时保留这份目录，备份游戏存档时一并备份对应的记忆数据。原理和恢复边界见 [存档记忆接入](docs/game-memory.md)。
 
+生活功能需要同时更新后端和 Mod，默认开关为 `SharedGoals`、`LifeActivities`、`LifeSocial`。原版台词后选择“浮木的事／材料与共同目标”或“一起做点事”；同步完成后才开放新动作。共同目标首接取需 8 心且非配偶；独立活动需 8 心或配偶／室友，部分活动还有地点、时段和角色条件，详见游戏清单。普通约定与生活活动共用每天 3 次启动额度，正常取消不算失约。
+
 ## 无游戏、无密钥验证
 
 ```powershell
@@ -46,6 +53,8 @@ npm run demo
 npm run demo:built
 npm audit
 node tools/check-repository.ts
+dotnet run --project tests/life-flow
+dotnet run --project tests/life-activity-rules
 ```
 
 离线测试不联网、不调用真实模型、不操作游戏存档；demo 使用临时数据库并在退出时清理。`demo:built` 需要先构建。`node:sqlite` 在 Node 24 上会显示实验性提示。

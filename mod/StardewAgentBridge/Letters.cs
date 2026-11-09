@@ -56,8 +56,10 @@ internal sealed partial class ModEntry
         if (!this.config.SendLetters || !this.activeLoad || !this.IsCurrentMessage(message)
             || !message.TryGetProperty("letters", out JsonElement list) || list.ValueKind != JsonValueKind.Array)
             return true;
+        this.DeliverLifeLetters();
         foreach (JsonElement letter in list.EnumerateArray())
         {
+            if (this.lifeSave.MailDay == this.currentDay) break;
             if (letter.ValueKind != JsonValueKind.Object)
                 continue;
             string key = letter.TryGetProperty("key", out JsonElement k) && k.ValueKind == JsonValueKind.String ? k.GetString() ?? "" : "";
@@ -80,6 +82,8 @@ internal sealed partial class ModEntry
             this.Helper.Data.WriteSaveData(LettersSaveKey, this.letters);
             this.Helper.GameContent.InvalidateCache(MailAsset);
             Game1.player.mailbox.Add(key);
+            this.lifeSave.MailDay = this.currentDay;
+            this.PersistLife();
             this.Monitor.Log($"{from}寄来一封信{(attachment is null ? "" : $"，附带“{item}”")}。", LogLevel.Info);
         }
         this.RecordLetterTestPacket(list);

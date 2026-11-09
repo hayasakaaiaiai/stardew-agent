@@ -81,12 +81,12 @@ internal sealed partial class ModEntry : Mod
         helper.Events.GameLoop.Saving += (_, _) => this.OnSaving();
         helper.Events.GameLoop.Saved += (_, _) => this.OnSaved();
         helper.Events.GameLoop.ReturnedToTitle += (_, _) => this.OnReturnedToTitle();
-        helper.Events.GameLoop.TimeChanged += (_, _) => this.OnTimeChanged();
+        helper.Events.GameLoop.TimeChanged += (_, _) => { this.OnTimeChanged(); this.LifeActivitiesTimeChanged(); };
         // Dungeon levels are dropped overnight with whoever is in them (MineCompanion.cs).
         helper.Events.GameLoop.DayEnding += (_, _) => this.ReleaseCompanions();
         helper.Events.GameLoop.DayEnding += (_, _) => this.ReleaseOutings();
         helper.Events.GameLoop.UpdateTicking += (_, _) => this.RescueBeforeUpdate();
-        helper.Events.Player.Warped += (_, e) => this.OnWarped(e);
+        helper.Events.Player.Warped += (_, e) => { this.OnWarped(e); this.LifeActivitiesWarped(e); };
         helper.Events.GameLoop.UpdateTicked += this.OnUpdateTicked;
         helper.Events.Display.MenuChanged += this.OnMenuChanged;
         helper.Events.Content.AssetRequested += this.OnAssetRequested;
@@ -158,6 +158,8 @@ internal sealed partial class ModEntry : Mod
             this.TickMeetings();
         this.TickCompanions(e);
         this.TickOutings(e);
+        this.TickLifeActivities(e);
+        if (e.IsMultipleOf(60)) this.DeliverLifeLetters();
         this.TickFestivalMeetings();
         this.TickGifts();
         this.TickTown();
@@ -169,7 +171,12 @@ internal sealed partial class ModEntry : Mod
         // Everything below opens a menu, so it waits until the previous one has fully closed.
         if (Game1.activeClickableMenu is not null || Game1.dialogueUp || !Context.IsWorldReady)
             return;
-        if (this.offerFor is NPC offer)
+        if (this.lifeMenuNext is Action lifeAction)
+        {
+            this.lifeMenuNext = null;
+            lifeAction();
+        }
+        else if (this.offerFor is NPC offer)
         {
             this.offerFor = null;
             this.Offer(offer);
@@ -190,10 +197,10 @@ internal sealed partial class ModEntry : Mod
     private bool ShouldOffer(NPC npc)
     {
         return this.config.OfferContinueChat
-            && this.CanChat
+            && (this.CanChat || this.HasLifeActivityExit(npc))
             && Context.IsWorldReady
             && SocialNpcs.Contains(npc.Name)
-            && !ColdShoulder(npc.Name)
+            && (!ColdShoulder(npc.Name) || this.HasLifeActivityExit(npc))
             && !Game1.eventUp
             && !Game1.isFestival();
     }
@@ -215,13 +222,26 @@ internal sealed partial class ModEntry : Mod
 
     private void Offer(NPC npc)
     {
+        bool existingOnly = !this.CanChat;
+        if (existingOnly && !this.HasLifeActivityExit(npc))
+            return;
+        List<Response> options = new();
+        if (!existingOnly)
+            options.Add(new Response("chat", "继续聊"));
+        if (!existingOnly && this.lifeSupported && this.HasLifeGoalEntry(npc))
+            options.Add(new Response("goal", npc.Name == "Leah" ? "浮木的事" : "材料与共同目标"));
+        if (this.HasLifeActivityExit(npc) || !existingOnly && this.lifeSupported && (this.config.LifeActivities || this.config.LifeSocial))
+            options.Add(new Response("life", existingOnly ? "结束当前活动" : "一起做点事"));
+        options.Add(new Response("leave", "离开"));
+        string nonce = this.loadNonce;
         Game1.currentLocation.createQuestionDialogue(
-            $"要继续和{npc.displayName}聊聊吗？",
-            new[] { new Response("chat", "继续聊"), new Response("leave", "离开") },
+            existingOnly ? $"和{npc.displayName}的活动仍在进行。" : $"要继续和{npc.displayName}聊聊吗？", options.ToArray(),
             (_, answer) =>
             {
-                if (answer == "chat")
-                    this.startFor = npc;
+                if (nonce != this.loadNonce || !this.activeLoad) return;
+                if (answer == "chat") this.startFor = npc;
+                else if (answer == "goal") this.lifeMenuNext = () => this.ShowLifeGoal(npc);
+                else if (answer == "life") this.lifeMenuNext = () => this.ShowLifeActivities(npc);
             });
     }
 
@@ -243,6 +263,8 @@ internal sealed partial class ModEntry : Mod
             ["world"] = GameState.World(),
         };
         GameState.AddSchedule(fields, npc);
+        if (this.LifeActivitySnapshot(npc) is { } lifeActivity)
+            fields["lifeActivity"] = lifeActivity;
         if (this.MeetingTalk(npc))
         {
             fields["atMeeting"] = true;
@@ -409,7 +431,7 @@ internal sealed partial class ModEntry : Mod
     private void Handle(JsonElement message)
     {
         string type = message.TryGetProperty("type", out JsonElement typeValue) ? typeValue.GetString() ?? "" : "";
-        if (this.HandleSync(type, message) || this.HandleBubbles(type, message) || this.HandleLetters(type, message)
+        if (this.HandleLife(type, message) || this.HandleSync(type, message) || this.HandleBubbles(type, message) || this.HandleLetters(type, message)
             || this.HandleScenes(type, message) || this.HandleAmbient(type, message) || this.HandleApproach(type, message)
             || this.HandleMeetings(type, message))
             return;

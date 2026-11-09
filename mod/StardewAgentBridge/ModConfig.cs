@@ -2,6 +2,13 @@ namespace StardewAgentBridge;
 
 internal sealed class ModConfig
 {
+    /// <summary>Persistent character goals, explicit delivery, and follow-up activities.</summary>
+    public bool SharedGoals { get; set; } = true;
+    /// <summary>Explicit companion and household activities using native game menus.</summary>
+    public bool LifeActivities { get; set; } = true;
+    /// <summary>Source-checked sharing and repairing missed appointments.</summary>
+    public bool LifeSocial { get; set; } = true;
+
     /// <summary>The backend started with `npm run bridge`.</summary>
     public string BackendUrl { get; set; } = "ws://127.0.0.1:47711";
 

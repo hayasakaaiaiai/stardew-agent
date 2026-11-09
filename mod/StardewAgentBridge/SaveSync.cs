@@ -53,7 +53,7 @@ internal sealed partial class ModEntry
     private bool memoryReady;
     private bool syncFailed;
 
-    private bool CanChat => this.activeLoad && this.memoryReady && !this.syncFailed && this.lifecycle.Count == 0
+    private bool CanChat => this.activeLoad && (this.lifeReady || !this.lifeSupported) && this.memoryReady && !this.syncFailed && this.lifecycle.Count == 0
         && this.bridge.IsConnected && this.bridge.Generation == this.announcedGeneration;
 
     private void OnSaveLoaded()
@@ -72,6 +72,7 @@ internal sealed partial class ModEntry
         this.initialSave = null; this.lifecycle.Clear(); this.memoryReady = false; this.syncFailed = false;
         this.activeLoad = Context.IsMainPlayer;
         this.LoadLetters();
+        this.LoadLife();
         if (!this.activeLoad)
         {
             this.Monitor.Log("当前为农场帮手，AI 记忆由主玩家管理，本机不写共享存档。", LogLevel.Info);
@@ -112,21 +113,26 @@ internal sealed partial class ModEntry
         this.EndTalk(null);
         this.currentDay = AbsoluteDay();
         this.Send("day.started", new() { ["date"] = GameState.Date(), ["weather"] = GameState.Weather() });
+        this.DeliverLifeLetters();
     }
 
     private void OnDayEnding()
     {
+        this.EndLifeActivitiesForDay();
         if (!this.activeLoad || this.initialSave is null || this.syncFailed)
             return;
         // Saving runs after vanilla resets the clock and date to the next morning.
+        this.PersistLife();
         this.EndMeetings();
     }
 
     private void OnSaving()
     {
+        this.EndLifeActivitiesForDay();
         if (!this.activeLoad || this.initialSave is null || this.syncFailed)
             return;
         this.EndTalk(null);
+        this.PersistLife();
         // Part of the day being saved, so it goes before save.saving.
         this.EndMeetings();
         MemoryCommit pointer = new()
@@ -161,6 +167,7 @@ internal sealed partial class ModEntry
         this.ClearApproach();
         this.ClearMeetings();
         this.letters = new();
+        this.ClearLife(); this.lifeMenuNext = null;
         this.talk = null; this.offerFor = null; this.startFor = null;
         this.activeLoad = false; this.memoryReady = false;
         if (this.initialSave is not null)
@@ -174,6 +181,7 @@ internal sealed partial class ModEntry
         if (this.initialSave is null || !this.bridge.IsConnected)
             return;
         this.announcedGeneration = this.bridge.Generation; this.memoryReady = false;
+        this.RestartLifeSync();
         this.bridge.Send(this.initialSave);
         foreach (JsonElement message in this.lifecycle.Messages())
             this.bridge.Send(message);
@@ -187,7 +195,7 @@ internal sealed partial class ModEntry
         fields["loadNonce"] = this.loadNonce; fields["seq"] = ++this.seq;
         if (type == "talk.say")
             fields["date"] = GameState.Date();
-        bool reliable = type is "day.started" or "save.saving" or "save.saved" or "title.returned" or "gift.given" or "scene.shown" or "town.hour" or "festival.ended" or "meet.ended";
+        bool reliable = type is "day.started" or "save.saving" or "save.saved" or "title.returned" or "gift.given" or "scene.shown" or "town.hour" or "festival.ended" or "meet.ended" or "life.sync";
         if (reliable && !this.lifecycle.Add(this.seq, fields))
         {
             this.FailSync("记忆同步队列已满，本次读档停用 AI；原版游戏可继续，请保留日志并重新读档。");
@@ -222,9 +230,16 @@ internal sealed partial class ModEntry
         if (!this.IsCurrentMessage(message))
             return true;
         if (type == "save.ready")
+        {
             this.memoryReady = true;
+            if (this.lifeSupported) this.SendNextLifeBatch();
+        }
         else
-            this.lifecycle.Acknowledge(message.GetProperty("seq").GetInt32());
+        {
+            int acknowledged = message.GetProperty("seq").GetInt32();
+            this.lifecycle.Acknowledge(acknowledged);
+            this.LifeAcknowledged(acknowledged);
+        }
         return true;
     }
 

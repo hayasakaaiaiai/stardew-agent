@@ -142,7 +142,7 @@ internal sealed partial class ModEntry
     {
         // One asking the player out today comes over too, at the hearts it was chosen by (Invites.cs).
         int hearts = this.approachHearts.TryGetValue(npc.Name, out int needed) ? needed : this.InvitesToday(npc) ? InviteHearts : -1;
-        if (hearts < 0 || this.approached.Contains(npc.Name) || !SocialNpcs.Contains(npc.Name)
+        if (this.IsLifeActivityNpc(npc.Name) || hearts < 0 || this.approached.Contains(npc.Name) || !SocialNpcs.Contains(npc.Name)
             || npc.IsInvisible || npc.isSleeping.Value || npc.ignoreScheduleToday || ColdShoulder(npc.Name) || this.sceneParticipants.Contains(npc.Name))
             return false;
         string relation = GameState.Relation(npc);
