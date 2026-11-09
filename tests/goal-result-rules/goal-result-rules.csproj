@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../mod/StardewAgentBridge/GoalResultRules.cs" Link="GoalResultRules.cs" />
+    <Compile Include="../../mod/StardewAgentBridge/LongGoalRules.cs" Link="LongGoalRules.cs" />
+    <Compile Include="../../mod/StardewAgentBridge/LifeGoalRules.cs" Link="LifeGoalRules.cs" />
+    <Compile Include="../../mod/StardewAgentBridge/LifeActivityRules.cs" Link="LifeActivityRules.cs" />
+    <Compile Include="../../mod/StardewAgentBridge/LifeEvent.cs" Link="LifeEvent.cs" />
+    <Content Include="../../data/town/goal-results.json" Link="goal-results.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

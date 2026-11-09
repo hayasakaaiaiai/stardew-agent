@@ -169,7 +169,7 @@ export interface AmbientNpc {
 }
 
 export type BackendMessage =
-  | { type: 'hello'; protocol: number; lifeProtocol?: 1; romanceProtocol?: 1; storiesProtocol?: 1; goalsProtocol?: 1 }
+  | { type: 'hello'; protocol: number; lifeProtocol?: 1; romanceProtocol?: 1; storiesProtocol?: 1; goalsProtocol?: 1; resultsProtocol?: 1 }
   | ({ type: 'save.ready'; day: number } & Envelope)
   | ({ type: 'life.ready'; day: number } & Envelope)
   | ({ type: 'ack' } & Envelope)

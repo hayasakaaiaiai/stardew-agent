@@ -17,6 +17,7 @@
     <Content Include="../../data/romance/profiles.json" Link="assets/romance-profiles.json" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="../../data/town/stories.json" Link="assets/town-stories.json" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="../../data/town/long-goals.json" Link="assets/long-goals.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../../data/town/goal-results.json" Link="assets/goal-results.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

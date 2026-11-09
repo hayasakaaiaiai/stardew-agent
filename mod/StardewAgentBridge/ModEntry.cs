@@ -69,6 +69,7 @@ internal sealed partial class ModEntry : Mod
         this.LoadRomanceProfiles();
         this.LoadTownStories();
         this.LoadLongGoals();
+        this.LoadGoalResults();
         this.ConfigureMemoryTest();
         this.bridge = new BridgeClient(new Uri(this.config.BackendUrl), this.Monitor, this.ModManifest.Version.ToString());
 
@@ -167,6 +168,7 @@ internal sealed partial class ModEntry : Mod
         this.TickLifeActivities(e);
         this.TickStoryIntervals();
         this.TickLongGoalIntervals();
+        this.TickGoalResults(e);
         if (e.IsMultipleOf(60)) { this.TickRomance(); this.DeliverLifeLetters(); }
         this.TickFestivalMeetings();
         this.TickGifts();

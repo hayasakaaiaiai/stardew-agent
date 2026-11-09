@@ -24,3 +24,5 @@ tests/town-story-rules/bin/
 tests/town-story-rules/obj/
 tests/long-goal-rules/bin/
 tests/long-goal-rules/obj/
+tests/goal-result-rules/bin/
+tests/goal-result-rules/obj/

@@ -38,6 +38,11 @@ internal sealed class LifeEvent
     [JsonPropertyName("contributionId")] public string? ContributionId { get; set; }
     [JsonPropertyName("itemId")] public string? ItemId { get; set; }
     [JsonPropertyName("dependencySourceId")] public string? DependencySourceId { get; set; }
+    [JsonPropertyName("projectId")] public string? ProjectId { get; set; }
+    [JsonPropertyName("attemptId")] public string? AttemptId { get; set; }
+    [JsonPropertyName("point")] public int? Point { get; set; }
+    [JsonPropertyName("x")] public int? X { get; set; }
+    [JsonPropertyName("y")] public int? Y { get; set; }
 }
 
 internal static class LifeEventWire

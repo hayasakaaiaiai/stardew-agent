@@ -28,6 +28,7 @@ internal sealed partial class ModEntry
         public int RomanceInvitationDay { get; set; }
         public Dictionary<string, TownStoryState> Stories { get; set; } = new();
         public Dictionary<string, LongGoalState> LongGoals { get; set; } = new();
+        public Dictionary<string, GoalResultState> GoalResults { get; set; } = new();
     }
 
     private LifeSave lifeSave = new();
@@ -81,6 +82,7 @@ internal sealed partial class ModEntry
         this.ClearLifeActivities();
         this.ClearStoryIntervals();
         this.ClearLongGoalIntervals();
+        this.ClearGoalResults();
         this.goalsUpgradeNotified = false;
         this.storiesUpgradeNotified = false;
         this.romanceUpgradeNotified = false;
@@ -92,8 +94,8 @@ internal sealed partial class ModEntry
         try
         {
             LifeSave saved = JsonSerializer.Deserialize<LifeSave>(json, LifeJson) ?? throw new InvalidOperationException("生活记录为空。");
-            if (saved.Version is not (1 or 2) || saved.Serial < 0 || saved.Serial > 9007199254740991L || saved.Events is null
-                || saved.Goals is null || saved.Letters is null || saved.Romance is null || saved.Stories is null || saved.LongGoals is null || saved.Events.Count > LifeEventLimit
+            if (saved.Version is not (1 or 2 or 3) || saved.Serial < 0 || saved.Serial > 9007199254740991L || saved.Events is null
+                || saved.Goals is null || saved.Letters is null || saved.Romance is null || saved.Stories is null || saved.LongGoals is null || saved.GoalResults is null || saved.Events.Count > LifeEventLimit
                 || saved.Events.Any(e => e is null || e.Day < 1 || e.Day > AbsoluteDay())
                 || !LifeGoalRules.OrderedEventIds(saved.Events.Select(e => e.Id), saved.Serial))
                 throw new InvalidOperationException("生活记录版本或内容无效；原始记录保留。");
@@ -101,6 +103,8 @@ internal sealed partial class ModEntry
             this.ValidateRomanceSave();
             this.ValidateStorySave();
             this.ValidateLongGoalSave();
+            this.ValidateGoalResultSave();
+            this.QueueGoalResultRecovery();
             // A loaded game starts at morning; no unfinished actor controller survives the save boundary.
             foreach (LifeGoal goal in saved.Goals.Values)
                 if (goal.Stage == "walking") { goal.Stage = "ready"; goal.Attempt = null; }
@@ -140,7 +144,7 @@ internal sealed partial class ModEntry
         entry.Id = "life-" + (serial + 1);
         entry.Day = this.currentDay;
         this.lifeSave.Serial = serial + 1;
-        this.lifeSave.Version = LongGoalRules.VersionAfterEvent(version, entry.Kind);
+        this.lifeSave.Version = GoalResultRules.VersionAfterEvent(LongGoalRules.VersionAfterEvent(version, entry.Kind), entry.Kind);
         this.lifeEvents.Add(entry);
         try { this.PersistLife(); }
         catch (Exception ex)
@@ -182,6 +186,11 @@ internal sealed partial class ModEntry
             this.ReportLongGoalCompatibility();
             return;
         }
+        if (!this.GoalResultsCompatible)
+        {
+            this.ReportGoalResultCompatibility();
+            return;
+        }
         var batch = this.lifeSync.Next(this.lifeEvents.Count);
         int request = this.Send("life.sync", new()
         {
@@ -215,6 +224,10 @@ internal sealed partial class ModEntry
                 && goalsCapability.TryGetInt32(out int goalsVersion) && goalsVersion == 1;
             this.goalsUpgradeNotified = false;
             this.ReportLongGoalCompatibility();
+            this.resultsSupported = message.TryGetProperty("resultsProtocol", out JsonElement resultsCapability)
+                && resultsCapability.TryGetInt32(out int resultsVersion) && resultsVersion == 1;
+            this.resultsUpgradeNotified = false;
+            this.ReportGoalResultCompatibility();
             if (!this.lifeSupported)
             {
                 this.Monitor.Log("当前后端不支持生活功能，请同时更新后端和 Mod。普通聊天仍可使用。", LogLevel.Warn);
@@ -238,6 +251,7 @@ internal sealed partial class ModEntry
         this.ClearLifeActivities();
         this.ClearStoryIntervals();
         this.ClearLongGoalIntervals();
+        this.ClearGoalResults();
         this.lifeSave = new(); this.lifeReady = false; this.lifeCorrupt = false;
         this.lifeSync.Reset();
     }

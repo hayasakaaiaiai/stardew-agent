@@ -18,6 +18,7 @@ import { journalFreshEvents, lifeJournalChanges } from '../agent/life-journal.ts
 import { romanceContext, ROMANCE_NPCS } from '../agent/romance.ts';
 import { storyContext, storyNpcIds, STORY_NPCS } from '../agent/town-stories.ts';
 import { longGoalContext, LONG_GOAL_NPCS } from '../agent/long-goals.ts';
+import { goalResultContext, GOAL_RESULT_NPCS } from '../agent/goal-results.ts';
 import { callOffIn, changeIn, LATER_TOPIC, laterCallOffNote, laterIn, type LaterMeeting, laterMeetings, laterMovedNote, laterNote, type Meeting, meetingFor,
   meetingMemory, MEET_PLACES, movedLabel, movedNote,
   MEETS_PER_DAY, declinedIn, invitedIn, MOOD_TOPIC, moodLine, openedAtMeeting, stoodUpTopics, todayAgreement, todayMeeting,
@@ -213,7 +214,7 @@ export class GameSave {
     this.scope = await this.runtime.ctx.saves.load({ lineageId: this.initial.lineageId, loadNonce: this.loadNonce, day, commitId: head });
   }
 
-  private async journalState(npcId: string, namespace: 'lifeState' | 'romanceState' | 'storyState' | 'longGoalState'): Promise<Json | undefined> {
+  private async journalState(npcId: string, namespace: 'lifeState' | 'romanceState' | 'storyState' | 'longGoalState' | 'goalResultState'): Promise<Json | undefined> {
     const current = this.dayEntries(npcId).findLast(entry =>
       entry.changes.some(change => change.npcId === npcId && change.log?.[namespace] !== undefined));
     if (current) return current.changes.find(change => change.npcId === npcId)!.log![namespace];
@@ -245,7 +246,7 @@ export class GameSave {
   private async journalEventSignatures(): Promise<Map<string, string>> {
     const add = (entries: readonly DayEntry[], index: Map<string, string>) => {
       for (const entry of entries) for (const change of entry.changes)
-        for (const key of ['lifeEvents', 'romanceEvents', 'storyEvents', 'longGoalEvents']) {
+        for (const key of ['lifeEvents', 'romanceEvents', 'storyEvents', 'longGoalEvents', 'goalResultEvents']) {
           const events = change.log?.[key];
           if (!Array.isArray(events)) continue;
           for (const event of events) {
@@ -547,18 +548,21 @@ export class GameSave {
         context: async (query, current) => {
           signal.throwIfAborted(); standing = current;
           const context = await reader.context(query, current);
-          const [projection, romantic, stories, longGoals] = await Promise.all([
+          const [projection, romantic, stories, longGoals, goalResults] = await Promise.all([
             this.journalState(npcId, 'lifeState'),
             (ROMANCE_NPCS as readonly string[]).includes(npcId) ? this.journalState(npcId, 'romanceState') : undefined,
             STORY_NPCS.includes(npcId) ? this.journalState(npcId, 'storyState') : undefined,
             LONG_GOAL_NPCS.includes(npcId) ? this.journalState(npcId, 'longGoalState') : undefined,
+            GOAL_RESULT_NPCS.includes(npcId) ? this.journalState(npcId, 'goalResultState') : undefined,
           ]);
           signal.throwIfAborted();
           const life = lifeContext(projection === undefined ? {} : { life: projection }, this.day);
           const romance = romanceContext(romantic === undefined ? {} : { romance: romantic }, this.day, current.relation);
           const story = storyContext(stories === undefined ? {} : { story: stories }, this.day);
           const longGoal = longGoalContext(longGoals === undefined ? {} : { longGoal: longGoals }, this.day);
-          return life || romance || story || longGoal ? { ...context, summary: [context.summary, life, romance, story, longGoal].filter(Boolean).join('\n') } : context;
+          const goalResult = goalResultContext(goalResults === undefined ? {} : { goalResult: goalResults }, this.day);
+          return life || romance || story || longGoal || goalResult
+            ? { ...context, summary: [context.summary, life, romance, story, longGoal, goalResult].filter(Boolean).join('\n') } : context;
         },
         record: async (exchange, remembered) => { signal.throwIfAborted(); staged = { exchange, remembered }; },
       }, { now: () => gameMinutes(date), read, skip: inviting }), { gifts, now: () => gameMinutes(date), read: async () => {
@@ -605,24 +609,30 @@ export class GameSave {
       if (this.check(message)) return;
       requireValue(this.state.phase === 'open', 'DAY_CLOSED', '生活记录等待当前存档准备就绪');
       requireValue(message.events.every(event => event.day <= this.day), 'FUTURE_LIFE_EVENT', '不能记录未来日期的生活事件');
+      let events = message.events;
       if (message.events.length) {
         const recorded = await this.journalEventSignatures();
         for (const event of message.events) requireValue(!recorded.has(event.id) || recorded.get(event.id) === canonical(event),
           'LIFE_EVENT_CONFLICT', '同一生活事件序号不能更换内容、角色或用途');
+        // Cancelled practice attempts may be compacted locally. Only globally verified identical events can bypass replay.
+        events = message.events.filter(event => !event.kind.startsWith('goalresult.') || !recorded.has(event.id));
       }
       const prior: Record<string, NpcState> = {};
-      const ids = [...new Set(message.events.flatMap(event => 'storyId' in event ? storyNpcIds(event)
-        : [event.npc, ...('other' in event && event.other ? [event.other] : [])]))];
+      const ids = [...new Set([...events.flatMap(event => 'storyId' in event ? storyNpcIds(event)
+        : [event.npc, ...('other' in event && event.other ? [event.other] : [])]),
+      ...(events.some(event => event.kind === 'goalresult.notified') ? GOAL_RESULT_NPCS : [])])];
       for (const id of ids) {
-        const [life, romance, story, longGoal] = await Promise.all([
+        const [life, romance, story, longGoal, goalResult] = await Promise.all([
           this.journalState(id, 'lifeState'), this.journalState(id, 'romanceState'),
           STORY_NPCS.includes(id) ? this.journalState(id, 'storyState') : undefined,
           LONG_GOAL_NPCS.includes(id) ? this.journalState(id, 'longGoalState') : undefined,
+          GOAL_RESULT_NPCS.includes(id) ? this.journalState(id, 'goalResultState') : undefined,
         ]);
         prior[id] = { ...(life === undefined ? {} : { life }), ...(romance === undefined ? {} : { romance }),
-          ...(story === undefined ? {} : { story }), ...(longGoal === undefined ? {} : { longGoal }) };
+          ...(story === undefined ? {} : { story }), ...(longGoal === undefined ? {} : { longGoal }),
+          ...(goalResult === undefined ? {} : { goalResult }) };
       }
-      const changes = lifeJournalChanges(message.events, prior);
+      const changes = lifeJournalChanges(events, prior);
       for (const change of changes) {
         const events = journalFreshEvents(change);
         let points = 0;
@@ -642,6 +652,7 @@ export class GameSave {
             ...(state?.romance === undefined ? {} : { romanceState: state.romance }),
             ...(state?.story === undefined ? {} : { storyState: state.story }),
             ...(state?.longGoal === undefined ? {} : { longGoalState: state.longGoal }),
+            ...(state?.goalResult === undefined ? {} : { goalResultState: state.goalResult }),
             ...(i === 0 ? { bridgeReceipt: JSON.parse(canonical(receipt)) } : {}) },
         })) });
       this.addReceipt(receipt);

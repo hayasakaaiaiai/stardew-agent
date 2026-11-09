@@ -2,6 +2,8 @@ namespace StardewAgentBridge;
 
 internal sealed class ModConfig
 {
+    /// <summary>Source-bound completion notices, real practice outings and later review.</summary>
+    public bool ProjectPractice { get; set; } = true;
     /// <summary>Three-chapter personal projects with optional evidence and actual work.</summary>
     public bool LongGoals { get; set; } = true;
     /// <summary>Investigations and persistent projects grounded in observed game actions.</summary>

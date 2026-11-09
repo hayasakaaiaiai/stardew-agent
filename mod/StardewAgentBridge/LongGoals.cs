@@ -167,7 +167,12 @@ internal sealed partial class ModEntry
                 if (progress.ChoiceId is not null) summary += " 也记下了你选择的方向。";
             }
         }
-        else options.Add(("打开完成的合册", () => this.ShowLongGoalCollection(npc, state)));
+        else
+        {
+            options.Add(("打开完成的合册", () => this.ShowLongGoalCollection(npc, state)));
+            if (this.resultsSupported && this.goalResults.ContainsKey(goal.Id))
+                options.Add(("成果实践与回访", () => this.ShowGoalResult(npc, goal.Id)));
+        }
         for (int i = 0; i < 3; i++)
         {
             int index = i;
