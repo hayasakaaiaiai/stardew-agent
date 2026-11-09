@@ -22,7 +22,7 @@
 
 生活功能本轮已完成代码与离线检查，尚未运行游戏验收；详见 [完整 spec](docs/npc-life-spec.md)、[验证报告](docs/test-results/2026-11-09-npc-life.md) 和 [全量游戏测试清单](docs/npc-life-game-checklist.md)。
 
-成果实践验收版 `codex/npc-project-practice / a1389a4` 已按用户要求推送，包含此前生活、恋爱、小镇故事、七人长期目标和成果实践；Windows 按 [实践清单](docs/npc-project-practice-game-checklist.md) 验收，技术记录见 [实践报告](docs/test-results/2026-11-09-npc-project-practice.md)。本分支 `codex/npc-town-cases` 继续完成四条调查扩展，本地提交、尚未推送，见 [调查 spec](docs/npc-town-cases-spec.md)、[验证报告](docs/test-results/2026-11-09-npc-town-cases.md) 和 [四案游戏清单](docs/npc-town-cases-game-checklist.md)。新功能均未做真人游戏验收，未合并 main；此前各阶段证据与清单见 [项目现状](docs/status.md)。
+成果实践验收版 `codex/npc-project-practice / a1389a4` 已按用户要求推送，包含此前生活、恋爱、小镇故事、七人长期目标和成果实践；Windows 按 [实践清单](docs/npc-project-practice-game-checklist.md) 验收，技术记录见 [实践报告](docs/test-results/2026-11-09-npc-project-practice.md)。本分支 `codex/npc-town-cases` 已完成四条调查扩展（功能提交 `117ee3d`），按用户授权交付 Windows 验收，见 [调查 spec](docs/npc-town-cases-spec.md)、[验证报告](docs/test-results/2026-11-09-npc-town-cases.md) 和 [四案游戏清单](docs/npc-town-cases-game-checklist.md)。新功能均未做真人游戏验收，未合并 main；此前各阶段证据与清单见 [项目现状](docs/status.md)。
 
 H 线硬件陪伴保留在 `hardware-companion`，尚未纳入 main。
 

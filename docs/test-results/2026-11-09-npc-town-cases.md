@@ -79,3 +79,5 @@ node tools/measure-town-cases-prompt.ts /private/tmp/stardew-feature-cost.aBgMTy
 [游戏清单](../npc-town-cases-game-checklist.md) **87个独立编号／91个结果格**全部留空，覆盖四案八结局、实际计时／样品／本人在场、地图与窗口、分页、开关、隐私、版本4、保存恢复及旧五域回归。需用户实际进游戏测试原版显示、自然日程、真实移动和自由模型回复。
 
 前版成果实践已推送 `codex/npc-project-practice / a1389a4`；四案新增版本地 `codex/npc-town-cases` 完成后等待后续推送指令。不部署DLL、不调用真实模型、不修改正常存档或main；H线仍暂停。
+
+用户随后明确授权推送，功能提交 `117ee3d` 交付 Windows 验收。发布前再次执行 `npm test`（555/555，29.77秒）和 `npm run typecheck`，日志 `/private/tmp/stardew-cases-publication.log`。
