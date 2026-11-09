@@ -1,6 +1,6 @@
 # 项目现状
 
-> 更新于 2026-11-09（`codex/npc-shared-goals` 功能分支）。用户授权的三类生活功能已完成代码接入，按 [完整 spec](npc-life-spec.md) 实施；本轮验证见 [报告](test-results/2026-11-09-npc-life.md)，下一步由用户按 [全量游戏清单](npc-life-game-checklist.md) 测试。尚未部署、推送或合并 main。
+> 更新于 2026-11-09（`codex/npc-shared-goals` 功能分支）。三类生活功能已完成代码接入，功能提交 `c68efe2`。用户已授权推送此分支供 Windows 全量测试，尚未部署或合并 main。规则见 [完整 spec](npc-life-spec.md)，验证见 [报告](test-results/2026-11-09-npc-life.md)，Windows 拉取、安装和验收见 [全量游戏清单](npc-life-game-checklist.md)。
 
 ## 1. 这个项目在做什么
 
@@ -33,7 +33,7 @@ NPC 已能按原版日程聊天、传话、寄信、主动靠近、约定赴约�
 | 分支 | 用途 |
 |---|---|
 | `main` | 当前单人游戏实现、非 H 线功能及 Windows 修复、验收入口和本轮全仓审查修复 |
-| `codex/npc-shared-goals` | 从本地 `main / 789b911` 建立；三类生活功能与测试、spec 和用户全量游戏清单。目录 `/Users/a11/Documents/ChatGPT/stardew-agent-shared-goals`，未推送、未合并 |
+| `codex/npc-shared-goals` | 从 `main / 789b911` 建立；三类生活功能与测试、spec 和用户全量游戏清单。目录 `/Users/a11/Documents/ChatGPT/stardew-agent-shared-goals`；用户已授权推送的 Windows 验收分支，未合并 main |
 | `hardware-companion` | H 线硬件陪伴，暂停；本轮保持原提交 `6e92320` |
 
 历史功能分支和验收分支在 2026-10-24 的内容核对、合并与验证后清理，提交历史保留在 main。该轮删除 51 条远端、23 条本地历史分支，当时两边只剩 main 和 hardware-companion；这不是本次本地分支清单。清理前的 refs 和完整 Git bundle 保存在本机 `.runtime/repository-publication-20261024/`；旧分支对应的设计、测试记录仍在仓库。
@@ -104,7 +104,7 @@ powershell -NoProfile -File tools/test-game-real-meetings.ps1 -Section live
 
 ## 7. 下一步
 
-0. **三类生活功能全量游戏验收**：按照 [清单](npc-life-game-checklist.md) 一次性测试三目标、六活动、关系／好友、信件、保存和既有玩法回归；记录未通过步骤与 SMAPI／后端日志。用户已取消本轮中途确认门，不再等待旧草案批准。主线合并、GitHub 推送仍需用户授权。
+0. **三类生活功能全量游戏验收**：用户已授权推送 `codex/npc-shared-goals`，Windows 须切到此分支；按照 [清单](npc-life-game-checklist.md) 一次性测试三目标、六活动、关系／好友、信件、保存和既有玩法回归，记录未通过步骤与 SMAPI／后端日志。主线合并仍需用户另行授权。
 1. 处理真实游戏留下的三处模型内容问题：主动邀约只寒暄、取消后编造等候、花舞节夜间漏约。保留原始失败；改变 prompt 或放宽接受词表前，继续按用户决定和实测 token 数评估。
 2. 暂不放宽含蓄答应的保守过滤；没有明确确认的约定可能漏记，通过 HUD 让玩家再确认。不得把固定回复通过写成自由模型通过。
 3. 持续观察自然日程、全角色剧情和自由内容。多人、全 NPC、随机矿层、节日完整自然流程没有新增全面覆盖。

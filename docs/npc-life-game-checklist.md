@@ -2,13 +2,24 @@
 
 > 2026-11-09。本文件供用户实际进游戏逐项填写。开发阶段完成的是离线测试与 Mod 编译，**没有运行本轮游戏验收，也没有部署到用户的 Windows 游戏**。空白结果不代表通过。
 >
-> 本轮代码在本地 `codex/npc-shared-goals` 分支的新工作目录 `/Users/a11/Documents/ChatGPT/stardew-agent-shared-goals`；尚未推送、未合并 `main`。只更新远端 `main` 拿不到本轮功能。请用本轮完整代码副本同时更新后端和 Mod。规则以 [完整 spec](npc-life-spec.md) 及当前代码为准。
+> 本轮代码使用 `codex/npc-shared-goals` 分支（功能提交 `c68efe2`），用户已授权推送供 Windows 测试，尚未合并 `main`。只更新远端 `main` 拿不到本轮功能。请切到此功能分支，同时更新后端和 Mod。规则以 [完整 spec](npc-life-spec.md) 及当前代码为准。
 
 结果栏可填“通过”“失败＋现象”“尚未执行”。失败时记录项目编号、游戏日期/时间、NPC、地点、操作前后背包数量，附相关 SMAPI 日志片段；不需要提供 `.env` 或密钥。原版信、自由模型回复与代码确定的任务阶段分别判断，不能因为一句聊天说“完成了”就把任务判为完成。
 
 ## 1. 准备、安装和测试副本
 
 先退出游戏和旧后端。建议使用测试用存档及与它对应的后端记忆副本，保留原档。Windows 游戏存档通常在 `%APPDATA%\StardewValley\Saves`；后端记忆在运行代码目录的 `.runtime\game`。做恢复点时，退出游戏和后端后同时备份这两部分；不能只替换数据库或只复制带旧同步指针的存档，然后把恢复故障误判为剧情故障。
+
+已有 Windows Git 仓库时，在其根目录运行以下命令。首次 `switch` 会自动跟踪同名远端分支；若提示本地改动冲突，先保留改动，不使用强制覆盖。`.env` 和 `.runtime\game` 保留在原处。
+
+```powershell
+git fetch origin
+git switch codex/npc-shared-goals
+git pull --ff-only
+git log -2 --oneline
+```
+
+更新后按下面的 `npm ci`、Mod 编译安装和后端启动步骤继续。
 
 本轮 Windows 代码目录可命名为 `E:\stardew-agent-life-test`。如果从 Mac 工作目录复制源码，应包含本轮新增文件；不要携带指向 Mac 的工作树 `.git` 文件、`node_modules`、`bin`、`obj`。`.env` 在 Windows 本地填写；测试用 `.runtime\game` 使用上述成对备份，或者从全新测试存档开始。目录示例按实际位置替换。
 

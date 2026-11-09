@@ -88,7 +88,7 @@ kind 白名单：`goal.accepted`、`goal.delivered`、`goal.completed`、`goal.c
 ## 8. 执行记录
 
 - S0–S4 开发交付已完成：Node 337/337；C# 独立规则 44/44 + 29/29；类型检查、后端构建、两个 demo、Mod Release（0 警告／错误）和仓库检查通过。精确范围及 Mac 旧原生检查限制在 [验证报告](test-results/2026-11-09-npc-life.md)，用户测试见 [全量游戏清单](npc-life-game-checklist.md)。原 `npc-shared-goals.md` 为莉亚细节参考，本 spec 的后续明确规则优先。
-- 基线 `789b911`：303 项测试；设计提交 `2f97ed5`。本轮未运行游戏，未调用真实模型，未部署、推送或合并。
+- 基线 `789b911`：303 项测试；设计提交 `2f97ed5`；功能提交 `c68efe2`。开发阶段未运行游戏、调用真实模型、部署、推送或合并；用户随后授权仅推送功能分支供 Windows 测试，尚未合并 main。
 
 ### 实现时的调整
 
