@@ -1,6 +1,6 @@
 # 项目现状
 
-> 更新于 2026-11-09（`codex/npc-town-life` 功能分支）。用户确认的小镇调查事件与 NPC 长期目标已按 [spec](npc-town-stories-spec.md) 完成三条故事、八种结局及离线检查；见 [本轮验证报告](test-results/2026-11-09-npc-town-stories.md) 与 [72 项 Windows 清单](npc-town-stories-game-checklist.md)。当前未推送、未部署、未合并 main、未运行游戏。起点为已推送恋爱分支 `dc36f8e`，包含全部生活和恋爱功能。
+> 更新于 2026-11-09（`codex/npc-town-life` 功能分支）。三条故事、八种结局与离线检查已完成，功能提交 `fcce80c` 已按用户要求推送；见 [spec](npc-town-stories-spec.md)、[验证报告](test-results/2026-11-09-npc-town-stories.md) 与 [72 项 Windows 清单](npc-town-stories-game-checklist.md)。包含全部生活和恋爱功能，未部署、未合并 main、未运行游戏。后续长期目标扩展将在独立分支推进。
 
 ## 1. 这个项目在做什么
 
@@ -41,7 +41,7 @@ NPC 已能按原版日程聊天、传话、寄信、主动靠近、约定赴约�
 | `main` | 当前单人游戏实现、非 H 线功能及 Windows 修复、验收入口和本轮全仓审查修复 |
 | `codex/npc-shared-goals` | 从 `main / 789b911` 建立；三类生活功能，已推送至 `d7b11a3`。目录 `/Users/a11/Documents/ChatGPT/stardew-agent-shared-goals`；Windows 生活验收分支，未合并 main |
 | `codex/npc-romance` | 从生活分支 `d7b11a3` 建立；本轮三项恋爱功能、spec、自动检查和游戏清单，功能提交 `abd6479` 已推送。目录 `/Users/a11/Documents/ChatGPT/stardew-agent-romance`；Windows 恋爱验收分支，未合并 main |
-| `codex/npc-town-life` | 从恋爱分支 `dc36f8e` 建立；调查与长期目标已实现并完成离线检查。目录 `/Users/a11/Documents/ChatGPT/stardew-agent-town`；未推送、未合并 main |
+| `codex/npc-town-life` | 从恋爱分支 `dc36f8e` 建立；调查与长期目标已实现并完成离线检查，功能提交 `fcce80c` 已推送。目录 `/Users/a11/Documents/ChatGPT/stardew-agent-town`；Windows 验收分支，未合并 main |
 | `hardware-companion` | H 线硬件陪伴，暂停；本轮保持原提交 `6e92320` |
 
 历史功能分支和验收分支在 2026-10-24 的内容核对、合并与验证后清理，提交历史保留在 main。该轮删除 51 条远端、23 条本地历史分支，当时两边只剩 main 和 hardware-companion；这不是本次本地分支清单。清理前的 refs 和完整 Git bundle 保存在本机 `.runtime/repository-publication-20261024/`；旧分支对应的设计、测试记录仍在仓库。
@@ -116,7 +116,7 @@ powershell -NoProfile -File tools/test-game-real-meetings.ps1 -Section live
 
 ## 7. 下一步
 
-当前交付：小镇故事 [spec](npc-town-stories-spec.md) 的 S0–S4 已完成，待用户要求推送后，在 Windows 按 [小镇故事清单](npc-town-stories-game-checklist.md) 验收三故事与八种结局。该分支含此前全部生活和恋爱功能。范围只有调查事件与 NPC 长期目标，摆摊、团体活动和公共改造不在本轮。
+当前交付：小镇故事分支已按用户要求推送，在 Windows 按 [小镇故事清单](npc-town-stories-game-checklist.md) 验收三故事与八种结局。该分支含此前全部生活和恋爱功能。用户同时要求继续扩充长期目标，后续在独立分支开发更多角色、分章节推进与可阅读阶段成果；摆摊、团体活动和公共改造仍未纳入。
 
 0. **恋爱三功能全量游戏验收**：`codex/npc-romance` 已按用户要求推送；Windows 拉取并切到此分支，按 [恋爱清单](npc-romance-game-checklist.md) 测试 12 人、存档、关系变化与旧生活回归。本分支已包含生活功能，不需要来回切换；独立生活清单见 [这里](npc-life-game-checklist.md)。两条功能分支均未合并 main。
 1. 处理真实游戏留下的三处模型内容问题：主动邀约只寒暄、取消后编造等候、花舞节夜间漏约。保留原始失败；改变 prompt 或放宽接受词表前，继续按用户决定和实测 token 数评估。

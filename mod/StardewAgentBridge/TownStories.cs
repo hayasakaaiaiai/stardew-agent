@@ -502,7 +502,7 @@ internal sealed partial class ModEntry
 
     private bool StoryWorkerEligible(TownStoryTemplate story, TownStoryState state, NPC? npc)
         => this.StoryClockRunning && this.CanRecordLifeEvent && state.Outcome is null && TownStoryRules.WorkDay(this.currentDay, state.StartedDay, state.WorkStep, state.LastWorkDay)
-            && npc is not null && !npc.IsInvisible && npc.currentLocation is not null && story.WorkVenues.Contains(npc.currentLocation.Name)
+            && npc is not null && !npc.IsInvisible && !npc.isSleeping.Value && npc.currentLocation is not null && story.WorkVenues.Contains(npc.currentLocation.Name)
             && !npc.isMoving() && npc.controller is null && npc.temporaryController is null && !npc.ignoreScheduleToday
             && !this.IsLifeActivityNpc(npc.Name) && !this.Approaching(npc.Name) && !this.sceneParticipants.Contains(npc.Name)
             && this.talk?.Npc != npc && this.offerFor != npc && this.startFor != npc
