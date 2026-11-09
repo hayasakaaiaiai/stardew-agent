@@ -2,6 +2,8 @@
 
 > 2026-11-09。用户要求先推送现版给 Windows 验收，随后继续长期目标，认为三条故事偏薄。验收分支 `codex/npc-town-life / b281ed1` 已推送；本轮在独立工作树 `/Users/a11/Documents/ChatGPT/stardew-agent-long-goals`、分支 `codex/npc-long-goals` 推进。用户此前已授权先写 spec、按顺序完成开发，本轮延续此方式；不合并 main、不碰 H 线、不启动游戏。新扩展完成后单独交付，不改已冻结的 Windows 验收分支。
 
+交付补记：用户随后明确要求“推送，之后继续”，本轮功能提交 `e4af355` 已推送供 Windows 验收。后续成果互动使用独立分支。
+
 ## 1. 范围与顺序
 
 | 阶段 | 完成条件 |
