@@ -26,6 +26,7 @@ internal sealed partial class ModEntry
         public int ActivityStarts { get; set; }
         public Dictionary<string, RomanceState> Romance { get; set; } = new();
         public int RomanceInvitationDay { get; set; }
+        public Dictionary<string, TownStoryState> Stories { get; set; } = new();
     }
 
     private LifeSave lifeSave = new();
@@ -77,6 +78,8 @@ internal sealed partial class ModEntry
     private void LoadLife()
     {
         this.ClearLifeActivities();
+        this.ClearStoryIntervals();
+        this.storiesUpgradeNotified = false;
         this.romanceUpgradeNotified = false;
         this.lifeReady = false; this.lifeCorrupt = false;
         this.lifeSync.Reset();
@@ -87,12 +90,13 @@ internal sealed partial class ModEntry
         {
             LifeSave saved = JsonSerializer.Deserialize<LifeSave>(json, LifeJson) ?? throw new InvalidOperationException("生活记录为空。");
             if (saved.Version != 1 || saved.Serial < 0 || saved.Serial > 9007199254740991L || saved.Events is null
-                || saved.Goals is null || saved.Letters is null || saved.Romance is null || saved.Events.Count > LifeEventLimit
+                || saved.Goals is null || saved.Letters is null || saved.Romance is null || saved.Stories is null || saved.Events.Count > LifeEventLimit
                 || saved.Events.Any(e => e is null || e.Day < 1 || e.Day > AbsoluteDay())
                 || !LifeGoalRules.OrderedEventIds(saved.Events.Select(e => e.Id), saved.Serial))
                 throw new InvalidOperationException("生活记录版本或内容无效；原始记录保留。");
             this.lifeSave = saved;
             this.ValidateRomanceSave();
+            this.ValidateStorySave();
             // A loaded game starts at morning; no unfinished actor controller survives the save boundary.
             foreach (LifeGoal goal in saved.Goals.Values)
                 if (goal.Stage == "walking") { goal.Stage = "ready"; goal.Attempt = null; }
@@ -161,6 +165,11 @@ internal sealed partial class ModEntry
             this.ReportRomanceCompatibility();
             return;
         }
+        if (!this.StoriesCompatible)
+        {
+            this.ReportStoryCompatibility();
+            return;
+        }
         var batch = this.lifeSync.Next(this.lifeEvents.Count);
         int request = this.Send("life.sync", new()
         {
@@ -186,6 +195,10 @@ internal sealed partial class ModEntry
                 && romanceCapability.TryGetInt32(out int romanceVersion) && romanceVersion == 1;
             this.romanceUpgradeNotified = false;
             this.ReportRomanceCompatibility();
+            this.storiesSupported = message.TryGetProperty("storiesProtocol", out JsonElement storiesCapability)
+                && storiesCapability.TryGetInt32(out int storiesVersion) && storiesVersion == 1;
+            this.storiesUpgradeNotified = false;
+            this.ReportStoryCompatibility();
             if (!this.lifeSupported)
             {
                 this.Monitor.Log("当前后端不支持生活功能，请同时更新后端和 Mod。普通聊天仍可使用。", LogLevel.Warn);
@@ -207,6 +220,7 @@ internal sealed partial class ModEntry
     private void ClearLife()
     {
         this.ClearLifeActivities();
+        this.ClearStoryIntervals();
         this.lifeSave = new(); this.lifeReady = false; this.lifeCorrupt = false;
         this.lifeSync.Reset();
     }

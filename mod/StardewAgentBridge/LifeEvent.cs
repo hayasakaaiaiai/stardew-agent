@@ -28,6 +28,11 @@ internal sealed class LifeEvent
     [JsonPropertyName("weather")] public string? Weather { get; set; }
     [JsonPropertyName("reason")] public string? Reason { get; set; }
     [JsonPropertyName("detail")] public string? Detail { get; set; }
+    [JsonPropertyName("storyId")] public string? StoryId { get; set; }
+    [JsonPropertyName("clueId")] public string? ClueId { get; set; }
+    [JsonPropertyName("choiceId")] public string? ChoiceId { get; set; }
+    [JsonPropertyName("step")] public int? Step { get; set; }
+    [JsonPropertyName("outcome")] public string? Outcome { get; set; }
 }
 
 internal static class LifeEventWire

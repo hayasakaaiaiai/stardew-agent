@@ -20,3 +20,5 @@ tests/life-activity-rules/bin/
 tests/life-activity-rules/obj/
 tests/romance-rules/bin/
 tests/romance-rules/obj/
+tests/town-story-rules/bin/
+tests/town-story-rules/obj/

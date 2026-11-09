@@ -1,0 +1,1097 @@
+{
+  "measuredOn": "2026-11-09",
+  "tokenizer": "gpt-tokenizer@3.4.0 / o200k_base",
+  "modelCalls": 0,
+  "method": "直接调用生产 storyChanges、storyContext 与 buildMessages，累计各 message.content 的 o200k token。加载全部34张卡，固定2心朋友、未看心事件、旧印象、当例春季源日14:30镇上；检索与对话历史为空。不含供应商消息封装、后续检索增长与输出，是DeepSeek分词近似，不是账单。",
+  "baselineMethod": "每例使用相同NPC、当前关系、日期和场景，没有故事摘要的实际prompt作基线；不同NPC的卡片成本不混算为功能增量。",
+  "definitionsComparisonMethod": "仅作输入成本对照：保留实际摘要，再额外放入三故事完整JSON。正式实现禁止常驻该配置，因为其中含未发现证词和未完成成品；此对照不作为可部署替代方案。",
+  "loadedCards": 34,
+  "loadedNpcIds": [
+    "abigail",
+    "alex",
+    "elliott",
+    "emily",
+    "haley",
+    "harvey",
+    "leah",
+    "maru",
+    "penny",
+    "sam",
+    "sebastian",
+    "shane",
+    "caroline",
+    "clint",
+    "demetrius",
+    "dwarf",
+    "evelyn",
+    "george",
+    "gus",
+    "jas",
+    "jodi",
+    "kent",
+    "krobus",
+    "leo",
+    "lewis",
+    "linus",
+    "marnie",
+    "pam",
+    "pierre",
+    "robin",
+    "sandy",
+    "vincent",
+    "willy",
+    "wizard"
+  ],
+  "sourceSha256": {
+    "src/agent/town-stories.ts": "951041fffb0d26848b66c6469d609d5decca991c0dbe8c496bfbd981da822de3",
+    "src/agent/dialogue.ts": "1de7a5054e5f5e9d2f0f924f9e06734bda8199585f3ea3d8eb60e6eebf8aaf4e",
+    "data/town/stories.json": "a549b675d6967b42d531d473fb6176f0b0d3c82e30185037baa87a6a63634d80",
+    "data/npcs/gus.md": "ce0e1a6ce53f65af767f534d7ec8d19b707416c3a1e6f434fc7530c3609fa72b",
+    "data/npcs/emily.md": "e01555dde2de025c7a7e8989a718b68d6ae91e76509fbfa90c12d20fd6301f9f",
+    "data/npcs/pierre.md": "3887a94efffee83fc0c6aa2c1e7662339c71889bf4f66533499242be5691d1f7",
+    "data/npcs/penny.md": "ea5ea764c991b60f4cc32ea5847c9ccce16dae95f1eb7836b75c68bc2f54c4e2",
+    "data/npcs/elliott.md": "51a3ebbc7c946ce20d82b35fd99f272cc91f51282cd638781d5606eea6e83c19"
+  },
+  "definitionsJsonTokens": 1631,
+  "samples": [
+    {
+      "name": "格斯尚未开始调查",
+      "npc": "gus",
+      "day": 1,
+      "events": [],
+      "cue": "",
+      "cueTokens": 0,
+      "baselineTokens": 1820,
+      "totalTokens": 1820,
+      "addedTokens": 0,
+      "residentDefinitionsComparison": {
+        "totalTokens": 3467,
+        "addedOverCurrentSummary": 1647
+      }
+    },
+    {
+      "name": "格斯已提出调查",
+      "npc": "gus",
+      "day": 1,
+      "events": [
+        {
+          "id": "life-1",
+          "npc": "gus",
+          "day": 1,
+          "kind": "story.started",
+          "storyId": "gus_parcel"
+        }
+      ],
+      "cue": "## 我知道的镇上近况\n“错放的备货包裹”：第 1 天，我向农场主提起此事；尚未记录包裹归还。\n只采用这里已知的情况；未汇报的调查、他人的进展和未选结局不作已知。观察题不等于孩子已上课，短文不等于小说出版；不补写未提供的成品内容。",
+      "cueTokens": 98,
+      "baselineTokens": 1820,
+      "totalTokens": 1918,
+      "addedTokens": 98,
+      "residentDefinitionsComparison": {
+        "totalTokens": 3565,
+        "addedOverCurrentSummary": 1647
+      }
+    },
+    {
+      "name": "问过艾米丽但尚未告诉格斯",
+      "npc": "gus",
+      "day": 1,
+      "events": [
+        {
+          "id": "life-1",
+          "npc": "gus",
+          "day": 1,
+          "kind": "story.started",
+          "storyId": "gus_parcel"
+        },
+        {
+          "id": "life-2",
+          "npc": "gus",
+          "day": 1,
+          "kind": "story.clue",
+          "storyId": "gus_parcel",
+          "clueId": "emily_mark",
+          "other": "emily"
+        }
+      ],
+      "cue": "## 我知道的镇上近况\n“错放的备货包裹”：第 1 天，我向农场主提起此事；尚未记录包裹归还。\n只采用这里已知的情况；未汇报的调查、他人的进展和未选结局不作已知。观察题不等于孩子已上课，短文不等于小说出版；不补写未提供的成品内容。",
+      "cueTokens": 98,
+      "baselineTokens": 1820,
+      "totalTokens": 1918,
+      "addedTokens": 98,
+      "residentDefinitionsComparison": {
+        "totalTokens": 3565,
+        "addedOverCurrentSummary": 1647
+      }
+    },
+    {
+      "name": "艾米丽仅知道自己给出的证词",
+      "npc": "emily",
+      "day": 1,
+      "events": [
+        {
+          "id": "life-1",
+          "npc": "gus",
+          "day": 1,
+          "kind": "story.started",
+          "storyId": "gus_parcel"
+        },
+        {
+          "id": "life-2",
+          "npc": "gus",
+          "day": 1,
+          "kind": "story.clue",
+          "storyId": "gus_parcel",
+          "clueId": "emily_mark",
+          "other": "emily"
+        },
+        {
+          "id": "life-3",
+          "npc": "gus",
+          "day": 1,
+          "kind": "story.clue",
+          "storyId": "gus_parcel",
+          "clueId": "pierre_mark",
+          "other": "pierre"
+        },
+        {
+          "id": "life-4",
+          "npc": "gus",
+          "day": 1,
+          "kind": "story.clue",
+          "storyId": "gus_parcel",
+          "clueId": "parcel"
+        }
+      ],
+      "cue": "## 我知道的镇上近况\n“错放的备货包裹”：我当面提供过线索：这回酒吧的收货记号是实心圆，表示东西已经收到了。我只核对酒吧这一头；空心圆是什么意思，还得问出货的人。。\n只采用这里已知的情况；未汇报的调查、他人的进展和未选结局不作已知。观察题不等于孩子已上课，短文不等于小说出版；不补写未提供的成品内容。",
+      "cueTokens": 123,
+      "baselineTokens": 1966,
+      "totalTokens": 2089,
+      "addedTokens": 123,
+      "residentDefinitionsComparison": {
+        "totalTokens": 3736,
+        "addedOverCurrentSummary": 1647
+      }
+    },
+    {
+      "name": "皮埃尔仅知道自己给出的证词",
+      "npc": "pierre",
+      "day": 1,
+      "events": [
+        {
+          "id": "life-1",
+          "npc": "gus",
+          "day": 1,
+          "kind": "story.started",
+          "storyId": "gus_parcel"
+        },
+        {
+          "id": "life-2",
+          "npc": "gus",
+          "day": 1,
+          "kind": "story.clue",
+          "storyId": "gus_parcel",
+          "clueId": "emily_mark",
+          "other": "emily"
+        },
+        {
+          "id": "life-3",
+          "npc": "gus",
+          "day": 1,
+          "kind": "story.clue",
+          "storyId": "gus_parcel",
+          "clueId": "pierre_mark",
+          "other": "pierre"
+        },
+        {
+          "id": "life-4",
+          "npc": "gus",
+          "day": 1,
+          "kind": "story.clue",
+          "storyId": "gus_parcel",
+          "clueId": "parcel"
+        }
+      ],
+      "cue": "## 我知道的镇上近况\n“错放的备货包裹”：我当面提供过线索：我这次用空心圆标待转交的货，可不是已经收到了。给酒吧的那份要经过镇广场，您可以去那一带核对一下。我不清楚酒吧最后怎么登记的。。\n只采用这里已知的情况；未汇报的调查、他人的进展和未选结局不作已知。观察题不等于孩子已上课，短文不等于小说出版；不补写未提供的成品内容。",
+      "cueTokens": 135,
+      "baselineTokens": 1745,
+      "totalTokens": 1880,
+      "addedTokens": 135,
+      "residentDefinitionsComparison": {
+        "totalTokens": 3527,
+        "addedOverCurrentSummary": 1647
+      }
+    },
+    {
+      "name": "全部线索及包裹尚未汇报给格斯",
+      "npc": "gus",
+      "day": 1,
+      "events": [
+        {
+          "id": "life-1",
+          "npc": "gus",
+          "day": 1,
+          "kind": "story.started",
+          "storyId": "gus_parcel"
+        },
+        {
+          "id": "life-2",
+          "npc": "gus",
+          "day": 1,
+          "kind": "story.clue",
+          "storyId": "gus_parcel",
+          "clueId": "emily_mark",
+          "other": "emily"
+        },
+        {
+          "id": "life-3",
+          "npc": "gus",
+          "day": 1,
+          "kind": "story.clue",
+          "storyId": "gus_parcel",
+          "clueId": "pierre_mark",
+          "other": "pierre"
+        },
+        {
+          "id": "life-4",
+          "npc": "gus",
+          "day": 1,
+          "kind": "story.clue",
+          "storyId": "gus_parcel",
+          "clueId": "parcel"
+        }
+      ],
+      "cue": "## 我知道的镇上近况\n“错放的备货包裹”：第 1 天，我向农场主提起此事；尚未记录包裹归还。\n只采用这里已知的情况；未汇报的调查、他人的进展和未选结局不作已知。观察题不等于孩子已上课，短文不等于小说出版；不补写未提供的成品内容。",
+      "cueTokens": 98,
+      "baselineTokens": 1820,
+      "totalTokens": 1918,
+      "addedTokens": 98,
+      "residentDefinitionsComparison": {
+        "totalTokens": 3565,
+        "addedOverCurrentSummary": 1647
+      }
+    },
+    {
+      "name": "当面告诉格斯包裹线索",
+      "npc": "gus",
+      "day": 1,
+      "events": [
+        {
+          "id": "life-1",
+          "npc": "gus",
+          "day": 1,
+          "kind": "story.started",
+          "storyId": "gus_parcel"
+        },
+        {
+          "id": "life-2",
+          "npc": "gus",
+          "day": 1,
+          "kind": "story.clue",
+          "storyId": "gus_parcel",
+          "clueId": "emily_mark",
+          "other": "emily"
+        },
+        {
+          "id": "life-3",
+          "npc": "gus",
+          "day": 1,
+          "kind": "story.clue",
+          "storyId": "gus_parcel",
+          "clueId": "pierre_mark",
+          "other": "pierre"
+        },
+        {
+          "id": "life-4",
+          "npc": "gus",
+          "day": 1,
+          "kind": "story.clue",
+          "storyId": "gus_parcel",
+          "clueId": "parcel"
+        },
+        {
+          "id": "life-5",
+          "npc": "gus",
+          "day": 1,
+          "kind": "story.told",
+          "storyId": "gus_parcel",
+          "sourceId": "life-4"
+        }
+      ],
+      "cue": "## 我知道的镇上近况\n“错放的备货包裹”：第 1 天，我向农场主提起此事；农场主已当面告诉我：找到的包裹上是空心圆记号，收货处写着星之果实酒吧。；尚未记录包裹归还。\n只采用这里已知的情况；未汇报的调查、他人的进展和未选结局不作已知。观察题不等于孩子已上课，短文不等于小说出版；不补写未提供的成品内容。",
+      "cueTokens": 133,
+      "baselineTokens": 1820,
+      "totalTokens": 1953,
+      "addedTokens": 133,
+      "residentDefinitionsComparison": {
+        "totalTokens": 3600,
+        "addedOverCurrentSummary": 1647
+      }
+    },
+    {
+      "name": "直接归还而未解释两份证词",
+      "npc": "gus",
+      "day": 1,
+      "events": [
+        {
+          "id": "life-1",
+          "npc": "gus",
+          "day": 1,
+          "kind": "story.started",
+          "storyId": "gus_parcel"
+        },
+        {
+          "id": "life-2",
+          "npc": "gus",
+          "day": 1,
+          "kind": "story.clue",
+          "storyId": "gus_parcel",
+          "clueId": "emily_mark",
+          "other": "emily"
+        },
+        {
+          "id": "life-3",
+          "npc": "gus",
+          "day": 1,
+          "kind": "story.clue",
+          "storyId": "gus_parcel",
+          "clueId": "pierre_mark",
+          "other": "pierre"
+        },
+        {
+          "id": "life-4",
+          "npc": "gus",
+          "day": 1,
+          "kind": "story.clue",
+          "storyId": "gus_parcel",
+          "clueId": "parcel"
+        },
+        {
+          "id": "life-5",
+          "npc": "gus",
+          "day": 1,
+          "kind": "story.resolved",
+          "storyId": "gus_parcel",
+          "outcome": "returned"
+        }
+      ],
+      "cue": "## 我知道的镇上近况\n“错放的备货包裹”：第 1 天，我向农场主提起此事；农场主已当面告诉我：找到的包裹上是空心圆记号，收货处写着星之果实酒吧。；第 1 天已结束，结局为“包裹回到了酒吧”。\n只采用这里已知的情况；未汇报的调查、他人的进展和未选结局不作已知。观察题不等于孩子已上课，短文不等于小说出版；不补写未提供的成品内容。",
+      "cueTokens": 144,
+      "baselineTokens": 1820,
+      "totalTokens": 1964,
+      "addedTokens": 144,
+      "residentDefinitionsComparison": {
+        "totalTokens": 3611,
+        "addedOverCurrentSummary": 1647
+      }
+    },
+    {
+      "name": "核清标记后归还",
+      "npc": "gus",
+      "day": 1,
+      "events": [
+        {
+          "id": "life-1",
+          "npc": "gus",
+          "day": 1,
+          "kind": "story.started",
+          "storyId": "gus_parcel"
+        },
+        {
+          "id": "life-2",
+          "npc": "gus",
+          "day": 1,
+          "kind": "story.clue",
+          "storyId": "gus_parcel",
+          "clueId": "emily_mark",
+          "other": "emily"
+        },
+        {
+          "id": "life-3",
+          "npc": "gus",
+          "day": 1,
+          "kind": "story.clue",
+          "storyId": "gus_parcel",
+          "clueId": "pierre_mark",
+          "other": "pierre"
+        },
+        {
+          "id": "life-4",
+          "npc": "gus",
+          "day": 1,
+          "kind": "story.clue",
+          "storyId": "gus_parcel",
+          "clueId": "parcel"
+        },
+        {
+          "id": "life-5",
+          "npc": "gus",
+          "day": 1,
+          "kind": "story.resolved",
+          "storyId": "gus_parcel",
+          "outcome": "explained"
+        }
+      ],
+      "cue": "## 我知道的镇上近况\n“错放的备货包裹”：第 1 天，我向农场主提起此事；农场主已当面告诉我：艾米丽的当面证词：“这回酒吧的收货记号是实心圆，表示东西已经收到了。我只核对酒吧这一头；空心圆是什么意思，还得问出货的人。”；农场主已当面告诉我：皮埃尔的当面证词：“我这次用空心圆标待转交的货，可不是已经收到了。给酒吧的那份要经过镇广场，您可以去那一带核对一下。我不清楚酒吧最后怎么登记的。”；农场主已当面告诉我：找到的包裹上是空心圆记号，收货处写着星之果实酒吧。；第 1 天已结束，结局为“两个圆记号终于分清了”。\n只采用这里已知的情况；未汇报的调查、他人的进展和未选结局不作已知。观察题不等于孩子已上课，短文不等于小说出版；不补写未提供的成品内容。",
+      "cueTokens": 273,
+      "baselineTokens": 1820,
+      "totalTokens": 2093,
+      "addedTokens": 273,
+      "residentDefinitionsComparison": {
+        "totalTokens": 3740,
+        "addedOverCurrentSummary": 1647
+      }
+    },
+    {
+      "name": "调查结束也不自动告诉艾米丽",
+      "npc": "emily",
+      "day": 1,
+      "events": [
+        {
+          "id": "life-1",
+          "npc": "gus",
+          "day": 1,
+          "kind": "story.started",
+          "storyId": "gus_parcel"
+        },
+        {
+          "id": "life-2",
+          "npc": "gus",
+          "day": 1,
+          "kind": "story.clue",
+          "storyId": "gus_parcel",
+          "clueId": "emily_mark",
+          "other": "emily"
+        },
+        {
+          "id": "life-3",
+          "npc": "gus",
+          "day": 1,
+          "kind": "story.clue",
+          "storyId": "gus_parcel",
+          "clueId": "pierre_mark",
+          "other": "pierre"
+        },
+        {
+          "id": "life-4",
+          "npc": "gus",
+          "day": 1,
+          "kind": "story.clue",
+          "storyId": "gus_parcel",
+          "clueId": "parcel"
+        },
+        {
+          "id": "life-5",
+          "npc": "gus",
+          "day": 1,
+          "kind": "story.resolved",
+          "storyId": "gus_parcel",
+          "outcome": "explained"
+        }
+      ],
+      "cue": "## 我知道的镇上近况\n“错放的备货包裹”：我当面提供过线索：这回酒吧的收货记号是实心圆，表示东西已经收到了。我只核对酒吧这一头；空心圆是什么意思，还得问出货的人。。\n只采用这里已知的情况；未汇报的调查、他人的进展和未选结局不作已知。观察题不等于孩子已上课，短文不等于小说出版；不补写未提供的成品内容。",
+      "cueTokens": 123,
+      "baselineTokens": 1966,
+      "totalTokens": 2089,
+      "addedTokens": 123,
+      "residentDefinitionsComparison": {
+        "totalTokens": 3736,
+        "addedOverCurrentSummary": 1647
+      }
+    },
+    {
+      "name": "潘妮已提出准备观察题",
+      "npc": "penny",
+      "day": 1,
+      "events": [
+        {
+          "id": "life-1",
+          "npc": "penny",
+          "storyId": "penny_field_notes",
+          "day": 1,
+          "kind": "story.started"
+        }
+      ],
+      "cue": "## 我知道的镇上近况\n“给下一课的观察题”：第 1 天，我向农场主提起此事；尚未记录成品完成。\n只采用这里已知的情况；未汇报的调查、他人的进展和未选结局不作已知。观察题不等于孩子已上课，短文不等于小说出版；不补写未提供的成品内容。",
+      "cueTokens": 94,
+      "baselineTokens": 1891,
+      "totalTokens": 1985,
+      "addedTokens": 94,
+      "residentDefinitionsComparison": {
+        "totalTokens": 3632,
+        "addedOverCurrentSummary": 1647
+      }
+    },
+    {
+      "name": "玩家实地观察但尚未告诉潘妮",
+      "npc": "penny",
+      "day": 1,
+      "events": [
+        {
+          "id": "life-1",
+          "npc": "penny",
+          "storyId": "penny_field_notes",
+          "day": 1,
+          "kind": "story.started"
+        },
+        {
+          "id": "life-2",
+          "npc": "penny",
+          "storyId": "penny_field_notes",
+          "day": 1,
+          "kind": "story.observed",
+          "venue": "Forest",
+          "weather": "rain",
+          "minutes": 10
+        }
+      ],
+      "cue": "## 我知道的镇上近况\n“给下一课的观察题”：第 1 天，我向农场主提起此事；尚未记录成品完成。\n只采用这里已知的情况；未汇报的调查、他人的进展和未选结局不作已知。观察题不等于孩子已上课，短文不等于小说出版；不补写未提供的成品内容。",
+      "cueTokens": 94,
+      "baselineTokens": 1891,
+      "totalTokens": 1985,
+      "addedTokens": 94,
+      "residentDefinitionsComparison": {
+        "totalTokens": 3632,
+        "addedOverCurrentSummary": 1647
+      }
+    },
+    {
+      "name": "潘妮收到真实观察和明确建议",
+      "npc": "penny",
+      "day": 1,
+      "events": [
+        {
+          "id": "life-1",
+          "npc": "penny",
+          "storyId": "penny_field_notes",
+          "day": 1,
+          "kind": "story.started"
+        },
+        {
+          "id": "life-2",
+          "npc": "penny",
+          "storyId": "penny_field_notes",
+          "day": 1,
+          "kind": "story.observed",
+          "venue": "Forest",
+          "weather": "rain",
+          "minutes": 10
+        },
+        {
+          "id": "life-3",
+          "npc": "penny",
+          "storyId": "penny_field_notes",
+          "day": 1,
+          "kind": "story.choice",
+          "choiceId": "observe",
+          "sourceId": "life-2"
+        }
+      ],
+      "cue": "## 我知道的镇上近况\n“给下一课的观察题”：第 1 天，我向农场主提起此事；农场主已当面告诉我：第 1 天在森林实际观察了 10 分钟，当时下雨。；农场主明确建议“先观察，再想问题”；尚未记录成品完成。\n只采用这里已知的情况；未汇报的调查、他人的进展和未选结局不作已知。观察题不等于孩子已上课，短文不等于小说出版；不补写未提供的成品内容。",
+      "cueTokens": 134,
+      "baselineTokens": 1891,
+      "totalTokens": 2025,
+      "addedTokens": 134,
+      "residentDefinitionsComparison": {
+        "totalTokens": 3672,
+        "addedOverCurrentSummary": 1647
+      }
+    },
+    {
+      "name": "潘妮完成首日实际工作",
+      "npc": "penny",
+      "day": 2,
+      "events": [
+        {
+          "id": "life-1",
+          "npc": "penny",
+          "storyId": "penny_field_notes",
+          "day": 1,
+          "kind": "story.started"
+        },
+        {
+          "id": "life-2",
+          "npc": "penny",
+          "storyId": "penny_field_notes",
+          "day": 1,
+          "kind": "story.observed",
+          "venue": "Forest",
+          "weather": "rain",
+          "minutes": 10
+        },
+        {
+          "id": "life-3",
+          "npc": "penny",
+          "storyId": "penny_field_notes",
+          "day": 1,
+          "kind": "story.choice",
+          "choiceId": "observe",
+          "sourceId": "life-2"
+        },
+        {
+          "id": "life-4",
+          "npc": "penny",
+          "storyId": "penny_field_notes",
+          "day": 2,
+          "kind": "story.worked",
+          "step": 1,
+          "venue": "ArchaeologyHouse",
+          "minutes": 30
+        }
+      ],
+      "cue": "## 我知道的镇上近况\n“给下一课的观察题”：第 1 天，我向农场主提起此事；农场主已当面告诉我：第 1 天在森林实际观察了 10 分钟，当时下雨。；农场主明确建议“先观察，再想问题”；我已在第 2 天分别完成 1 个实际工作阶段；尚未记录成品完成。\n只采用这里已知的情况；未汇报的调查、他人的进展和未选结局不作已知。观察题不等于孩子已上课，短文不等于小说出版；不补写未提供的成品内容。",
+      "cueTokens": 150,
+      "baselineTokens": 1891,
+      "totalTokens": 2041,
+      "addedTokens": 150,
+      "residentDefinitionsComparison": {
+        "totalTokens": 3688,
+        "addedOverCurrentSummary": 1647
+      }
+    },
+    {
+      "name": "潘妮完成两日工作但结局尚未记录",
+      "npc": "penny",
+      "day": 3,
+      "events": [
+        {
+          "id": "life-1",
+          "npc": "penny",
+          "storyId": "penny_field_notes",
+          "day": 1,
+          "kind": "story.started"
+        },
+        {
+          "id": "life-2",
+          "npc": "penny",
+          "storyId": "penny_field_notes",
+          "day": 1,
+          "kind": "story.observed",
+          "venue": "Forest",
+          "weather": "rain",
+          "minutes": 10
+        },
+        {
+          "id": "life-3",
+          "npc": "penny",
+          "storyId": "penny_field_notes",
+          "day": 1,
+          "kind": "story.choice",
+          "choiceId": "observe",
+          "sourceId": "life-2"
+        },
+        {
+          "id": "life-4",
+          "npc": "penny",
+          "storyId": "penny_field_notes",
+          "day": 2,
+          "kind": "story.worked",
+          "step": 1,
+          "venue": "ArchaeologyHouse",
+          "minutes": 30
+        },
+        {
+          "id": "life-5",
+          "npc": "penny",
+          "storyId": "penny_field_notes",
+          "day": 3,
+          "kind": "story.worked",
+          "step": 2,
+          "venue": "ArchaeologyHouse",
+          "minutes": 30
+        }
+      ],
+      "cue": "## 我知道的镇上近况\n“给下一课的观察题”：第 1 天，我向农场主提起此事；农场主已当面告诉我：第 1 天在森林实际观察了 10 分钟，当时下雨。；农场主明确建议“先观察，再想问题”；我已在第 2、3 天分别完成 2 个实际工作阶段；尚未记录成品完成。\n只采用这里已知的情况；未汇报的调查、他人的进展和未选结局不作已知。观察题不等于孩子已上课，短文不等于小说出版；不补写未提供的成品内容。",
+      "cueTokens": 152,
+      "baselineTokens": 1891,
+      "totalTokens": 2043,
+      "addedTokens": 152,
+      "residentDefinitionsComparison": {
+        "totalTokens": 3690,
+        "addedOverCurrentSummary": 1647
+      }
+    },
+    {
+      "name": "潘妮独立完成基础练习页",
+      "npc": "penny",
+      "day": 3,
+      "events": [
+        {
+          "id": "life-1",
+          "npc": "penny",
+          "storyId": "penny_field_notes",
+          "day": 1,
+          "kind": "story.started"
+        },
+        {
+          "id": "life-2",
+          "npc": "penny",
+          "storyId": "penny_field_notes",
+          "day": 2,
+          "kind": "story.worked",
+          "step": 1,
+          "venue": "ArchaeologyHouse",
+          "minutes": 30
+        },
+        {
+          "id": "life-3",
+          "npc": "penny",
+          "storyId": "penny_field_notes",
+          "day": 3,
+          "kind": "story.worked",
+          "step": 2,
+          "venue": "ArchaeologyHouse",
+          "minutes": 30
+        },
+        {
+          "id": "life-4",
+          "npc": "penny",
+          "storyId": "penny_field_notes",
+          "day": 3,
+          "kind": "story.resolved",
+          "outcome": "independent"
+        }
+      ],
+      "cue": "## 我知道的镇上近况\n“给下一课的观察题”：第 1 天，我向农场主提起此事；我已在第 2、3 天分别完成 2 个实际工作阶段；第 3 天已结束，结局为“观察题：从身边开始”，由我独立完成，没有玩家建议贡献。\n只采用这里已知的情况；未汇报的调查、他人的进展和未选结局不作已知。观察题不等于孩子已上课，短文不等于小说出版；不补写未提供的成品内容。",
+      "cueTokens": 134,
+      "baselineTokens": 1891,
+      "totalTokens": 2025,
+      "addedTokens": 134,
+      "residentDefinitionsComparison": {
+        "totalTokens": 3672,
+        "addedOverCurrentSummary": 1647
+      }
+    },
+    {
+      "name": "潘妮完成先观察版练习页",
+      "npc": "penny",
+      "day": 3,
+      "events": [
+        {
+          "id": "life-1",
+          "npc": "penny",
+          "storyId": "penny_field_notes",
+          "day": 1,
+          "kind": "story.started"
+        },
+        {
+          "id": "life-2",
+          "npc": "penny",
+          "storyId": "penny_field_notes",
+          "day": 1,
+          "kind": "story.observed",
+          "venue": "Forest",
+          "weather": "rain",
+          "minutes": 10
+        },
+        {
+          "id": "life-3",
+          "npc": "penny",
+          "storyId": "penny_field_notes",
+          "day": 1,
+          "kind": "story.choice",
+          "choiceId": "observe",
+          "sourceId": "life-2"
+        },
+        {
+          "id": "life-4",
+          "npc": "penny",
+          "storyId": "penny_field_notes",
+          "day": 2,
+          "kind": "story.worked",
+          "step": 1,
+          "venue": "ArchaeologyHouse",
+          "minutes": 30
+        },
+        {
+          "id": "life-5",
+          "npc": "penny",
+          "storyId": "penny_field_notes",
+          "day": 3,
+          "kind": "story.worked",
+          "step": 2,
+          "venue": "ArchaeologyHouse",
+          "minutes": 30
+        },
+        {
+          "id": "life-6",
+          "npc": "penny",
+          "storyId": "penny_field_notes",
+          "day": 3,
+          "kind": "story.resolved",
+          "outcome": "observe"
+        }
+      ],
+      "cue": "## 我知道的镇上近况\n“给下一课的观察题”：第 1 天，我向农场主提起此事；农场主已当面告诉我：第 1 天在森林实际观察了 10 分钟，当时下雨。；农场主明确建议“先观察，再想问题”；我已在第 2、3 天分别完成 2 个实际工作阶段；第 3 天已结束，结局为“观察题：先看见，再提问”。\n只采用这里已知的情况；未汇报的调查、他人的进展和未选结局不作已知。观察题不等于孩子已上课，短文不等于小说出版；不补写未提供的成品内容。",
+      "cueTokens": 167,
+      "baselineTokens": 1891,
+      "totalTokens": 2058,
+      "addedTokens": 167,
+      "residentDefinitionsComparison": {
+        "totalTokens": 3705,
+        "addedOverCurrentSummary": 1647
+      }
+    },
+    {
+      "name": "潘妮完成先阅读版练习页",
+      "npc": "penny",
+      "day": 3,
+      "events": [
+        {
+          "id": "life-1",
+          "npc": "penny",
+          "storyId": "penny_field_notes",
+          "day": 1,
+          "kind": "story.started"
+        },
+        {
+          "id": "life-2",
+          "npc": "penny",
+          "storyId": "penny_field_notes",
+          "day": 1,
+          "kind": "story.observed",
+          "venue": "Forest",
+          "weather": "rain",
+          "minutes": 10
+        },
+        {
+          "id": "life-3",
+          "npc": "penny",
+          "storyId": "penny_field_notes",
+          "day": 1,
+          "kind": "story.choice",
+          "choiceId": "read",
+          "sourceId": "life-2"
+        },
+        {
+          "id": "life-4",
+          "npc": "penny",
+          "storyId": "penny_field_notes",
+          "day": 2,
+          "kind": "story.worked",
+          "step": 1,
+          "venue": "ArchaeologyHouse",
+          "minutes": 30
+        },
+        {
+          "id": "life-5",
+          "npc": "penny",
+          "storyId": "penny_field_notes",
+          "day": 3,
+          "kind": "story.worked",
+          "step": 2,
+          "venue": "ArchaeologyHouse",
+          "minutes": 30
+        },
+        {
+          "id": "life-6",
+          "npc": "penny",
+          "storyId": "penny_field_notes",
+          "day": 3,
+          "kind": "story.resolved",
+          "outcome": "read"
+        }
+      ],
+      "cue": "## 我知道的镇上近况\n“给下一课的观察题”：第 1 天，我向农场主提起此事；农场主已当面告诉我：第 1 天在森林实际观察了 10 分钟，当时下雨。；农场主明确建议“先读提示，再去核对”；我已在第 2、3 天分别完成 2 个实际工作阶段；第 3 天已结束，结局为“观察题：带着问题去核对”。\n只采用这里已知的情况；未汇报的调查、他人的进展和未选结局不作已知。观察题不等于孩子已上课，短文不等于小说出版；不补写未提供的成品内容。",
+      "cueTokens": 169,
+      "baselineTokens": 1891,
+      "totalTokens": 2060,
+      "addedTokens": 169,
+      "residentDefinitionsComparison": {
+        "totalTokens": 3707,
+        "addedOverCurrentSummary": 1647
+      }
+    },
+    {
+      "name": "艾利欧特独立完成练笔",
+      "npc": "elliott",
+      "day": 3,
+      "events": [
+        {
+          "id": "life-1",
+          "npc": "elliott",
+          "storyId": "elliott_short_piece",
+          "day": 1,
+          "kind": "story.started"
+        },
+        {
+          "id": "life-2",
+          "npc": "elliott",
+          "storyId": "elliott_short_piece",
+          "day": 2,
+          "kind": "story.worked",
+          "step": 1,
+          "venue": "ElliottHouse",
+          "minutes": 30
+        },
+        {
+          "id": "life-3",
+          "npc": "elliott",
+          "storyId": "elliott_short_piece",
+          "day": 3,
+          "kind": "story.worked",
+          "step": 2,
+          "venue": "ElliottHouse",
+          "minutes": 30
+        },
+        {
+          "id": "life-4",
+          "npc": "elliott",
+          "storyId": "elliott_short_piece",
+          "day": 3,
+          "kind": "story.resolved",
+          "outcome": "independent"
+        }
+      ],
+      "cue": "## 我知道的镇上近况\n“一页短文，两种余味”：第 1 天，我向农场主提起此事；我已在第 2、3 天分别完成 2 个实际工作阶段；第 3 天已结束，结局为“练笔：停下来的人”，由我独立完成，没有玩家建议贡献。\n只采用这里已知的情况；未汇报的调查、他人的进展和未选结局不作已知。观察题不等于孩子已上课，短文不等于小说出版；不补写未提供的成品内容。",
+      "cueTokens": 134,
+      "baselineTokens": 1785,
+      "totalTokens": 1919,
+      "addedTokens": 134,
+      "residentDefinitionsComparison": {
+        "totalTokens": 3566,
+        "addedOverCurrentSummary": 1647
+      }
+    },
+    {
+      "name": "艾利欧特完成留白版短文",
+      "npc": "elliott",
+      "day": 3,
+      "events": [
+        {
+          "id": "life-1",
+          "npc": "elliott",
+          "storyId": "elliott_short_piece",
+          "day": 1,
+          "kind": "story.started"
+        },
+        {
+          "id": "life-2",
+          "npc": "elliott",
+          "storyId": "elliott_short_piece",
+          "day": 1,
+          "kind": "story.observed",
+          "venue": "Beach",
+          "weather": "rain",
+          "minutes": 10
+        },
+        {
+          "id": "life-3",
+          "npc": "elliott",
+          "storyId": "elliott_short_piece",
+          "day": 1,
+          "kind": "story.choice",
+          "choiceId": "open",
+          "sourceId": "life-2"
+        },
+        {
+          "id": "life-4",
+          "npc": "elliott",
+          "storyId": "elliott_short_piece",
+          "day": 2,
+          "kind": "story.worked",
+          "step": 1,
+          "venue": "ElliottHouse",
+          "minutes": 30
+        },
+        {
+          "id": "life-5",
+          "npc": "elliott",
+          "storyId": "elliott_short_piece",
+          "day": 3,
+          "kind": "story.worked",
+          "step": 2,
+          "venue": "ElliottHouse",
+          "minutes": 30
+        },
+        {
+          "id": "life-6",
+          "npc": "elliott",
+          "storyId": "elliott_short_piece",
+          "day": 3,
+          "kind": "story.resolved",
+          "outcome": "open"
+        }
+      ],
+      "cue": "## 我知道的镇上近况\n“一页短文，两种余味”：第 1 天，我向农场主提起此事；农场主已当面告诉我：第 1 天在海滩实际观察了 10 分钟，当时下雨。；农场主明确建议“给结尾留一点空白”；我已在第 2、3 天分别完成 2 个实际工作阶段；第 3 天已结束，结局为“练笔：没有写完的地址”。\n只采用这里已知的情况；未汇报的调查、他人的进展和未选结局不作已知。观察题不等于孩子已上课，短文不等于小说出版；不补写未提供的成品内容。",
+      "cueTokens": 171,
+      "baselineTokens": 1785,
+      "totalTokens": 1956,
+      "addedTokens": 171,
+      "residentDefinitionsComparison": {
+        "totalTokens": 3603,
+        "addedOverCurrentSummary": 1647
+      }
+    },
+    {
+      "name": "艾利欧特完成明朗版短文",
+      "npc": "elliott",
+      "day": 3,
+      "events": [
+        {
+          "id": "life-1",
+          "npc": "elliott",
+          "storyId": "elliott_short_piece",
+          "day": 1,
+          "kind": "story.started"
+        },
+        {
+          "id": "life-2",
+          "npc": "elliott",
+          "storyId": "elliott_short_piece",
+          "day": 1,
+          "kind": "story.observed",
+          "venue": "Beach",
+          "weather": "rain",
+          "minutes": 10
+        },
+        {
+          "id": "life-3",
+          "npc": "elliott",
+          "storyId": "elliott_short_piece",
+          "day": 1,
+          "kind": "story.choice",
+          "choiceId": "bright",
+          "sourceId": "life-2"
+        },
+        {
+          "id": "life-4",
+          "npc": "elliott",
+          "storyId": "elliott_short_piece",
+          "day": 2,
+          "kind": "story.worked",
+          "step": 1,
+          "venue": "ElliottHouse",
+          "minutes": 30
+        },
+        {
+          "id": "life-5",
+          "npc": "elliott",
+          "storyId": "elliott_short_piece",
+          "day": 3,
+          "kind": "story.worked",
+          "step": 2,
+          "venue": "ElliottHouse",
+          "minutes": 30
+        },
+        {
+          "id": "life-6",
+          "npc": "elliott",
+          "storyId": "elliott_short_piece",
+          "day": 3,
+          "kind": "story.resolved",
+          "outcome": "bright"
+        }
+      ],
+      "cue": "## 我知道的镇上近况\n“一页短文，两种余味”：第 1 天，我向农场主提起此事；农场主已当面告诉我：第 1 天在海滩实际观察了 10 分钟，当时下雨。；农场主明确建议“给结尾一个明朗方向”；我已在第 2、3 天分别完成 2 个实际工作阶段；第 3 天已结束，结局为“练笔：把地址写完”。\n只采用这里已知的情况；未汇报的调查、他人的进展和未选结局不作已知。观察题不等于孩子已上课，短文不等于小说出版；不补写未提供的成品内容。",
+      "cueTokens": 170,
+      "baselineTokens": 1785,
+      "totalTokens": 1955,
+      "addedTokens": 170,
+      "residentDefinitionsComparison": {
+        "totalTokens": 3602,
+        "addedOverCurrentSummary": 1647
+      }
+    }
+  ]
+}

@@ -16,6 +16,7 @@ import { type DeliveredLetter, type Letter, letterFor, letterKey } from '../agen
 import { lifeContext } from '../agent/life.ts';
 import { journalFreshEvents, lifeJournalChanges } from '../agent/life-journal.ts';
 import { romanceContext, ROMANCE_NPCS } from '../agent/romance.ts';
+import { storyContext, storyNpcIds, STORY_NPCS } from '../agent/town-stories.ts';
 import { callOffIn, changeIn, LATER_TOPIC, laterCallOffNote, laterIn, type LaterMeeting, laterMeetings, laterMovedNote, laterNote, type Meeting, meetingFor,
   meetingMemory, MEET_PLACES, movedLabel, movedNote,
   MEETS_PER_DAY, declinedIn, invitedIn, MOOD_TOPIC, moodLine, openedAtMeeting, stoodUpTopics, todayAgreement, todayMeeting,
@@ -209,7 +210,7 @@ export class GameSave {
     this.scope = await this.runtime.ctx.saves.load({ lineageId: this.initial.lineageId, loadNonce: this.loadNonce, day, commitId: head });
   }
 
-  private async journalState(npcId: string, namespace: 'lifeState' | 'romanceState'): Promise<Json | undefined> {
+  private async journalState(npcId: string, namespace: 'lifeState' | 'romanceState' | 'storyState'): Promise<Json | undefined> {
     const current = this.dayEntries(npcId).findLast(entry =>
       entry.changes.some(change => change.npcId === npcId && change.log?.[namespace] !== undefined));
     if (current) return current.changes.find(change => change.npcId === npcId)!.log![namespace];
@@ -508,14 +509,16 @@ export class GameSave {
         context: async (query, current) => {
           signal.throwIfAborted(); standing = current;
           const context = await reader.context(query, current);
-          const [projection, romantic] = await Promise.all([
+          const [projection, romantic, stories] = await Promise.all([
             this.journalState(npcId, 'lifeState'),
             (ROMANCE_NPCS as readonly string[]).includes(npcId) ? this.journalState(npcId, 'romanceState') : undefined,
+            STORY_NPCS.includes(npcId) ? this.journalState(npcId, 'storyState') : undefined,
           ]);
           signal.throwIfAborted();
           const life = lifeContext(projection === undefined ? {} : { life: projection }, this.day);
           const romance = romanceContext(romantic === undefined ? {} : { romance: romantic }, this.day, current.relation);
-          return life || romance ? { ...context, summary: [context.summary, life, romance].filter(Boolean).join('\n') } : context;
+          const story = storyContext(stories === undefined ? {} : { story: stories }, this.day);
+          return life || romance || story ? { ...context, summary: [context.summary, life, romance, story].filter(Boolean).join('\n') } : context;
         },
         record: async (exchange, remembered) => { signal.throwIfAborted(); staged = { exchange, remembered }; },
       }, { now: () => gameMinutes(date), read, skip: inviting }), { gifts, now: () => gameMinutes(date), read: async () => {
@@ -563,10 +566,14 @@ export class GameSave {
       requireValue(this.state.phase === 'open', 'DAY_CLOSED', '生活记录等待当前存档准备就绪');
       requireValue(message.events.every(event => event.day <= this.day), 'FUTURE_LIFE_EVENT', '不能记录未来日期的生活事件');
       const prior: Record<string, NpcState> = {};
-      const ids = [...new Set(message.events.flatMap(event => [event.npc, ...('other' in event && event.other ? [event.other] : [])]))];
+      const ids = [...new Set(message.events.flatMap(event => 'storyId' in event ? storyNpcIds(event)
+        : [event.npc, ...('other' in event && event.other ? [event.other] : [])]))];
       for (const id of ids) {
-        const [life, romance] = await Promise.all([this.journalState(id, 'lifeState'), this.journalState(id, 'romanceState')]);
-        prior[id] = { ...(life === undefined ? {} : { life }), ...(romance === undefined ? {} : { romance }) };
+        const [life, romance, story] = await Promise.all([
+          this.journalState(id, 'lifeState'), this.journalState(id, 'romanceState'),
+          STORY_NPCS.includes(id) ? this.journalState(id, 'storyState') : undefined,
+        ]);
+        prior[id] = { ...(life === undefined ? {} : { life }), ...(romance === undefined ? {} : { romance }), ...(story === undefined ? {} : { story }) };
       }
       const changes = lifeJournalChanges(message.events, prior);
       for (const change of changes) {
@@ -586,6 +593,7 @@ export class GameSave {
           ...change, log: { ...change.log,
             ...(state?.life === undefined ? {} : { lifeState: state.life }),
             ...(state?.romance === undefined ? {} : { romanceState: state.romance }),
+            ...(state?.story === undefined ? {} : { storyState: state.story }),
             ...(i === 0 ? { bridgeReceipt: JSON.parse(canonical(receipt)) } : {}) },
         })) });
       this.addReceipt(receipt);

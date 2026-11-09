@@ -2,6 +2,10 @@ namespace StardewAgentBridge;
 
 internal sealed class ModConfig
 {
+    /// <summary>Investigations and persistent projects grounded in observed game actions.</summary>
+    public bool TownStories { get; set; } = true;
+    /// <summary>Opens native choices for nearby investigation and field observations.</summary>
+    public StardewModdingAPI.SButton StoryInvestigationKey { get; set; } = StardewModdingAPI.SButton.F8;
     /// <summary>Explicit dates and private shared memories for vanilla romantic relationships.</summary>
     public bool Romance { get; set; } = true;
     /// <summary>Persistent character goals, explicit delivery, and follow-up activities.</summary>
